@@ -23,7 +23,8 @@ V_TRUE = 0.95
 V_FALSE = 0.05
 
 LEARNING_RATE = 0.001
-BATCH_SIZE = 4
+BATCH_SIZE = 8
+TRAINING_SIZE = 128
 
 
 def add_convolution_module(model):
@@ -40,7 +41,7 @@ def add_convolution_module(model):
     return model
 
 
-def training_generator(orig_file, image_group, image_dataset, label_group, label_dataset):
+def training_generator(orig_file, image_group, image_dataset, label_group, label_dataset, batch_size, training_size):
     f = h5py.File(orig_file, 'r')
     image_data = f[image_group][image_dataset]
     label_data = f[label_group][label_dataset]
@@ -50,35 +51,50 @@ def training_generator(orig_file, image_group, image_dataset, label_group, label
 
     mask_input = np.full(INPUT_SHAPE, V_FALSE, dtype='float32')
     mask_input[ctr_min[0], ctr_min[1], ctr_min[2]] = V_TRUE
-    mask_input = np.expand_dims(mask_input, 0)
+    mask_input = np.tile(mask_input, (batch_size, 1, 1, 1, 1))
 
     def pad_dims(x):
         # return np.expand_dims(x, x.ndim)
         return np.expand_dims(np.expand_dims(x, x.ndim), 0)
 
     np.random.seed(0)
+    i = 0
     while 1:
-        ctr = tuple(np.random.randint(ctr_min[i], ctr_max[i]) for i in range(0, 3))
-        subvol = ((ctr[2] - ctr_min[2], ctr[2] + ctr_min[2] + 1),
-                  (ctr[1] - ctr_min[1], ctr[1] + ctr_min[1] + 1),
-                  (ctr[0] - ctr_min[0], ctr[0] + ctr_min[0] + 1))
-        image_subvol = image_data[subvol[0][0]:subvol[0][1],
-                                  subvol[1][0]:subvol[1][1],
-                                  subvol[2][0]:subvol[2][1]]
-        label_subvol = label_data[subvol[0][0]:subvol[0][1],
-                                  subvol[1][0]:subvol[1][1],
-                                  subvol[2][0]:subvol[2][1]]
-        # label_id = label_data[ctr[2], ctr[1], ctr[0]]
-        label_id = label_subvol[ctr_min[2], ctr_min[1], ctr_min[0]]
-        label_mask = label_subvol == label_id
-        f_a = np.count_nonzero(label_mask) / float(label_mask.size)
-        mask_target = np.full_like(label_subvol, V_FALSE, dtype='float32')
-        mask_target[label_mask] = V_TRUE
-        # print 'Yielding (' + ','.join(map(str, ctr)) + ') Label ID: ' + str(label_id) + ' f_a: {:.1%}'.format(f_a)
+        if i >= training_size:
+            np.random.seed(0)
+            i = 0
 
-        yield ({'image_input': pad_dims(np.transpose(image_subvol)),
+        batch_image_input = None
+        batch_mask_output = None
+
+        for _ in range(0, batch_size):
+            ctr = tuple(np.random.randint(ctr_min[i], ctr_max[i]) for i in range(0, 3))
+            subvol = ((ctr[2] - ctr_min[2], ctr[2] + ctr_min[2] + 1),
+                      (ctr[1] - ctr_min[1], ctr[1] + ctr_min[1] + 1),
+                      (ctr[0] - ctr_min[0], ctr[0] + ctr_min[0] + 1))
+            image_subvol = image_data[subvol[0][0]:subvol[0][1],
+                                      subvol[1][0]:subvol[1][1],
+                                      subvol[2][0]:subvol[2][1]]
+            label_subvol = label_data[subvol[0][0]:subvol[0][1],
+                                      subvol[1][0]:subvol[1][1],
+                                      subvol[2][0]:subvol[2][1]]
+            label_id = label_subvol[ctr_min[2], ctr_min[1], ctr_min[0]]
+            label_mask = label_subvol == label_id
+            f_a = np.count_nonzero(label_mask) / float(label_mask.size)
+            mask_target = np.full_like(label_subvol, V_FALSE, dtype='float32')
+            mask_target[label_mask] = V_TRUE
+            # print 'Yielding (' + ','.join(map(str, ctr)) + ') Label ID: ' + str(label_id) + ' f_a: {:.1%}'.format(f_a)
+
+            image_input = pad_dims(np.transpose(image_subvol.astype('float32')))
+            mask_output = pad_dims(np.transpose(mask_target))
+
+            batch_image_input = np.concatenate((batch_image_input, image_input)) if batch_image_input is not None else image_input
+            batch_mask_output = np.concatenate((batch_mask_output, mask_output)) if batch_mask_output is not None else mask_output
+
+        i += batch_size
+        yield ({'image_input': batch_image_input,
                 'mask_input': mask_input},
-               {'mask_output': pad_dims(np.transpose(mask_target))})
+               {'mask_output': batch_mask_output})
 
 
 
@@ -128,9 +144,11 @@ def main():
                                                    '/volumes',
                                                    'raw',
                                                    'volumes/labels',
-                                                   'neuron_ids'),
-                                samples_per_epoch=10,
-                                nb_epoch=5)
+                                                   'neuron_ids',
+                                                   BATCH_SIZE,
+                                                   TRAINING_SIZE),
+                                samples_per_epoch=TRAINING_SIZE,
+                                nb_epoch=10)
     plot_history(history)
     return history
 
