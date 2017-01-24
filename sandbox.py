@@ -24,8 +24,8 @@ CONV_X = CONV_Y = 5
 CONV_Z = 3
 
 T_MOVE = 0.75 # 0.9
-STEP_DELTA = (INPUT_SHAPE[0:3] - 1) / 4
-TRAINING_FOV = INPUT_SHAPE[0:3] + (2 * STEP_DELTA)
+MOVE_DELTA = (INPUT_SHAPE[0:3] - 1) / 4
+TRAINING_FOV = INPUT_SHAPE[0:3] + (2 * MOVE_DELTA)
 
 V_TRUE = 0.95
 V_FALSE = 0.05
@@ -74,15 +74,15 @@ class FloodFillRegion:
         # print 'FFR {0} with seed_pos: {1}'.format(self.ffrid, np.array_str(seed_pos))
 
     def add_mask(self, mask_block, mask_pos):
-        new_steps = get_steps(mask_block)
-        for step in new_steps:
-            new_ctr = mask_pos + step['step']
+        new_moves = get_moves(mask_block)
+        for move in new_moves:
+            new_ctr = mask_pos + move['move']
             if np.any(np.greater_equal(new_ctr, self.move_bounds)) or np.any(new_ctr <= 1):
                continue
-            if tuple(new_ctr) not in self.visited and step['v'] >= T_MOVE:
+            if tuple(new_ctr) not in self.visited and move['v'] >= T_MOVE:
                 self.visited.add(tuple(new_ctr))
-                self.queue.put((-step['v'], tuple(new_ctr)))
-                # print 'FFR {0} queuing {1} ({2})'.format(self.ffrid, np.array_str(new_ctr), step['v'])
+                self.queue.put((-move['v'], tuple(new_ctr)))
+                # print 'FFR {0} queuing {1} ({2})'.format(self.ffrid, np.array_str(new_ctr), move['v'])
 
         mask_origin = pos_to_vox(mask_pos) - (np.asarray(mask_block.shape) - 1) / 2
 
@@ -151,27 +151,27 @@ void main() {
 
 
 def vox_to_pos(vox):
-    return np.divide(vox, STEP_DELTA)
+    return np.divide(vox, MOVE_DELTA)
 
 
 def pos_to_vox(pos):
-    return pos * STEP_DELTA
+    return pos * MOVE_DELTA
 
 
-def get_steps(mask):
-    steps = []
+def get_moves(mask):
+    moves = []
     ctr = (np.asarray(mask.shape) - 1) / 2 + 1
-    for step in map(np.array, [(1, 0, 0), (-1, 0, 0),
+    for move in map(np.array, [(1, 0, 0), (-1, 0, 0),
                  (0, 1, 0), (0, -1, 0),
                  (0, 0, 1), (0, 0, -1)]):
-        steps.append({'step': step,
-                      'v': mask[ctr[0] - (-2 * max(step[0], 0) + 1) * STEP_DELTA[0]:
-                                ctr[0] + (+2 * min(step[0], 0) + 1) * STEP_DELTA[0] + 1,
-                                ctr[1] - (-2 * max(step[1], 0) + 1) * STEP_DELTA[1]:
-                                ctr[1] + (+2 * min(step[1], 0) + 1) * STEP_DELTA[1] + 1,
-                                ctr[2] - (-2 * max(step[2], 0) + 1) * STEP_DELTA[2]:
-                                ctr[2] + (+2 * min(step[2], 0) + 1) * STEP_DELTA[2] + 1].max()})
-    return steps
+        moves.append({'move': move,
+                      'v': mask[ctr[0] - (-2 * max(move[0], 0) + 1) * MOVE_DELTA[0]:
+                                ctr[0] + (+2 * min(move[0], 0) + 1) * MOVE_DELTA[0] + 1,
+                                ctr[1] - (-2 * max(move[1], 0) + 1) * MOVE_DELTA[1]:
+                                ctr[1] + (+2 * min(move[1], 0) + 1) * MOVE_DELTA[1] + 1,
+                                ctr[2] - (-2 * max(move[2], 0) + 1) * MOVE_DELTA[2]:
+                                ctr[2] + (+2 * min(move[2], 0) + 1) * MOVE_DELTA[2] + 1].max()})
+    return moves
 
 
 def simple_training_generator(orig_file, image_group, image_dataset, label_group, label_dataset, batch_size, training_size):
