@@ -37,6 +37,7 @@ V_FALSE = 0.05
 LEARNING_RATE = 0.01
 BATCH_SIZE = 8
 TRAINING_SIZE = 24
+VALIDATION_SIZE = 16
 PRETRAIN_NUM_EPOCHS = 1
 NUM_EPOCHS = 3
 
@@ -178,16 +179,20 @@ def get_moves(mask):
     return moves
 
 
-def simple_training_generator(orig_file, image_group, image_dataset, label_group, label_dataset, batch_size, training_size):
+def simple_training_generator(orig_file, image_group, image_dataset, label_group, label_dataset, batch_size, training_size, partition=None):
+    if partition is None:
+        partition = (np.array((1, 1, 1)), np.array((0, 0, 0)))
     f = h5py.File(orig_file, 'r')
     zoom = np.exp2(DOWNSAMPLE).astype('int64')
     region_size_zoom = INPUT_SHAPE[0:3]
     region_size_orig = np.multiply(region_size_zoom, zoom)
     image_data = f[image_group][image_dataset]
     label_data = f[label_group][label_dataset]
-    ctr_min = np.floor_divide(region_size_orig, 2)
+    subvol_sz = np.floor_divide(region_size_orig, 2)
     # HDF5 coordinates are z, y, x
-    ctr_max = (np.flipud(np.array(image_data.shape)) - (np.floor_divide(region_size_orig, 2) + 1))
+    partition_sz = np.floor_divide(np.flipud(np.array(image_data.shape)), partition[0])
+    ctr_min = np.multiply(partition_sz, partition[1]) + subvol_sz
+    ctr_max = np.multiply(partition_sz, partition[1] + 1) - subvol_sz - 1
 
     mask_input = np.full(INPUT_SHAPE, V_FALSE, dtype='float32')
     mask_input[tuple(np.array(mask_input.shape) / 2)] = V_TRUE
@@ -208,9 +213,9 @@ def simple_training_generator(orig_file, image_group, image_dataset, label_group
 
         for _ in range(0, batch_size):
             ctr = tuple(np.random.randint(ctr_min[n], ctr_max[n]) for n in range(0, 3))
-            subvol = ((ctr[2] - ctr_min[2], ctr[2] + ctr_min[2] + (region_size_orig[2] % 2)),
-                      (ctr[1] - ctr_min[1], ctr[1] + ctr_min[1] + (region_size_orig[1] % 2)),
-                      (ctr[0] - ctr_min[0], ctr[0] + ctr_min[0] + (region_size_orig[0] % 2)))
+            subvol = ((ctr[2] - subvol_sz[2], ctr[2] + subvol_sz[2] + (region_size_orig[2] % 2)),
+                      (ctr[1] - subvol_sz[1], ctr[1] + subvol_sz[1] + (region_size_orig[1] % 2)),
+                      (ctr[0] - subvol_sz[0], ctr[0] + subvol_sz[0] + (region_size_orig[0] % 2)))
             image_subvol = image_data[subvol[0][0]:subvol[0][1],
                                       subvol[1][0]:subvol[1][1],
                                       subvol[2][0]:subvol[2][1]]
@@ -254,16 +259,20 @@ def simple_training_generator(orig_file, image_group, image_dataset, label_group
                {'mask_output': batch_mask_target})
 
 
-def moving_training_generator(orig_file, image_group, image_dataset, label_group, label_dataset, batch_size, training_size, callback_kludge):
+def moving_training_generator(orig_file, image_group, image_dataset, label_group, label_dataset, batch_size, training_size, callback_kludge, partition=None):
+    if partition is None:
+        partition = (np.array((1, 1, 1)), np.array((0, 0, 0)))
     f = h5py.File(orig_file, 'r')
     zoom = np.exp2(DOWNSAMPLE).astype('int64')
     region_size_zoom = TRAINING_FOV[0:3]
     region_size_orig = np.multiply(region_size_zoom, zoom)
     image_data = f[image_group][image_dataset]
     label_data = f[label_group][label_dataset]
-    ctr_min = np.floor_divide(region_size_orig, 2)
+    subvol_sz = np.floor_divide(region_size_orig, 2)
     # HDF5 coordinates are z, y, x
-    ctr_max = (np.flipud(np.array(image_data.shape)) - (np.floor_divide(region_size_orig, 2) + 1))
+    partition_sz = np.floor_divide(np.flipud(np.array(image_data.shape)), partition[0])
+    ctr_min = np.multiply(partition_sz, partition[1]) + subvol_sz
+    ctr_max = np.multiply(partition_sz, partition[1] + 1) - subvol_sz - 1
 
     def pad_dims(x):
         return np.expand_dims(np.expand_dims(x, x.ndim), 0)
@@ -297,9 +306,9 @@ def moving_training_generator(orig_file, image_group, image_dataset, label_group
         for r, region in enumerate(regions):
             if region is None or region.queue.empty():
                 ctr = tuple(np.random.randint(ctr_min[n], ctr_max[n]) for n in range(0, 3))
-                subvol = ((ctr[2] - ctr_min[2], ctr[2] + ctr_min[2] + (region_size_orig[2] % 2)),
-                          (ctr[1] - ctr_min[1], ctr[1] + ctr_min[1] + (region_size_orig[1] % 2)),
-                          (ctr[0] - ctr_min[0], ctr[0] + ctr_min[0] + (region_size_orig[0] % 2)))
+                subvol = ((ctr[2] - subvol_sz[2], ctr[2] + subvol_sz[2] + (region_size_orig[2] % 2)),
+                          (ctr[1] - subvol_sz[1], ctr[1] + subvol_sz[1] + (region_size_orig[1] % 2)),
+                          (ctr[0] - subvol_sz[0], ctr[0] + subvol_sz[0] + (region_size_orig[0] % 2)))
                 image_subvol = image_data[subvol[0][0]:subvol[0][1],
                                           subvol[1][0]:subvol[1][1],
                                           subvol[2][0]:subvol[2][1]]
@@ -375,16 +384,8 @@ def make_network():
 
 
 def plot_history(history):
-    # plt.plot(history.history['acc'])
-    # # plt.plot(history.history['val_acc'])
-    # plt.title('model accuracy')
-    # plt.ylabel('accuracy')
-    # plt.xlabel('epoch')
-    # plt.legend(['train', 'test'], loc='upper left')
-    # plt.show()
-
     plt.plot(history.history['loss'])
-    # plt.plot(history.history['val_loss'])
+    plt.plot(history.history['val_loss'])
     plt.title('model loss')
     plt.ylabel('loss')
     plt.xlabel('epoch')
@@ -417,15 +418,26 @@ def main():
                                        'volumes/labels',
                                        'neuron_ids',
                                        BATCH_SIZE,
-                                       TRAINING_SIZE)
+                                       TRAINING_SIZE,
+                                       (np.array((1, 1, 2)), np.array((0, 0, 0))))
+    validation_data = simple_training_generator('/home/championa/code/catsop/cremi-export/orig/sample_A_20160501.hdf',
+                                       '/volumes',
+                                       'raw',
+                                       'volumes/labels',
+                                       'neuron_ids',
+                                       BATCH_SIZE,
+                                       TRAINING_SIZE,
+                                       (np.array((1, 1, 2)), np.array((0, 0, 1))))
     history = ffn.fit_generator(training_data,
                                 samples_per_epoch=TRAINING_SIZE,
-                                nb_epoch=PRETRAIN_NUM_EPOCHS)
+                                nb_epoch=PRETRAIN_NUM_EPOCHS,
+                                validation_data=validation_data,
+                                nb_val_samples=VALIDATION_SIZE)
 
     # Moving training
     kludge = {'inputs': None, 'outputs': None}
     cb = PredictionCopy(kludge)
-    checkpoint = ModelCheckpoint('weights.hdf5', monitor='loss', save_best_only=True)
+    checkpoint = ModelCheckpoint('weights.hdf5', save_best_only=True)
     training_data = moving_training_generator('/home/championa/code/catsop/cremi-export/orig/sample_A_20160501.hdf',
                                        '/volumes',
                                        'raw',
@@ -433,14 +445,17 @@ def main():
                                        'neuron_ids',
                                        BATCH_SIZE,
                                        TRAINING_SIZE,
-                                       kludge)
+                                       kludge,
+                                       (np.array((1, 1, 2)), np.array((0, 0, 0))))
     moving_history = ffn.fit_generator(training_data,
                                 samples_per_epoch=TRAINING_SIZE,
                                 nb_epoch=NUM_EPOCHS,
                                 initial_epoch=PRETRAIN_NUM_EPOCHS,
                                 max_q_size=1,
                                 nb_worker=1,
-                                callbacks=[cb, checkpoint])
+                                callbacks=[cb, checkpoint],
+                                validation_data=validation_data,
+                                nb_val_samples=VALIDATION_SIZE)
     extend_keras_history(history, moving_history)
 
     # for _ in itertools.islice(training_data, 12):
