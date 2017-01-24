@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import Queue
 
-from keras.callbacks import Callback
+from keras.callbacks import Callback, ModelCheckpoint
 from keras.layers import AveragePooling3D, Convolution3D, Input, merge
 from keras.layers.core import Activation, Lambda, Merge
 from keras.models import Model, Sequential
@@ -18,9 +18,10 @@ from progressbar import ProgressBar
 import neuroglancer
 
 
-DOWNSAMPLE = np.array((1, 1, 0))
-# DOWNSAMPLE = np.array((0, 0, 0))
-RESOLUTION = (8, 8, 40)
+# DOWNSAMPLE = np.array((1, 1, 0))
+DOWNSAMPLE = np.array((0, 0, 0))
+# RESOLUTION = (8, 8, 40)
+RESOLUTION = (4, 4, 40)
 INPUT_SHAPE = np.array((65, 65, 13, 1))
 NUM_MODULES = 8
 CONV_X = CONV_Y = 5
@@ -424,6 +425,7 @@ def main():
     # Moving training
     kludge = {'inputs': None, 'outputs': None}
     cb = PredictionCopy(kludge)
+    checkpoint = ModelCheckpoint('weights.hdf5', monitor='loss', save_best_only=True)
     training_data = moving_training_generator('/home/championa/code/catsop/cremi-export/orig/sample_A_20160501.hdf',
                                        '/volumes',
                                        'raw',
@@ -438,7 +440,7 @@ def main():
                                 initial_epoch=PRETRAIN_NUM_EPOCHS,
                                 max_q_size=1,
                                 nb_worker=1,
-                                callbacks=[cb])
+                                callbacks=[cb, checkpoint])
     extend_keras_history(history, moving_history)
 
     # for _ in itertools.islice(training_data, 12):
