@@ -301,13 +301,13 @@ class HDF5Volume:
 
             image_subvol = np.transpose(image_subvol.astype('float32')) / 256.0
             label_subvol = np.transpose(label_subvol)
+            label_id = label_subvol[tuple(np.array(label_subvol.shape) / 2)]
+            label_mask = label_subvol == label_id
 
             if np.any(self.zoom > 1):
                 image_subvol = image_subvol.reshape([self.size_zoom[0], self.zoom[0],
                                                      self.size_zoom[1], self.zoom[1],
                                                      self.size_zoom[2], self.zoom[2]]).mean(5).mean(3).mean(1)
-                label_id = label_subvol[tuple(np.array(label_subvol.shape) / 2)]
-                label_mask = label_subvol == label_id
                 label_mask = label_mask.reshape([self.size_zoom[0], self.zoom[0],
                                                  self.size_zoom[1], self.zoom[1],
                                                  self.size_zoom[2], self.zoom[2]]).all(5).all(3).all(1)
