@@ -148,7 +148,7 @@ class FloodFillRegion:
 
 
 def vox_to_pos(vox):
-    return np.divide(vox, MOVE_DELTA)
+    return np.floor_divide(vox, MOVE_DELTA)
 
 
 def pos_to_vox(pos):
