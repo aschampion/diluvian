@@ -3,6 +3,7 @@ import itertools
 import matplotlib.pyplot as plt
 import numpy as np
 import Queue
+import sys
 
 from keras.callbacks import Callback, EarlyStopping, ModelCheckpoint
 from keras.layers import AveragePooling3D, Convolution3D, Input, merge
@@ -95,7 +96,9 @@ class FloodFillRegion:
             current_mask = self.mask[mask_origin[0]:mask_origin[0] + mask_block.shape[0],
                                      mask_origin[1]:mask_origin[1] + mask_block.shape[1],
                                      mask_origin[2]:mask_origin[2] + mask_block.shape[2]]
-            current_mask[np.isnan(current_mask) | current_mask > 0.5 | mask_block < current_mask] = mask_block
+            update_mask = np.isnan(current_mask) | (current_mask > 0.5) | np.less(mask_block, current_mask)
+            # print float(np.sum(update_mask)) / float(np.prod(np.array(update_mask.shape)))
+            current_mask[update_mask] = mask_block[update_mask]
             self.mask[mask_origin[0]:mask_origin[0] + mask_block.shape[0],
                       mask_origin[1]:mask_origin[1] + mask_block.shape[1],
                       mask_origin[2]:mask_origin[2] + mask_block.shape[2]] = current_mask
@@ -134,8 +137,13 @@ class FloodFillRegion:
                 'target': target_block,
                 'position': next_pos}
 
-    def fill(self, model):
+    def fill(self, model, verbose=False):
+        if verbose:
+            sys.stdout.write('Filling region')
         while not self.queue.empty():
+            if verbose:
+                sys.stdout.write('.')
+                sys.stdout.flush()
             block_data = self.get_next_block()
 
             image_input = pad_dims(block_data['image'])
@@ -144,6 +152,9 @@ class FloodFillRegion:
             output = model.predict({'image_input': image_input,
                                     'mask_input': mask_input})
             self.add_mask(output[0, :, :, :, 0], block_data['position'])
+
+        if verbose:
+            print ''
 
     def get_viewer(self):
         viewer = neuroglancer.Viewer(voxel_size=list(RESOLUTION))
@@ -276,12 +287,28 @@ class HDF5Volume:
             yield (inputs,
                    {'mask_output': batch_mask_target})
 
-    def region_generator(self, subvolume_size, partition=None):
+    def region_generator(self, subvolume_size, partition=None, seed_margin=None):
         subvolumes = self.SubvolumeGenerator(self, subvolume_size, DOWNSAMPLE, partition)
+
+        if seed_margin is None:
+            seed_margin = 10.0
+
+        margin = np.ceil(np.reciprocal(np.array(RESOLUTION), dtype='float64') * seed_margin).astype('int64')
 
         while 1:
             subvolume = subvolumes.next()
-            region = FloodFillRegion(subvolume['image'], subvolume['mask_target'])
+            mask_target = subvolume['mask_target']
+            ctr = np.array(mask_target.shape) / 2
+            seed_region = mask_target[ctr[0] - margin[0]:
+                                      ctr[0] + margin[0] + 1,
+                                      ctr[1] - margin[1]:
+                                      ctr[1] + margin[1] + 1,
+                                      ctr[2] - margin[2]:
+                                      ctr[2] + margin[2] + 1]
+            if not np.unique(seed_region).size == 1:
+                print 'Rejecting region with seed margin too small.'
+                continue
+            region = FloodFillRegion(subvolume['image'], mask_target)
             yield region
 
 
@@ -422,7 +449,8 @@ def fill_region_from_model(model_file):
     model = load_model(model_file)
 
     for region in regions:
-        region.fill(model)
+        # region.bias_against_merge = True
+        region.fill(model, verbose=True)
         viewer = region.get_viewer()
         print viewer
         s = raw_input("Press Enter to continue, q to quit...")
