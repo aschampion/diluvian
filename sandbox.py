@@ -140,18 +140,10 @@ class FloodFillRegion:
                    name='Image')
         viewer.add(np.transpose(self.target),
                    name='Mask Target',
-                   shader="""
-void main() {
-  emitRGBA(vec4(toNormalized(getDataValue(0)), 0, 0, toNormalized(getDataValue(0))));
-}
-""")
+                   shader=get_color_shader(0))
         viewer.add(np.transpose(self.mask),
                    name='Mask Output',
-                   shader="""
-void main() {
-  emitRGBA(vec4(0, toNormalized(getDataValue(0)), 0, toNormalized(getDataValue(0))));
-}
-""")
+                   shader=get_color_shader(1))
         return viewer
 
 
@@ -179,15 +171,15 @@ def get_moves(mask):
     return moves
 
 
-def simple_training_generator(orig_file, image_group, image_dataset, label_group, label_dataset, batch_size, training_size, partition=None):
+def simple_training_generator(orig_file, image_dataset, label_dataset, batch_size, training_size, partition=None):
     if partition is None:
         partition = (np.array((1, 1, 1)), np.array((0, 0, 0)))
     f = h5py.File(orig_file, 'r')
     zoom = np.exp2(DOWNSAMPLE).astype('int64')
     region_size_zoom = INPUT_SHAPE[0:3]
     region_size_orig = np.multiply(region_size_zoom, zoom)
-    image_data = f[image_group][image_dataset]
-    label_data = f[label_group][label_dataset]
+    image_data = f[image_dataset]
+    label_data = f[label_dataset]
     subvol_sz = np.floor_divide(region_size_orig, 2)
     # HDF5 coordinates are z, y, x
     partition_sz = np.floor_divide(np.flipud(np.array(image_data.shape)), partition[0])
@@ -259,15 +251,15 @@ def simple_training_generator(orig_file, image_group, image_dataset, label_group
                {'mask_output': batch_mask_target})
 
 
-def moving_training_generator(orig_file, image_group, image_dataset, label_group, label_dataset, batch_size, training_size, callback_kludge, partition=None):
+def moving_training_generator(orig_file, image_dataset, label_dataset, batch_size, training_size, callback_kludge, partition=None):
     if partition is None:
         partition = (np.array((1, 1, 1)), np.array((0, 0, 0)))
     f = h5py.File(orig_file, 'r')
     zoom = np.exp2(DOWNSAMPLE).astype('int64')
     region_size_zoom = TRAINING_FOV[0:3]
     region_size_orig = np.multiply(region_size_zoom, zoom)
-    image_data = f[image_group][image_dataset]
-    label_data = f[label_group][label_dataset]
+    image_data = f[image_dataset]
+    label_data = f[label_dataset]
     subvol_sz = np.floor_divide(region_size_orig, 2)
     # HDF5 coordinates are z, y, x
     partition_sz = np.floor_divide(np.flipud(np.array(image_data.shape)), partition[0])
@@ -408,26 +400,40 @@ def extend_keras_history(a, b):
         a.history.setdefault(k, []).extend(v)
 
 
+def get_color_shader(channel):
+    value_str = 'toNormalized(getDataValue(0))'
+    channels = ['0', '0', '0', value_str]
+    channels[channel] = value_str
+    shader = """
+void main() {{
+  emitRGBA(vec4({}));
+}}
+""".format(', '.join(channels))
+    return shader
+
+
 def main():
     ffn = make_network()
 
+    hdf5_file = '/home/championa/code/catsop/cremi-export/orig/sample_A_20160501.hdf'
+    image_dataset = 'volumes/raw'
+    label_dataset = 'volumes/labels/neuron_ids'
+
+    partitions = np.array((1, 1, 2))
+
     # Pre-train
-    training_data = simple_training_generator('/home/championa/code/catsop/cremi-export/orig/sample_A_20160501.hdf',
-                                       '/volumes',
-                                       'raw',
-                                       'volumes/labels',
-                                       'neuron_ids',
+    training_data = simple_training_generator(hdf5_file,
+                                       image_dataset,
+                                       label_dataset,
                                        BATCH_SIZE,
                                        TRAINING_SIZE,
-                                       (np.array((1, 1, 2)), np.array((0, 0, 0))))
-    validation_data = simple_training_generator('/home/championa/code/catsop/cremi-export/orig/sample_A_20160501.hdf',
-                                       '/volumes',
-                                       'raw',
-                                       'volumes/labels',
-                                       'neuron_ids',
+                                       (partitions, np.array((0, 0, 0))))
+    validation_data = simple_training_generator(hdf5_file,
+                                       image_dataset,
+                                       label_dataset,
                                        BATCH_SIZE,
                                        VALIDATION_SIZE,
-                                       (np.array((1, 1, 2)), np.array((0, 0, 1))))
+                                       (partitions, np.array((0, 0, 1))))
     history = ffn.fit_generator(training_data,
                                 samples_per_epoch=TRAINING_SIZE,
                                 nb_epoch=PRETRAIN_NUM_EPOCHS,
@@ -439,35 +445,31 @@ def main():
     cb = PredictionCopy(kludge)
     checkpoint = ModelCheckpoint('weights.hdf5', save_best_only=True)
     early_stop = EarlyStopping(patience=50)
-    training_data = moving_training_generator('/home/championa/code/catsop/cremi-export/orig/sample_A_20160501.hdf',
-                                       '/volumes',
-                                       'raw',
-                                       'volumes/labels',
-                                       'neuron_ids',
+    training_data = moving_training_generator(hdf5_file,
+                                       image_dataset,
+                                       label_dataset,
                                        BATCH_SIZE,
                                        TRAINING_SIZE,
                                        kludge,
-                                       (np.array((1, 1, 2)), np.array((0, 0, 0))))
+                                       (partitions, np.array((0, 0, 0))))
     moving_history = ffn.fit_generator(training_data,
                                 samples_per_epoch=TRAINING_SIZE,
                                 nb_epoch=NUM_EPOCHS,
                                 initial_epoch=PRETRAIN_NUM_EPOCHS,
                                 max_q_size=1,
                                 nb_worker=1,
-                                callbacks=[cb, checkpoint],
+                                callbacks=[cb, checkpoint, early_stop],
                                 validation_data=validation_data,
                                 nb_val_samples=VALIDATION_SIZE)
     extend_keras_history(history, moving_history)
 
     # for _ in itertools.islice(training_data, 12):
     #     continue
-    dupe_data = simple_training_generator('/home/championa/code/catsop/cremi-export/orig/sample_A_20160501.hdf',
-                                       '/volumes',
-                                       'raw',
-                                       'volumes/labels',
-                                       'neuron_ids',
+    dupe_data = simple_training_generator(hdf5_file,
+                                       image_dataset,
+                                       label_dataset,
                                        BATCH_SIZE,
-                                       TRAINING_SIZE)
+                                       TRAINING_SIZE,)
     viz_ex = itertools.islice(dupe_data, 1)
 
     for inputs, targets in viz_ex:
@@ -476,26 +478,14 @@ def main():
                    name='Image')
         viewer.add(np.transpose(inputs['mask_input'][0, :, :, :, 0]),
                    name='Mask Input',
-                   shader="""
-void main() {
-  emitRGBA(vec4(0, 0, toNormalized(getDataValue(0)), toNormalized(getDataValue(0))));
-}
-""")
+                   shader=get_color_shader(2))
         viewer.add(np.transpose(targets['mask_output'][0, :, :, :, 0]),
                    name='Mask Target',
-                   shader="""
-void main() {
-  emitRGBA(vec4(toNormalized(getDataValue(0)), 0, 0, toNormalized(getDataValue(0))));
-}
-""")
+                   shader=get_color_shader(0))
         output = ffn.predict(inputs)
         viewer.add(np.transpose(output[0, :, :, :, 0]),
                    name='Mask Output',
-                   shader="""
-void main() {
-  emitRGBA(vec4(0, toNormalized(getDataValue(0)), 0, toNormalized(getDataValue(0))));
-}
-""")
+                   shader=get_color_shader(1))
         print(viewer)
     plot_history(history)
     return history
