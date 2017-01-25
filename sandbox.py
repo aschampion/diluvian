@@ -426,7 +426,7 @@ def main():
                                        'volumes/labels',
                                        'neuron_ids',
                                        BATCH_SIZE,
-                                       TRAINING_SIZE,
+                                       VALIDATION_SIZE,
                                        (np.array((1, 1, 2)), np.array((0, 0, 1))))
     history = ffn.fit_generator(training_data,
                                 samples_per_epoch=TRAINING_SIZE,
