@@ -7,7 +7,7 @@ import Queue
 from keras.callbacks import Callback, EarlyStopping, ModelCheckpoint
 from keras.layers import AveragePooling3D, Convolution3D, Input, merge
 from keras.layers.core import Activation, Lambda, Merge
-from keras.models import Model, Sequential
+from keras.models import load_model, Model, Sequential
 from keras.optimizers import SGD
 from keras import backend as K
 
@@ -134,6 +134,17 @@ class FloodFillRegion:
                 'target': target_block,
                 'position': next_pos}
 
+    def fill(self, model):
+        while not self.queue.empty():
+            block_data = self.get_next_block()
+
+            image_input = pad_dims(block_data['image'])
+            mask_input = pad_dims(block_data['mask'])
+
+            output = model.predict({'image_input': image_input,
+                                    'mask_input': mask_input})
+            self.add_mask(output[0, :, :, :, 0], block_data['position'])
+
     def get_viewer(self):
         viewer = neuroglancer.Viewer(voxel_size=list(RESOLUTION))
         viewer.add(np.transpose(self.image),
@@ -171,15 +182,16 @@ def get_moves(mask):
     return moves
 
 
+def pad_dims(x):
+    """Add single-dimensions to the beginning and end of an array."""
+    return np.expand_dims(np.expand_dims(x, x.ndim), 0)
+
+
 class HDF5Volume:
     def __init__(self, orig_file, image_dataset, label_dataset):
         self.file = h5py.File(orig_file, 'r')
         self.image_data = self.file[image_dataset]
         self.label_data = self.file[label_dataset]
-
-    @staticmethod
-    def pad_dims(x):
-        return np.expand_dims(np.expand_dims(x, x.ndim), 0)
 
     def simple_training_generator(self, subvolume_size, batch_size, training_size, partition=None):
         subvolumes = self.SubvolumeGenerator(self, subvolume_size, DOWNSAMPLE, partition)
@@ -200,8 +212,8 @@ class HDF5Volume:
             for _ in range(0, batch_size):
                 subvolume = subvolumes.next()
 
-                image_input = self.pad_dims(subvolume['image'])
-                mask_target = self.pad_dims(subvolume['mask_target'])
+                image_input = pad_dims(subvolume['image'])
+                mask_target = pad_dims(subvolume['mask_target'])
 
                 batch_image_input = np.concatenate((batch_image_input, image_input)) if batch_image_input is not None else image_input
                 batch_mask_target = np.concatenate((batch_mask_target, mask_target)) if batch_mask_target is not None else mask_target
@@ -248,9 +260,9 @@ class HDF5Volume:
 
                 block_data = region.get_next_block()
 
-                image_input = self.pad_dims(block_data['image'])
-                mask_input = self.pad_dims(block_data['mask'])
-                mask_target = self.pad_dims(block_data['target'])
+                image_input = pad_dims(block_data['image'])
+                mask_input = pad_dims(block_data['mask'])
+                mask_target = pad_dims(block_data['target'])
                 region_pos[r] = block_data['position']
 
                 batch_image_input = np.concatenate((batch_image_input, image_input)) if batch_image_input is not None else image_input
@@ -263,6 +275,14 @@ class HDF5Volume:
             callback_kludge['inputs'] = inputs
             yield (inputs,
                    {'mask_output': batch_mask_target})
+
+    def region_generator(self, subvolume_size, partition=None):
+        subvolumes = self.SubvolumeGenerator(self, subvolume_size, DOWNSAMPLE, partition)
+
+        while 1:
+            subvolume = subvolumes.next()
+            region = FloodFillRegion(subvolume['image'], subvolume['mask_target'])
+            yield region
 
 
     class SubvolumeGenerator:
@@ -359,7 +379,7 @@ def plot_history(history):
     plt.title('model loss')
     plt.ylabel('loss')
     plt.xlabel('epoch')
-    plt.legend(['train', 'test'], loc='upper left')
+    plt.legend(['train', 'test'], loc='upper right')
     plt.show()
 
 
@@ -388,6 +408,26 @@ void main() {{
 }}
 """.format(', '.join(channels))
     return shader
+
+
+def fill_region_from_model(model_file):
+    hdf5_file = '/home/championa/code/catsop/cremi-export/orig/sample_A_20160501.hdf'
+    image_dataset = 'volumes/raw'
+    label_dataset = 'volumes/labels/neuron_ids'
+
+    volume = HDF5Volume(hdf5_file, image_dataset, label_dataset)
+
+    regions = volume.region_generator(TRAINING_FOV * 4)
+
+    model = load_model(model_file)
+
+    for region in regions:
+        region.fill(model)
+        viewer = region.get_viewer()
+        print viewer
+        s = raw_input("Press Enter to continue, q to quit...")
+        if s == 'q':
+            break
 
 
 def main():
