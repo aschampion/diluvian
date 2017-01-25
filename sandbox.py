@@ -171,62 +171,146 @@ def get_moves(mask):
     return moves
 
 
-def simple_training_generator(orig_file, image_dataset, label_dataset, batch_size, training_size, partition=None):
-    if partition is None:
-        partition = (np.array((1, 1, 1)), np.array((0, 0, 0)))
-    f = h5py.File(orig_file, 'r')
-    zoom = np.exp2(DOWNSAMPLE).astype('int64')
-    region_size_zoom = INPUT_SHAPE[0:3]
-    region_size_orig = np.multiply(region_size_zoom, zoom)
-    image_data = f[image_dataset]
-    label_data = f[label_dataset]
-    subvol_sz = np.floor_divide(region_size_orig, 2)
-    # HDF5 coordinates are z, y, x
-    partition_sz = np.floor_divide(np.flipud(np.array(image_data.shape)), partition[0])
-    ctr_min = np.multiply(partition_sz, partition[1]) + subvol_sz
-    ctr_max = np.multiply(partition_sz, partition[1] + 1) - subvol_sz - 1
+class HDF5Volume:
+    def __init__(self, orig_file, image_dataset, label_dataset):
+        self.file = h5py.File(orig_file, 'r')
+        self.image_data = self.file[image_dataset]
+        self.label_data = self.file[label_dataset]
 
-    mask_input = np.full(INPUT_SHAPE, V_FALSE, dtype='float32')
-    mask_input[tuple(np.array(mask_input.shape) / 2)] = V_TRUE
-    mask_input = np.tile(mask_input, (batch_size, 1, 1, 1, 1))
-
+    @staticmethod
     def pad_dims(x):
         return np.expand_dims(np.expand_dims(x, x.ndim), 0)
 
-    np.random.seed(0)
-    sample_num = 0
-    while 1:
-        if sample_num >= training_size:
-            np.random.seed(0)
-            sample_num = 0
+    def simple_training_generator(self, subvolume_size, batch_size, training_size, partition=None):
+        subvolumes = self.SubvolumeGenerator(self, subvolume_size, DOWNSAMPLE, partition)
 
-        batch_image_input = None
-        batch_mask_target = None
+        mask_input = np.full(np.append(subvolume_size, (1,)), V_FALSE, dtype='float32')
+        mask_input[tuple(np.array(mask_input.shape) / 2)] = V_TRUE
+        mask_input = np.tile(mask_input, (batch_size, 1, 1, 1, 1))
 
-        for _ in range(0, batch_size):
-            ctr = tuple(np.random.randint(ctr_min[n], ctr_max[n]) for n in range(0, 3))
-            subvol = ((ctr[2] - subvol_sz[2], ctr[2] + subvol_sz[2] + (region_size_orig[2] % 2)),
-                      (ctr[1] - subvol_sz[1], ctr[1] + subvol_sz[1] + (region_size_orig[1] % 2)),
-                      (ctr[0] - subvol_sz[0], ctr[0] + subvol_sz[0] + (region_size_orig[0] % 2)))
-            image_subvol = image_data[subvol[0][0]:subvol[0][1],
+        sample_num = 0
+        while 1:
+            if sample_num >= training_size:
+                subvolumes.reset()
+                sample_num = 0
+
+            batch_image_input = None
+            batch_mask_target = None
+
+            for _ in range(0, batch_size):
+                subvolume = subvolumes.next()
+
+                image_input = self.pad_dims(subvolume['image'])
+                mask_target = self.pad_dims(subvolume['mask_target'])
+
+                batch_image_input = np.concatenate((batch_image_input, image_input)) if batch_image_input is not None else image_input
+                batch_mask_target = np.concatenate((batch_mask_target, mask_target)) if batch_mask_target is not None else mask_target
+
+            sample_num += batch_size
+            yield ({'image_input': batch_image_input,
+                    'mask_input': mask_input},
+                   {'mask_output': batch_mask_target})
+
+    def moving_training_generator(self, subvolume_size, batch_size, training_size, callback_kludge, partition=None):
+        subvolumes = self.SubvolumeGenerator(self, subvolume_size, DOWNSAMPLE, partition)
+
+        regions = [None] * batch_size
+        region_pos = [None] * batch_size
+
+        sample_num = 0
+        while 1:
+            if sample_num >= training_size:
+                subvolumes.reset()
+                sample_num = 0
+
+            # Before clearing last batches, reuse them to predict mask outputs
+            # for move training. Add mask outputs to regions.
+            active_regions = [n for n, region in enumerate(regions) if region is not None]
+            if active_regions and callback_kludge['outputs'] is not None:
+                # mask_updates = model.predict({'image_input': batch_image_input,
+                #                               'mask_input': batch_mask_input})
+                # for n in active_regions:
+                #     regions[n].add_mask(mask_updates[n, :, :, :, 0], region_pos[n])
+                for n in active_regions:
+                    assert np.array_equal(callback_kludge['inputs']['image_input'][n, 0, 0, :, 0], batch_image_input[n, 0, 0, :, 0])
+                    regions[n].add_mask(callback_kludge['outputs'][n, :, :, :, 0], region_pos[n])
+
+            batch_image_input = None
+            batch_mask_input = None
+            batch_mask_target = None
+
+            for r, region in enumerate(regions):
+                if region is None or region.queue.empty():
+                    subvolume = subvolumes.next()
+
+                    regions[r] = FloodFillRegion(subvolume['image'], subvolume['mask_target'])
+                    region = regions[r]
+
+                block_data = region.get_next_block()
+
+                image_input = self.pad_dims(block_data['image'])
+                mask_input = self.pad_dims(block_data['mask'])
+                mask_target = self.pad_dims(block_data['target'])
+                region_pos[r] = block_data['position']
+
+                batch_image_input = np.concatenate((batch_image_input, image_input)) if batch_image_input is not None else image_input
+                batch_mask_input = np.concatenate((batch_mask_input, mask_input)) if batch_mask_input is not None else mask_input
+                batch_mask_target = np.concatenate((batch_mask_target, mask_target)) if batch_mask_target is not None else mask_target
+
+            sample_num += batch_size
+            inputs = {'image_input': batch_image_input,
+                      'mask_input': batch_mask_input}
+            callback_kludge['inputs'] = inputs
+            yield (inputs,
+                   {'mask_output': batch_mask_target})
+
+
+    class SubvolumeGenerator:
+        def __init__(self, volume, size_zoom, downsample, partition=None):
+            if partition is None:
+                partition = (np.array((1, 1, 1)), np.array((0, 0, 0)))
+            self.volume = volume
+            self.partition = partition
+            self.zoom = np.exp2(downsample).astype('int64')
+            self.size_zoom = size_zoom
+            self.size_orig = np.multiply(self.size_zoom, self.zoom)
+            self.margin = np.floor_divide(self.size_orig, 2)
+            # HDF5 coordinates are z, y, x
+            self.partition_size = np.floor_divide(np.flipud(np.array(self.volume.image_data.shape)), self.partition[0])
+            self.ctr_min = np.multiply(self.partition_size, self.partition[1]) + self.margin
+            self.ctr_max = np.multiply(self.partition_size, self.partition[1] + 1) - self.margin - 1
+            self.random = np.random.RandomState(0)
+
+        def __iter__(self):
+            return self
+
+        def reset(self):
+            self.random.seed(0)
+
+        def next(self):
+            ctr = tuple(self.random.randint(self.ctr_min[n], self.ctr_max[n]) for n in range(0, 3))
+            subvol = ((ctr[2] - self.margin[2], ctr[2] + self.margin[2] + (self.size_orig[2] % 2)),
+                      (ctr[1] - self.margin[1], ctr[1] + self.margin[1] + (self.size_orig[1] % 2)),
+                      (ctr[0] - self.margin[0], ctr[0] + self.margin[0] + (self.size_orig[0] % 2)))
+            image_subvol = self.volume.image_data[subvol[0][0]:subvol[0][1],
                                       subvol[1][0]:subvol[1][1],
                                       subvol[2][0]:subvol[2][1]]
-            label_subvol = label_data[subvol[0][0]:subvol[0][1],
+            label_subvol = self.volume.label_data[subvol[0][0]:subvol[0][1],
                                       subvol[1][0]:subvol[1][1],
                                       subvol[2][0]:subvol[2][1]]
 
             image_subvol = np.transpose(image_subvol.astype('float32')) / 256.0
             label_subvol = np.transpose(label_subvol)
 
-            if np.count_nonzero(DOWNSAMPLE):
-                image_subvol = image_subvol.reshape([region_size_zoom[0], zoom[0],
-                                                     region_size_zoom[1], zoom[1],
-                                                     region_size_zoom[2], zoom[2]]).mean(5).mean(3).mean(1)
+            if np.any(self.zoom > 1):
+                image_subvol = image_subvol.reshape([self.size_zoom[0], self.zoom[0],
+                                                     self.size_zoom[1], self.zoom[1],
+                                                     self.size_zoom[2], self.zoom[2]]).mean(5).mean(3).mean(1)
                 label_id = label_subvol[tuple(np.array(label_subvol.shape) / 2)]
                 label_mask = label_subvol == label_id
-                label_mask = label_mask.reshape([region_size_zoom[0], zoom[0],
-                                                 region_size_zoom[1], zoom[1],
-                                                 region_size_zoom[2], zoom[2]]).all(5).all(3).all(1)
+                label_mask = label_mask.reshape([self.size_zoom[0], self.zoom[0],
+                                                 self.size_zoom[1], self.zoom[1],
+                                                 self.size_zoom[2], self.zoom[2]]).all(5).all(3).all(1)
                 # A higher fidelity alternative would be to use the mode label
                 # for each downsample block. However, this is prohibitively
                 # slow using the scipy code preserved below as an example:
@@ -237,131 +321,14 @@ def simple_training_generator(orig_file, image_dataset, label_dataset, batch_siz
                 # label_subvol = stats.mode(label_subvol, 3)[0]
                 # label_subvol = np.squeeze(stats.mode(label_subvol, 1)[0])
 
-            assert image_subvol.shape == tuple(region_size_zoom), 'Image wrong size: {}'.format(image_subvol.shape)
-            assert label_mask.shape == tuple(region_size_zoom), 'Labels wrong size: {}'.format(label_mask.shape)
+            assert image_subvol.shape == tuple(self.size_zoom), 'Image wrong size: {}'.format(image_subvol.shape)
+            assert label_mask.shape == tuple(self.size_zoom), 'Labels wrong size: {}'.format(label_mask.shape)
 
             f_a = np.count_nonzero(label_mask) / float(label_mask.size)
             mask_target = np.full_like(label_mask, V_FALSE, dtype='float32')
             mask_target[label_mask] = V_TRUE
 
-            image_input = pad_dims(image_subvol)
-            mask_target = pad_dims(mask_target)
-
-            batch_image_input = np.concatenate((batch_image_input, image_input)) if batch_image_input is not None else image_input
-            batch_mask_target = np.concatenate((batch_mask_target, mask_target)) if batch_mask_target is not None else mask_target
-
-        sample_num += batch_size
-        yield ({'image_input': batch_image_input,
-                'mask_input': mask_input},
-               {'mask_output': batch_mask_target})
-
-
-def moving_training_generator(orig_file, image_dataset, label_dataset, batch_size, training_size, callback_kludge, partition=None):
-    if partition is None:
-        partition = (np.array((1, 1, 1)), np.array((0, 0, 0)))
-    f = h5py.File(orig_file, 'r')
-    zoom = np.exp2(DOWNSAMPLE).astype('int64')
-    region_size_zoom = TRAINING_FOV[0:3]
-    region_size_orig = np.multiply(region_size_zoom, zoom)
-    image_data = f[image_dataset]
-    label_data = f[label_dataset]
-    subvol_sz = np.floor_divide(region_size_orig, 2)
-    # HDF5 coordinates are z, y, x
-    partition_sz = np.floor_divide(np.flipud(np.array(image_data.shape)), partition[0])
-    ctr_min = np.multiply(partition_sz, partition[1]) + subvol_sz
-    ctr_max = np.multiply(partition_sz, partition[1] + 1) - subvol_sz - 1
-
-    def pad_dims(x):
-        return np.expand_dims(np.expand_dims(x, x.ndim), 0)
-
-    regions = [None] * batch_size
-    region_pos = [None] * batch_size
-
-    np.random.seed(0)
-    sample_num = 0
-    while 1:
-        if sample_num >= training_size:
-            np.random.seed(0)
-            sample_num = 0
-
-        # Before clearing last batches, reuse them to predict mask outputs
-        # for move training. Add mask outputs to regions.
-        active_regions = [n for n, region in enumerate(regions) if region is not None]
-        if active_regions and callback_kludge['outputs'] is not None:
-            # mask_updates = model.predict({'image_input': batch_image_input,
-            #                               'mask_input': batch_mask_input})
-            # for n in active_regions:
-            #     regions[n].add_mask(mask_updates[n, :, :, :, 0], region_pos[n])
-            for n in active_regions:
-                assert np.array_equal(callback_kludge['inputs']['image_input'][n, 0, 0, :, 0], batch_image_input[n, 0, 0, :, 0])
-                regions[n].add_mask(callback_kludge['outputs'][n, :, :, :, 0], region_pos[n])
-
-        batch_image_input = None
-        batch_mask_input = None
-        batch_mask_target = None
-
-        for r, region in enumerate(regions):
-            if region is None or region.queue.empty():
-                ctr = tuple(np.random.randint(ctr_min[n], ctr_max[n]) for n in range(0, 3))
-                subvol = ((ctr[2] - subvol_sz[2], ctr[2] + subvol_sz[2] + (region_size_orig[2] % 2)),
-                          (ctr[1] - subvol_sz[1], ctr[1] + subvol_sz[1] + (region_size_orig[1] % 2)),
-                          (ctr[0] - subvol_sz[0], ctr[0] + subvol_sz[0] + (region_size_orig[0] % 2)))
-                image_subvol = image_data[subvol[0][0]:subvol[0][1],
-                                          subvol[1][0]:subvol[1][1],
-                                          subvol[2][0]:subvol[2][1]]
-                label_subvol = label_data[subvol[0][0]:subvol[0][1],
-                                          subvol[1][0]:subvol[1][1],
-                                          subvol[2][0]:subvol[2][1]]
-
-                image_subvol = np.transpose(image_subvol.astype('float32')) / 256.0
-                label_subvol = np.transpose(label_subvol)
-
-                if np.count_nonzero(DOWNSAMPLE):
-                    image_subvol = image_subvol.reshape([region_size_zoom[0], zoom[0],
-                                                         region_size_zoom[1], zoom[1],
-                                                         region_size_zoom[2], zoom[2]]).mean(5).mean(3).mean(1)
-                    label_id = label_subvol[tuple(np.array(label_subvol.shape) / 2)]
-                    label_mask = label_subvol == label_id
-                    label_mask = label_mask.reshape([region_size_zoom[0], zoom[0],
-                                                     region_size_zoom[1], zoom[1],
-                                                     region_size_zoom[2], zoom[2]]).all(5).all(3).all(1)
-                    # A higher fidelity alternative would be to use the mode label
-                    # for each downsample block. However, this is prohibitively
-                    # slow using the scipy code preserved below as an example:
-                    # label_subvol = label_subvol.reshape([region_size_zoom[0], zoom[0],
-                    #                                      region_size_zoom[1], zoom[1],
-                    #                                      region_size_zoom[2], zoom[2]])
-                    # label_subvol = stats.mode(label_subvol, 5)[0]
-                    # label_subvol = stats.mode(label_subvol, 3)[0]
-                    # label_subvol = np.squeeze(stats.mode(label_subvol, 1)[0])
-
-                assert image_subvol.shape == tuple(region_size_zoom), 'Image wrong size: {}'.format(image_subvol.shape)
-                assert label_mask.shape == tuple(region_size_zoom), 'Labels wrong size: {}'.format(label_mask.shape)
-
-                f_a = np.count_nonzero(label_mask) / float(label_mask.size)
-                mask_target = np.full_like(label_mask, V_FALSE, dtype='float32')
-                mask_target[label_mask] = V_TRUE
-
-                regions[r] = FloodFillRegion(image_subvol, mask_target)
-                region = regions[r]
-
-            block_data = region.get_next_block()
-
-            image_input = pad_dims(block_data['image'])
-            mask_input = pad_dims(block_data['mask'])
-            mask_target = pad_dims(block_data['target'])
-            region_pos[r] = block_data['position']
-
-            batch_image_input = np.concatenate((batch_image_input, image_input)) if batch_image_input is not None else image_input
-            batch_mask_input = np.concatenate((batch_mask_input, mask_input)) if batch_mask_input is not None else mask_input
-            batch_mask_target = np.concatenate((batch_mask_target, mask_target)) if batch_mask_target is not None else mask_target
-
-        sample_num += batch_size
-        inputs = {'image_input': batch_image_input,
-                'mask_input': batch_mask_input}
-        callback_kludge['inputs'] = inputs
-        yield (inputs,
-               {'mask_output': batch_mask_target})
+            return {'image': image_subvol, 'mask_target': mask_target}
 
 
 def make_network():
@@ -432,19 +399,17 @@ def main():
 
     partitions = np.array((1, 1, 2))
 
-    # Pre-train
-    training_data = simple_training_generator(hdf5_file,
-                                       image_dataset,
-                                       label_dataset,
-                                       BATCH_SIZE,
-                                       TRAINING_SIZE,
-                                       (partitions, np.array((0, 0, 0))))
-    validation_data = simple_training_generator(hdf5_file,
-                                       image_dataset,
-                                       label_dataset,
+    volume = HDF5Volume(hdf5_file, image_dataset, label_dataset)
+    validation_data = volume.simple_training_generator(INPUT_SHAPE[0:3],
                                        BATCH_SIZE,
                                        VALIDATION_SIZE,
                                        (partitions, np.array((0, 0, 1))))
+
+    # Pre-train
+    training_data = volume.simple_training_generator(INPUT_SHAPE[0:3],
+                                                     BATCH_SIZE,
+                                                     TRAINING_SIZE,
+                                                     (partitions, np.array((0, 0, 0))))
     history = ffn.fit_generator(training_data,
                                 samples_per_epoch=TRAINING_SIZE,
                                 nb_epoch=PRETRAIN_NUM_EPOCHS,
@@ -456,9 +421,7 @@ def main():
     cb = PredictionCopy(kludge)
     checkpoint = ModelCheckpoint('weights.hdf5', save_best_only=True)
     early_stop = EarlyStopping(patience=50)
-    training_data = moving_training_generator(hdf5_file,
-                                       image_dataset,
-                                       label_dataset,
+    training_data = volume.moving_training_generator(TRAINING_FOV,
                                        BATCH_SIZE,
                                        TRAINING_SIZE,
                                        kludge,
@@ -476,11 +439,9 @@ def main():
 
     # for _ in itertools.islice(training_data, 12):
     #     continue
-    dupe_data = simple_training_generator(hdf5_file,
-                                       image_dataset,
-                                       label_dataset,
+    dupe_data = volume.simple_training_generator(INPUT_SHAPE[0:3],
                                        BATCH_SIZE,
-                                       TRAINING_SIZE,)
+                                       TRAINING_SIZE)
     viz_ex = itertools.islice(dupe_data, 1)
 
     for inputs, targets in viz_ex:
