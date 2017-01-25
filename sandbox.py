@@ -222,22 +222,27 @@ def simple_training_generator(orig_file, image_dataset, label_dataset, batch_siz
                 image_subvol = image_subvol.reshape([region_size_zoom[0], zoom[0],
                                                      region_size_zoom[1], zoom[1],
                                                      region_size_zoom[2], zoom[2]]).mean(5).mean(3).mean(1)
-                label_subvol = label_subvol.reshape([region_size_zoom[0], zoom[0],
-                                                     region_size_zoom[1], zoom[1],
-                                                     region_size_zoom[2], zoom[2]])
-                label_subvol = stats.mode(label_subvol, 5)[0]
-                label_subvol = stats.mode(label_subvol, 3)[0]
-                label_subvol = np.squeeze(stats.mode(label_subvol, 1)[0])
+                label_id = label_subvol[tuple(np.array(label_subvol.shape) / 2)]
+                label_mask = label_subvol == label_id
+                label_mask = label_mask.reshape([region_size_zoom[0], zoom[0],
+                                                 region_size_zoom[1], zoom[1],
+                                                 region_size_zoom[2], zoom[2]]).all(5).all(3).all(1)
+                # A higher fidelity alternative would be to use the mode label
+                # for each downsample block. However, this is prohibitively
+                # slow using the scipy code preserved below as an example:
+                # label_subvol = label_subvol.reshape([region_size_zoom[0], zoom[0],
+                #                                      region_size_zoom[1], zoom[1],
+                #                                      region_size_zoom[2], zoom[2]])
+                # label_subvol = stats.mode(label_subvol, 5)[0]
+                # label_subvol = stats.mode(label_subvol, 3)[0]
+                # label_subvol = np.squeeze(stats.mode(label_subvol, 1)[0])
 
             assert image_subvol.shape == tuple(region_size_zoom), 'Image wrong size: {}'.format(image_subvol.shape)
-            assert label_subvol.shape == tuple(region_size_zoom), 'Labels wrong size: {}'.format(label_subvol.shape)
+            assert label_mask.shape == tuple(region_size_zoom), 'Labels wrong size: {}'.format(label_mask.shape)
 
-            label_id = label_subvol[tuple(np.array(label_subvol.shape) / 2)]
-            label_mask = label_subvol == label_id
             f_a = np.count_nonzero(label_mask) / float(label_mask.size)
-            mask_target = np.full_like(label_subvol, V_FALSE, dtype='float32')
+            mask_target = np.full_like(label_mask, V_FALSE, dtype='float32')
             mask_target[label_mask] = V_TRUE
-            # print 'Yielding (' + ','.join(map(str, ctr)) + ') Label ID: ' + str(label_id) + ' f_a: {:.1%}'.format(f_a)
 
             image_input = pad_dims(image_subvol)
             mask_target = pad_dims(mask_target)
@@ -315,20 +320,26 @@ def moving_training_generator(orig_file, image_dataset, label_dataset, batch_siz
                     image_subvol = image_subvol.reshape([region_size_zoom[0], zoom[0],
                                                          region_size_zoom[1], zoom[1],
                                                          region_size_zoom[2], zoom[2]]).mean(5).mean(3).mean(1)
-                    label_subvol = label_subvol.reshape([region_size_zoom[0], zoom[0],
-                                                         region_size_zoom[1], zoom[1],
-                                                         region_size_zoom[2], zoom[2]])
-                    label_subvol = stats.mode(label_subvol, 5)[0]
-                    label_subvol = stats.mode(label_subvol, 3)[0]
-                    label_subvol = np.squeeze(stats.mode(label_subvol, 1)[0])
+                    label_id = label_subvol[tuple(np.array(label_subvol.shape) / 2)]
+                    label_mask = label_subvol == label_id
+                    label_mask = label_mask.reshape([region_size_zoom[0], zoom[0],
+                                                     region_size_zoom[1], zoom[1],
+                                                     region_size_zoom[2], zoom[2]]).all(5).all(3).all(1)
+                    # A higher fidelity alternative would be to use the mode label
+                    # for each downsample block. However, this is prohibitively
+                    # slow using the scipy code preserved below as an example:
+                    # label_subvol = label_subvol.reshape([region_size_zoom[0], zoom[0],
+                    #                                      region_size_zoom[1], zoom[1],
+                    #                                      region_size_zoom[2], zoom[2]])
+                    # label_subvol = stats.mode(label_subvol, 5)[0]
+                    # label_subvol = stats.mode(label_subvol, 3)[0]
+                    # label_subvol = np.squeeze(stats.mode(label_subvol, 1)[0])
 
                 assert image_subvol.shape == tuple(region_size_zoom), 'Image wrong size: {}'.format(image_subvol.shape)
-                assert label_subvol.shape == tuple(region_size_zoom), 'Labels wrong size: {}'.format(label_subvol.shape)
+                assert label_mask.shape == tuple(region_size_zoom), 'Labels wrong size: {}'.format(label_mask.shape)
 
-                label_id = label_subvol[tuple(np.array(label_subvol.shape) / 2)]
-                label_mask = label_subvol == label_id
                 f_a = np.count_nonzero(label_mask) / float(label_mask.size)
-                mask_target = np.full_like(label_subvol, V_FALSE, dtype='float32')
+                mask_target = np.full_like(label_mask, V_FALSE, dtype='float32')
                 mask_target[label_mask] = V_TRUE
 
                 regions[r] = FloodFillRegion(image_subvol, mask_target)
