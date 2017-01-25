@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import Queue
 
-from keras.callbacks import Callback, ModelCheckpoint
+from keras.callbacks import Callback, EarlyStopping, ModelCheckpoint
 from keras.layers import AveragePooling3D, Convolution3D, Input, merge
 from keras.layers.core import Activation, Lambda, Merge
 from keras.models import Model, Sequential
@@ -438,6 +438,7 @@ def main():
     kludge = {'inputs': None, 'outputs': None}
     cb = PredictionCopy(kludge)
     checkpoint = ModelCheckpoint('weights.hdf5', save_best_only=True)
+    early_stop = EarlyStopping(patience=50)
     training_data = moving_training_generator('/home/championa/code/catsop/cremi-export/orig/sample_A_20160501.hdf',
                                        '/volumes',
                                        'raw',
