@@ -458,56 +458,80 @@ def fill_region_from_model(model_file):
             break
 
 
+# Taken from the python docs itertools recipes
+def roundrobin(*iterables):
+    "roundrobin('ABC', 'D', 'EF') --> A D E B F C"
+    # Recipe credited to George Sakkis
+    pending = len(iterables)
+    nexts = itertools.cycle(iter(it).next for it in iterables)
+    while pending:
+        try:
+            for next in nexts:
+                yield next()
+        except StopIteration:
+            pending -= 1
+            nexts = itertools.cycle(itertools.islice(nexts, pending))
+
+
 def main():
     ffn = make_network()
 
-    hdf5_file = '/home/championa/code/catsop/cremi-export/orig/sample_A_20160501.hdf'
+    hdf5_files = {
+        'a': '/home/championa/code/catsop/cremi-export/orig/sample_A_20160501.hdf',
+        'b': '/home/championa/code/catsop/cremi-export/orig/sample_B_20160501.hdf',
+        'c': '/home/championa/code/catsop/cremi-export/orig/sample_C_20160501.hdf',
+    }
     image_dataset = 'volumes/raw'
     label_dataset = 'volumes/labels/neuron_ids'
 
     partitions = np.array((1, 1, 2))
 
-    volume = HDF5Volume(hdf5_file, image_dataset, label_dataset)
-    validation_data = volume.simple_training_generator(INPUT_SHAPE[0:3],
+
+    volumes = {k: HDF5Volume(f, image_dataset, label_dataset) for k, f in hdf5_files.iteritems()}
+    num_volumes = len(volumes)
+    validation_data = {k: v.simple_training_generator(INPUT_SHAPE[0:3],
                                        BATCH_SIZE,
                                        VALIDATION_SIZE,
-                                       (partitions, np.array((0, 0, 1))))
+                                       (partitions, np.array((0, 0, 1)))) for k, v in volumes.iteritems()}
+    validation_data = roundrobin(*validation_data.values())
 
     # Pre-train
-    training_data = volume.simple_training_generator(INPUT_SHAPE[0:3],
+    training_data = {k: v.simple_training_generator(INPUT_SHAPE[0:3],
                                                      BATCH_SIZE,
                                                      TRAINING_SIZE,
-                                                     (partitions, np.array((0, 0, 0))))
+                                                     (partitions, np.array((0, 0, 0)))) for k, v in volumes.iteritems()}
+    training_data = roundrobin(*training_data.values())
     history = ffn.fit_generator(training_data,
-                                samples_per_epoch=TRAINING_SIZE,
+                                samples_per_epoch=TRAINING_SIZE * num_volumes,
                                 nb_epoch=PRETRAIN_NUM_EPOCHS,
                                 validation_data=validation_data,
-                                nb_val_samples=VALIDATION_SIZE)
+                                nb_val_samples=VALIDATION_SIZE * num_volumes)
 
     # Moving training
-    kludge = {'inputs': None, 'outputs': None}
-    cb = PredictionCopy(kludge)
+    kludges = {k: {'inputs': None, 'outputs': None} for k in volumes.iterkeys()}
+    kludge_callbacks = [PredictionCopy(kludge) for kludge in kludges.values()]
     checkpoint = ModelCheckpoint('weights.hdf5', save_best_only=True)
-    early_stop = EarlyStopping(patience=50)
-    training_data = volume.moving_training_generator(TRAINING_FOV,
+    early_stop = EarlyStopping(patience=20)
+    training_data = {k: v.moving_training_generator(TRAINING_FOV,
                                        BATCH_SIZE,
                                        TRAINING_SIZE,
-                                       kludge,
-                                       (partitions, np.array((0, 0, 0))))
+                                       kludges[k],
+                                       (partitions, np.array((0, 0, 0)))) for k, v in volumes.iteritems()}
+    training_data = roundrobin(*training_data.values())
     moving_history = ffn.fit_generator(training_data,
-                                samples_per_epoch=TRAINING_SIZE,
+                                samples_per_epoch=TRAINING_SIZE * num_volumes,
                                 nb_epoch=NUM_EPOCHS,
                                 initial_epoch=PRETRAIN_NUM_EPOCHS,
                                 max_q_size=1,
                                 nb_worker=1,
-                                callbacks=[cb, checkpoint, early_stop],
+                                callbacks=kludge_callbacks + [checkpoint, early_stop],
                                 validation_data=validation_data,
-                                nb_val_samples=VALIDATION_SIZE)
+                                nb_val_samples=VALIDATION_SIZE * num_volumes)
     extend_keras_history(history, moving_history)
 
     # for _ in itertools.islice(training_data, 12):
     #     continue
-    dupe_data = volume.simple_training_generator(INPUT_SHAPE[0:3],
+    dupe_data = volumes['a'].simple_training_generator(INPUT_SHAPE[0:3],
                                        BATCH_SIZE,
                                        TRAINING_SIZE)
     viz_ex = itertools.islice(dupe_data, 1)
