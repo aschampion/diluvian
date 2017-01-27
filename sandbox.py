@@ -57,11 +57,7 @@ def add_convolution_module(model):
 
 
 class FloodFillRegion:
-    ffrid = 0
-
     def __init__(self, image, target=None, seed_pos=None):
-        self.ffrid = FloodFillRegion.ffrid
-        FloodFillRegion.ffrid += 1
         self.queue = Queue.PriorityQueue()
         self.visited = set()
         self.image = image
@@ -77,7 +73,8 @@ class FloodFillRegion:
         self.queue.put((None, seed_pos))
         seed_vox = pos_to_vox(seed_pos)
         self.mask[tuple(seed_vox)] = V_TRUE
-        # print 'FFR {0} with seed_pos: {1}'.format(self.ffrid, np.array_str(seed_pos))
+        # self.ffrid = np.array_str(seed_pos)
+        # print 'FFR {0}'.format(self.ffrid)
 
     def add_mask(self, mask_block, mask_pos):
         mask_origin = pos_to_vox(mask_pos) - (np.asarray(mask_block.shape) - 1) / 2
