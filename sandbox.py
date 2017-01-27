@@ -251,10 +251,6 @@ class HDF5Volume:
             # for move training. Add mask outputs to regions.
             active_regions = [n for n, region in enumerate(regions) if region is not None]
             if active_regions and callback_kludge['outputs'] is not None:
-                # mask_updates = model.predict({'image_input': batch_image_input,
-                #                               'mask_input': batch_mask_input})
-                # for n in active_regions:
-                #     regions[n].add_mask(mask_updates[n, :, :, :, 0], region_pos[n])
                 for n in active_regions:
                     assert np.array_equal(callback_kludge['inputs']['image_input'][n, 0, 0, :, 0], batch_image_input[n, 0, 0, :, 0])
                     regions[n].add_mask(callback_kludge['outputs'][n, :, :, :, 0], region_pos[n])
@@ -552,7 +548,7 @@ def main():
         viewer.add(np.transpose(output[0, :, :, :, 0]),
                    name='Mask Output',
                    shader=get_color_shader(1))
-        print(viewer)
+        print viewer
     plot_history(history)
     return history
 
