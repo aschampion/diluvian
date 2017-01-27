@@ -430,8 +430,9 @@ void main() {{
     return shader
 
 
-def fill_region_from_model(model_file):
-    hdf5_file = '/home/championa/code/catsop/cremi-export/orig/sample_A_20160501.hdf'
+def fill_region_from_model(model_file, hdf5_file=None, bias=True):
+    if hdf5_file is None:
+        hdf5_file = '/home/championa/code/catsop/cremi-export/orig/sample_A_20160501.hdf'
     image_dataset = 'volumes/raw'
     label_dataset = 'volumes/labels/neuron_ids'
 
@@ -442,7 +443,7 @@ def fill_region_from_model(model_file):
     model = load_model(model_file)
 
     for region in regions:
-        # region.bias_against_merge = True
+        region.bias_against_merge = bias
         region.fill(model, verbose=True)
         viewer = region.get_viewer()
         print viewer
