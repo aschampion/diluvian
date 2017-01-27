@@ -284,6 +284,7 @@ class HDF5Volume:
             inputs = {'image_input': batch_image_input,
                       'mask_input': batch_mask_input}
             callback_kludge['inputs'] = inputs
+            callback_kludge['outputs'] = None
             yield (inputs,
                    {'mask_output': batch_mask_target})
 
@@ -415,7 +416,7 @@ class PredictionCopy(Callback):
         self.kludge = kludge
 
     def on_batch_end(self, batch, logs={}):
-        if self.kludge['inputs']:
+        if self.kludge['inputs'] and self.kludge['outputs'] is None:
             self.kludge['outputs'] = self.model.predict(self.kludge['inputs'])
 
 
