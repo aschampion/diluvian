@@ -96,11 +96,7 @@ class FloodFillRegion:
                                      mask_origin[1]:mask_origin[1] + mask_block.shape[1],
                                      mask_origin[2]:mask_origin[2] + mask_block.shape[2]]
             update_mask = np.isnan(current_mask) | (current_mask > 0.5) | np.less(mask_block, current_mask)
-            # print float(np.sum(update_mask)) / float(np.prod(np.array(update_mask.shape)))
             current_mask[update_mask] = mask_block[update_mask]
-            self.mask[mask_origin[0]:mask_origin[0] + mask_block.shape[0],
-                      mask_origin[1]:mask_origin[1] + mask_block.shape[1],
-                      mask_origin[2]:mask_origin[2] + mask_block.shape[2]] = current_mask
         else:
             self.mask[mask_origin[0]:mask_origin[0] + mask_block.shape[0],
                       mask_origin[1]:mask_origin[1] + mask_block.shape[1],
@@ -118,7 +114,7 @@ class FloodFillRegion:
                                  block_min[2]:block_max[2]]
         mask_block = self.mask[block_min[0]:block_max[0],
                                block_min[1]:block_max[1],
-                               block_min[2]:block_max[2]]
+                               block_min[2]:block_max[2]].copy()
 
         mask_block[np.isnan(mask_block)] = V_FALSE
 
