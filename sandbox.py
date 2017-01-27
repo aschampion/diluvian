@@ -71,6 +71,7 @@ class FloodFillRegion:
         self.mask[:] = np.NAN
         self.target = target
         self.bias_against_merge = False
+        self.move_based_on_new_mask = False
         if not seed_pos:
             seed_pos = np.floor_divide(self.move_bounds, 2) + 1
         self.queue.put((None, seed_pos))
@@ -79,7 +80,21 @@ class FloodFillRegion:
         # print 'FFR {0} with seed_pos: {1}'.format(self.ffrid, np.array_str(seed_pos))
 
     def add_mask(self, mask_block, mask_pos):
-        new_moves = get_moves(mask_block)
+        mask_origin = pos_to_vox(mask_pos) - (np.asarray(mask_block.shape) - 1) / 2
+        current_mask = self.mask[mask_origin[0]:mask_origin[0] + mask_block.shape[0],
+                                 mask_origin[1]:mask_origin[1] + mask_block.shape[1],
+                                 mask_origin[2]:mask_origin[2] + mask_block.shape[2]]
+
+        if self.bias_against_merge:
+            update_mask = np.isnan(current_mask) | (current_mask > 0.5) | np.less(mask_block, current_mask)
+            current_mask[update_mask] = mask_block[update_mask]
+        else:
+            current_mask[:] = mask_block
+
+        if self.move_based_on_new_mask:
+            new_moves = get_moves(mask_block)
+        else:
+            new_moves = get_moves(current_mask)
         for move in new_moves:
             new_ctr = mask_pos + move['move']
             if np.any(np.greater_equal(new_ctr, self.move_bounds)) or np.any(new_ctr <= 1):
@@ -88,19 +103,6 @@ class FloodFillRegion:
                 self.visited.add(tuple(new_ctr))
                 self.queue.put((-move['v'], tuple(new_ctr)))
                 # print 'FFR {0} queuing {1} ({2})'.format(self.ffrid, np.array_str(new_ctr), move['v'])
-
-        mask_origin = pos_to_vox(mask_pos) - (np.asarray(mask_block.shape) - 1) / 2
-
-        if self.bias_against_merge:
-            current_mask = self.mask[mask_origin[0]:mask_origin[0] + mask_block.shape[0],
-                                     mask_origin[1]:mask_origin[1] + mask_block.shape[1],
-                                     mask_origin[2]:mask_origin[2] + mask_block.shape[2]]
-            update_mask = np.isnan(current_mask) | (current_mask > 0.5) | np.less(mask_block, current_mask)
-            current_mask[update_mask] = mask_block[update_mask]
-        else:
-            self.mask[mask_origin[0]:mask_origin[0] + mask_block.shape[0],
-                      mask_origin[1]:mask_origin[1] + mask_block.shape[1],
-                      mask_origin[2]:mask_origin[2] + mask_block.shape[2]] = mask_block
 
     def get_next_block(self):
         next_pos = np.asarray(self.queue.get()[1])
