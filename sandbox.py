@@ -14,9 +14,8 @@ from keras import backend as K
 
 from scipy import stats
 
-from progressbar import ProgressBar
-
 import neuroglancer
+from tqdm import tqdm
 
 
 # DOWNSAMPLE = np.array((1, 1, 0))
@@ -138,12 +137,14 @@ class FloodFillRegion:
                 'position': next_pos}
 
     def fill(self, model, verbose=False):
+        moves = 0
         if verbose:
-            sys.stdout.write('Filling region')
+            pbar = tqdm(desc='Move queue')
         while not self.queue.empty():
+            moves += 1
             if verbose:
-                sys.stdout.write('.')
-                sys.stdout.flush()
+                pbar.total = moves + self.queue.qsize()
+                pbar.update()
             block_data = self.get_next_block()
 
             image_input = pad_dims(block_data['image'])
@@ -154,7 +155,7 @@ class FloodFillRegion:
             self.add_mask(output[0, :, :, :, 0], block_data['position'])
 
         if verbose:
-            print ''
+            pbar.close()
 
     def get_viewer(self):
         viewer = neuroglancer.Viewer(voxel_size=list(RESOLUTION))
