@@ -14,6 +14,8 @@ from keras import backend as K
 
 from scipy import stats
 
+import matplotlib.animation as animation
+import matplotlib.pyplot as plt
 import neuroglancer
 from tqdm import tqdm
 
@@ -68,13 +70,19 @@ class FloodFillRegion:
         self.target = target
         self.bias_against_merge = False
         self.move_based_on_new_mask = False
-        if not seed_pos:
+        if seed_pos is None:
             seed_pos = np.floor_divide(self.move_bounds, 2) + 1
+        self.seed_pos = seed_pos
         self.queue.put((None, seed_pos))
         seed_vox = pos_to_vox(seed_pos)
         self.mask[tuple(seed_vox)] = V_TRUE
         # self.ffrid = np.array_str(seed_pos)
         # print 'FFR {0}'.format(self.ffrid)
+
+    def unfilled_copy(self):
+        copy = FloodFillRegion(self.image, self.target, self.seed_pos)
+        copy.bias_against_merge = self.bias_against_merge
+        copy.move_based_on_new_mask = self.move_based_on_new_mask
 
     def add_mask(self, mask_block, mask_pos):
         mask_origin = pos_to_vox(mask_pos) - (np.asarray(mask_block.shape) - 1) / 2
@@ -151,6 +159,157 @@ class FloodFillRegion:
 
         if verbose:
             pbar.close()
+
+    def fill_animation(self, model, movie_filename, verbose=False):
+        dpi = 100
+        fig = plt.figure(figsize=(1920/dpi, 1080/dpi), dpi=dpi)
+        fig.patch.set_facecolor('black')
+        axes = {
+            'xy': fig.add_subplot(1, 3, 1),
+            'xz': fig.add_subplot(1, 3, 2),
+            'zy': fig.add_subplot(1, 3, 3),
+        }
+
+        def get_plane(arr, vox, plane):
+            return {
+                'xy': lambda a, v: np.transpose(a[:, :, v[2]]),
+                'xz': lambda a, v: np.transpose(a[:, v[1], :]),
+                'zy': lambda a, v: a[v[0], :, :],
+            }[plane](arr, np.round(vox).astype('int64'))
+
+        def get_hv(vox, plane):
+            # rel = np.divide(vox, self.bounds)
+            rel = vox
+            # rel = self.bounds - vox
+            return {
+                'xy': {'h': rel[1], 'v': rel[0]},
+                'xz': {'h': rel[2], 'v': rel[0]},
+                'zy': {'h': rel[1], 'v': rel[2]},
+            }[plane]
+
+        def get_aspect(plane):
+            return {
+                'xy': float(RESOLUTION[1]) / float(RESOLUTION[0]),
+                'xz': float(RESOLUTION[2]) / float(RESOLUTION[0]),
+                'zy': float(RESOLUTION[1]) / float(RESOLUTION[2]),
+            }[plane]
+
+        images = {
+            'image': {},
+            'mask': {},
+        }
+        lines = {
+            'v': {},
+            'h': {},
+            'bl': {},
+            'bt': {},
+        }
+        current_vox = pos_to_vox(self.seed_pos)
+        margin = (INPUT_SHAPE[0:3]) / 2
+        for plane, ax in axes.iteritems():
+            ax.get_xaxis().set_visible(False)
+            ax.get_yaxis().set_visible(False)
+
+            image_data = get_plane(self.image, current_vox, plane)
+            im = ax.imshow(image_data, cmap='gray')
+            im.set_clim([0, 1])
+            images['image'][plane] = im
+
+            mask_data = get_plane(self.mask, current_vox, plane)
+            im = ax.imshow(mask_data, cmap='jet', alpha=0.8)
+            im.set_clim([0, 1])
+            images['mask'][plane] = im
+
+            aspect = get_aspect(plane)
+            lines['h'][plane] = ax.axhline(y=get_hv(current_vox - margin, plane)['h'], color='w')
+            lines['v'][plane] = ax.axvline(x=get_hv(current_vox + margin, plane)['v'], color='w')
+            lines['bl'][plane] = ax.axvline(x=get_hv(current_vox - margin, plane)['v'], color='w')
+            lines['bt'][plane] = ax.axhline(y=get_hv(current_vox + margin, plane)['h'], color='w')
+
+            ax.set_aspect(aspect)
+
+        plt.tight_layout()
+
+        def update_fn(vox):
+            # print 'vox: {} npv: {} vq: {} pq: {}'.format(np.array_str(vox), np.array_str(update_fn.next_pos_vox), update_fn.vox_queue.qsize(), self.queue.qsize())
+            if np.array_equal(np.round(vox).astype('int64'), update_fn.next_pos_vox):
+                if update_fn.block_data is not None:
+                    image_input = pad_dims(update_fn.block_data['image'])
+                    mask_input = pad_dims(update_fn.block_data['mask'])
+
+                    output = model.predict({'image_input': image_input,
+                                            'mask_input': mask_input})
+                    self.add_mask(output[0, :, :, :, 0], update_fn.block_data['position'])
+
+                if not self.queue.empty():
+                    update_fn.moves += 1
+                    if verbose:
+                        update_fn.pbar.total = update_fn.moves + self.queue.qsize()
+                        update_fn.pbar.update()
+                    update_fn.block_data = self.get_next_block()
+
+                    update_fn.next_pos_vox = pos_to_vox(update_fn.block_data['position'])
+                    if not np.array_equal(np.round(vox).astype('int64'), update_fn.next_pos_vox):
+                        p = update_fn.next_pos_vox - vox
+                        steps = np.linspace(0, 1, 16)
+                        interp_vox = vox + np.outer(steps, p)
+                        for row in interp_vox:
+                            update_fn.vox_queue.put(row)
+                    else:
+                        update_fn.vox_queue.put(vox)
+
+            for plane, im in images['image'].iteritems():
+                image_data = get_plane(self.image, vox, plane)
+                im.set_data(image_data)
+
+            for plane, im in images['mask'].iteritems():
+                image_data = get_plane(self.mask, vox, plane)
+                masked_data = np.ma.masked_where(image_data < 0.5, image_data)
+                im.set_data(masked_data)
+
+            for plane, ax in axes.iteritems():
+                aspect = get_aspect(plane)
+                lines['h'][plane].set_ydata(get_hv(vox - margin, plane)['h'])
+                lines['v'][plane].set_xdata(get_hv(vox + margin, plane)['v'])
+                lines['bl'][plane].set_xdata(get_hv(vox - margin, plane)['v'])
+                lines['bt'][plane].set_ydata(get_hv(vox + margin, plane)['h'])
+
+            return images['image'].values() + images['mask'].values() + \
+                   lines['h'].values() + lines['v'].values() + \
+                   lines['bl'].values() + lines['bt'].values()
+
+        update_fn.moves = 0
+        update_fn.block_data = None
+        if verbose:
+            update_fn.pbar = tqdm(desc='Move queue')
+
+        update_fn.next_pos_vox = current_vox
+        update_fn.vox_queue = Queue.Queue()
+        update_fn.vox_queue.put(current_vox)
+
+        def vox_gen():
+            # count = 0
+            # limit = 1000
+            last_vox = None
+            while 1:
+                # print 'gen {}'.format(update_fn.vox_queue.qsize())
+                if update_fn.vox_queue.empty():
+                    # print 'Done animating'
+                    return
+                else:
+                # count += 1
+                    last_vox = update_fn.vox_queue.get()
+                    yield last_vox
+
+        ani = animation.FuncAnimation(fig, update_fn, frames=vox_gen(), interval=16, repeat=False, save_count=60*60)
+        writer = animation.writers['ffmpeg'](fps=60)
+
+        ani.save(movie_filename, writer=writer, dpi=dpi, savefig_kwargs={'facecolor': 'black'})
+
+        if verbose:
+            update_fn.pbar.close()
+
+        return ani
 
     def get_viewer(self):
         viewer = neuroglancer.Viewer(voxel_size=list(RESOLUTION))
@@ -447,9 +606,13 @@ def fill_region_from_model(model_file, hdf5_file=None, bias=True):
         region.fill(model, verbose=True)
         viewer = region.get_viewer()
         print viewer
-        s = raw_input("Press Enter to continue, q to quit...")
+        s = raw_input("Press Enter to continue, a to export animation, q to quit...")
         if s == 'q':
             break
+        elif s == 'a':
+            region_copy = region.unfilled_copy()
+            ani = region_copy.fill_animation(model, 'export.mp4', verbose=True)
+            s = raw_input("Press Enter when animation is complete...")
 
 
 # Taken from the python docs itertools recipes
