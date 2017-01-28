@@ -144,9 +144,9 @@ class FloodFillRegion:
         if verbose:
             pbar = tqdm(desc='Move queue')
         while not self.queue.empty():
-            moves += 1
             if verbose:
                 pbar.total = moves + self.queue.qsize()
+                moves += 1
                 pbar.update()
             block_data = self.get_next_block()
 
