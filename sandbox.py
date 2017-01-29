@@ -139,23 +139,26 @@ class FloodFillRegion:
                 'target': target_block,
                 'position': next_pos}
 
-    def fill(self, model, verbose=False):
+    def fill(self, model, verbose=False, move_batch_size=1):
         moves = 0
         if verbose:
             pbar = tqdm(desc='Move queue')
         while not self.queue.empty():
+            batch_block_data = [self.get_next_block() for _ in itertools.takewhile(lambda _: not self.queue.empty(), range(move_batch_size))]
+            batch_moves = len(batch_block_data)
             if verbose:
+                moves += batch_moves
                 pbar.total = moves + self.queue.qsize()
-                moves += 1
-                pbar.update()
-            block_data = self.get_next_block()
+                pbar.update(batch_moves)
 
-            image_input = pad_dims(block_data['image'])
-            mask_input = pad_dims(block_data['mask'])
+            image_input = np.concatenate([pad_dims(b['image']) for b in batch_block_data])
+            mask_input = np.concatenate([pad_dims(b['mask']) for b in batch_block_data])
 
             output = model.predict({'image_input': image_input,
                                     'mask_input': mask_input})
-            self.add_mask(output[0, :, :, :, 0], block_data['position'])
+
+            for ind, block_data in enumerate(batch_block_data):
+                self.add_mask(output[ind, :, :, :, 0], block_data['position'])
 
         if verbose:
             pbar.close()
