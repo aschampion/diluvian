@@ -359,12 +359,16 @@ class HDF5Volume:
         self.image_data = self.file[image_dataset]
         self.label_data = self.file[label_dataset]
 
-    def simple_training_generator(self, subvolume_size, batch_size, training_size, partition=None):
+    def simple_training_generator(self, subvolume_size, batch_size, training_size, f_a_bins=None, partition=None):
         subvolumes = self.SubvolumeGenerator(self, subvolume_size, DOWNSAMPLE, partition)
 
         mask_input = np.full(np.append(subvolume_size, (1,)), V_FALSE, dtype='float32')
         mask_input[tuple(np.array(mask_input.shape) / 2)] = V_TRUE
         mask_input = np.tile(mask_input, (batch_size, 1, 1, 1, 1))
+
+        if f_a_bins is not None:
+            f_a_counts = np.zeros_like(f_a_bins, dtype='uint64')
+            f_as = np.zeros(batch_size)
 
         sample_num = 0
         while 1:
@@ -375,25 +379,43 @@ class HDF5Volume:
             batch_image_input = None
             batch_mask_target = None
 
-            for _ in range(0, batch_size):
+            for batch_ind in range(0, batch_size):
                 subvolume = subvolumes.next()
 
                 image_input = pad_dims(subvolume['image'])
                 mask_target = pad_dims(subvolume['mask_target'])
 
+                if f_a_bins is not None:
+                    f_as[batch_ind] = subvolume['f_a']
+
                 batch_image_input = np.concatenate((batch_image_input, image_input)) if batch_image_input is not None else image_input
                 batch_mask_target = np.concatenate((batch_mask_target, mask_target)) if batch_mask_target is not None else mask_target
 
             sample_num += batch_size
-            yield ({'image_input': batch_image_input,
-                    'mask_input': mask_input},
-                   {'mask_output': batch_mask_target})
 
-    def moving_training_generator(self, subvolume_size, batch_size, training_size, callback_kludge, partition=None):
+            if f_a_bins is None:
+                yield ({'image_input': batch_image_input,
+                        'mask_input': mask_input},
+                       {'mask_output': batch_mask_target})
+            else:
+                f_a_inds = np.digitize(f_as, f_a_bins) - 1
+                inds, counts = np.unique(f_a_inds, return_counts=True)
+                f_a_counts[inds] += counts.astype('uint64')
+                sample_weights = np.reciprocal(f_a_counts[f_a_inds], dtype='float64')
+                yield ({'image_input': batch_image_input,
+                        'mask_input': mask_input},
+                       {'mask_output': batch_mask_target},
+                       sample_weights)
+
+    def moving_training_generator(self, subvolume_size, batch_size, training_size, callback_kludge, f_a_bins=None, partition=None):
         subvolumes = self.SubvolumeGenerator(self, subvolume_size, DOWNSAMPLE, partition)
 
         regions = [None] * batch_size
         region_pos = [None] * batch_size
+
+        if f_a_bins is not None:
+            f_a_counts = np.zeros_like(f_a_bins, dtype='uint64')
+            f_as = np.zeros(batch_size)
 
         sample_num = 0
         while 1:
@@ -427,6 +449,9 @@ class HDF5Volume:
                 mask_target = pad_dims(block_data['target'])
                 region_pos[r] = block_data['position']
 
+                if f_a_bins is not None:
+                    f_as[r] = subvolume['f_a']
+
                 batch_image_input = np.concatenate((batch_image_input, image_input)) if batch_image_input is not None else image_input
                 batch_mask_input = np.concatenate((batch_mask_input, mask_input)) if batch_mask_input is not None else mask_input
                 batch_mask_target = np.concatenate((batch_mask_target, mask_target)) if batch_mask_target is not None else mask_target
@@ -436,8 +461,18 @@ class HDF5Volume:
                       'mask_input': batch_mask_input}
             callback_kludge['inputs'] = inputs
             callback_kludge['outputs'] = None
-            yield (inputs,
-                   {'mask_output': batch_mask_target})
+
+            if f_a_bins is None:
+                yield (inputs,
+                       {'mask_output': batch_mask_target})
+            else:
+                f_a_inds = np.digitize(f_as, f_a_bins) - 1
+                inds, counts = np.unique(f_a_inds, return_counts=True)
+                f_a_counts[inds] += counts.astype('uint64')
+                sample_weights = np.reciprocal(f_a_counts[f_a_inds], dtype='float64')
+                yield (inputs,
+                       {'mask_output': batch_mask_target},
+                       sample_weights)
 
     def region_generator(self, subvolume_size, partition=None, seed_margin=None):
         subvolumes = self.SubvolumeGenerator(self, subvolume_size, DOWNSAMPLE, partition)
@@ -527,7 +562,7 @@ class HDF5Volume:
             mask_target = np.full_like(label_mask, V_FALSE, dtype='float32')
             mask_target[label_mask] = V_TRUE
 
-            return {'image': image_subvol, 'mask_target': mask_target}
+            return {'image': image_subvol, 'mask_target': mask_target, 'f_a': f_a}
 
 
 def make_network():
@@ -641,6 +676,10 @@ def main():
     image_dataset = 'volumes/raw'
     label_dataset = 'volumes/labels/neuron_ids'
 
+
+    # f_a_bins = np.array((0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.075, \
+    #                      0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0))
+    f_a_bins = None
     partitions = np.array((1, 1, 2))
 
 
@@ -649,14 +688,16 @@ def main():
     validation_data = {k: v.simple_training_generator(INPUT_SHAPE[0:3],
                                        BATCH_SIZE,
                                        VALIDATION_SIZE,
-                                       (partitions, np.array((0, 0, 1)))) for k, v in volumes.iteritems()}
+                                       f_a_bins=f_a_bins,
+                                       partition=(partitions, np.array((0, 0, 1)))) for k, v in volumes.iteritems()}
     validation_data = roundrobin(*validation_data.values())
 
     # Pre-train
     training_data = {k: v.simple_training_generator(INPUT_SHAPE[0:3],
                                                      BATCH_SIZE,
                                                      TRAINING_SIZE,
-                                                     (partitions, np.array((0, 0, 0)))) for k, v in volumes.iteritems()}
+                                                     f_a_bins=f_a_bins,
+                                                     partition=(partitions, np.array((0, 0, 0)))) for k, v in volumes.iteritems()}
     training_data = roundrobin(*training_data.values())
     history = ffn.fit_generator(training_data,
                                 samples_per_epoch=TRAINING_SIZE * num_volumes,
@@ -673,7 +714,8 @@ def main():
                                        BATCH_SIZE,
                                        TRAINING_SIZE,
                                        kludges[k],
-                                       (partitions, np.array((0, 0, 0)))) for k, v in volumes.iteritems()}
+                                       f_a_bins=f_a_bins,
+                                       partition=(partitions, np.array((0, 0, 0)))) for k, v in volumes.iteritems()}
     training_data = roundrobin(*training_data.values())
     moving_history = ffn.fit_generator(training_data,
                                 samples_per_epoch=TRAINING_SIZE * num_volumes,
