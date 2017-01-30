@@ -16,50 +16,12 @@ import matplotlib.animation as animation
 import neuroglancer
 from tqdm import tqdm
 
-
-VOLUME_CONFIG = {
-    'DOWNSAMPLE': np.array((1, 1, 0)),
-    'RESOLUTION': (8, 8, 40),
-}
-
-MODEL_CONFIG = {
-    'BLOCK_SIZE': np.array((65, 65, 13)),
-    'V_TRUE': 0.95,
-    'V_FALSE': 0.05,
-    'T_MOVE': 0.9,
-}
-MODEL_CONFIG['TRAINING_FOV'] = MODEL_CONFIG['BLOCK_SIZE'] + ((MODEL_CONFIG['BLOCK_SIZE'] - 1) / 2)
-
-NETWORK_CONFIG = {
-    'INPUT_SHAPE': np.append(MODEL_CONFIG['BLOCK_SIZE'], [1]),
-    'NUM_MODULES': 8,
-    'CONV_X': 5,
-    'CONV_Y': 5,
-    'CONV_Z': 3,
-}
-
-OPTIMIZER_CONFIG = {
-    'LEARNING_RATE': 0.01,
-    'MOMENTUM': 0.9,
-    'NESTEROV': True,
-}
-
-TRAINING_CONFIG = {
-    'BATCH_SIZE': 32,
-    'TRAINING_SIZE': 256,
-    'VALIDATION_SIZE': 32,
-    # 'TRAINING_SIZE': 4096,
-    # 'VALIDATION_SIZE': 256,
-    # 'TRAINING_SIZE': 32,
-    # 'VALIDATION_SIZE': 16,
-    'PRETRAIN_NUM_EPOCHS': 1,
-    'NUM_EPOCHS': 2,
-}
+from config import CONFIG
 
 
 class FloodFillRegion(object):
     def __init__(self, image, target=None, seed_pos=None):
-        self.MOVE_DELTA = (MODEL_CONFIG['BLOCK_SIZE'] - 1) / 4
+        self.MOVE_DELTA = (CONFIG.model.block_size - 1) / 4
         self.queue = Queue.PriorityQueue()
         self.visited = set()
         self.image = image
@@ -75,7 +37,7 @@ class FloodFillRegion(object):
         self.seed_pos = seed_pos
         self.queue.put((None, seed_pos))
         seed_vox = self.pos_to_vox(seed_pos)
-        self.mask[tuple(seed_vox)] = MODEL_CONFIG['V_TRUE']
+        self.mask[tuple(seed_vox)] = CONFIG.model.v_true
         # self.ffrid = np.array_str(seed_pos)
         # print 'FFR {0}'.format(self.ffrid)
 
@@ -125,7 +87,7 @@ class FloodFillRegion(object):
             new_ctr = mask_pos + move['move']
             if np.any(np.greater_equal(new_ctr, self.move_bounds)) or np.any(new_ctr <= 1):
                continue
-            if tuple(new_ctr) not in self.visited and move['v'] >= MODEL_CONFIG['T_MOVE']:
+            if tuple(new_ctr) not in self.visited and move['v'] >= CONFIG.model.t_move:
                 self.visited.add(tuple(new_ctr))
                 self.queue.put((-move['v'], tuple(new_ctr)))
                 # print 'FFR {0} queuing {1} ({2})'.format(self.ffrid, np.array_str(new_ctr), move['v'])
@@ -134,7 +96,7 @@ class FloodFillRegion(object):
         next_pos = np.asarray(self.queue.get()[1])
         # print 'FFR {0} dequeuing {1}'.format(self.ffrid, np.array_str(next_pos))
         next_vox = self.pos_to_vox(next_pos)
-        margin = (MODEL_CONFIG['BLOCK_SIZE'] - 1) / 2
+        margin = (CONFIG.model.block_size - 1) / 2
         block_min = next_vox - margin
         block_max = next_vox + margin + 1
         image_block = self.image[block_min[0]:block_max[0],
@@ -144,7 +106,7 @@ class FloodFillRegion(object):
                                block_min[1]:block_max[1],
                                block_min[2]:block_max[2]].copy()
 
-        mask_block[np.isnan(mask_block)] = MODEL_CONFIG['V_FALSE']
+        mask_block[np.isnan(mask_block)] = CONFIG.model.v_false
 
         if self.target is not None:
             target_block = self.target[block_min[0]:block_max[0],
@@ -153,8 +115,8 @@ class FloodFillRegion(object):
         else:
             target_block = None
 
-        assert image_block.shape == tuple(MODEL_CONFIG['BLOCK_SIZE']), 'Image wrong size: {}'.format(image_block.shape)
-        assert mask_block.shape == tuple(MODEL_CONFIG['BLOCK_SIZE']), 'Mask wrong size: {}'.format(mask_block.shape)
+        assert image_block.shape == tuple(CONFIG.model.block_size), 'Image wrong size: {}'.format(image_block.shape)
+        assert mask_block.shape == tuple(CONFIG.model.block_size), 'Mask wrong size: {}'.format(mask_block.shape)
         return {'image': image_block,
                 'mask': mask_block,
                 'target': target_block,
@@ -213,9 +175,9 @@ class FloodFillRegion(object):
 
         def get_aspect(plane):
             return {
-                'xy': float(VOLUME_CONFIG['RESOLUTION'][1]) / float(VOLUME_CONFIG['RESOLUTION'][0]),
-                'xz': float(VOLUME_CONFIG['RESOLUTION'][2]) / float(VOLUME_CONFIG['RESOLUTION'][0]),
-                'zy': float(VOLUME_CONFIG['RESOLUTION'][1]) / float(VOLUME_CONFIG['RESOLUTION'][2]),
+                'xy': float(CONFIG.volume.resolution[1]) / float(CONFIG.volume.resolution[0]),
+                'xz': float(CONFIG.volume.resolution[2]) / float(CONFIG.volume.resolution[0]),
+                'zy': float(CONFIG.volume.resolution[1]) / float(CONFIG.volume.resolution[2]),
             }[plane]
 
         images = {
@@ -229,7 +191,7 @@ class FloodFillRegion(object):
             'bt': {},
         }
         current_vox = self.pos_to_vox(self.seed_pos)
-        margin = (MODEL_CONFIG['BLOCK_SIZE']) / 2
+        margin = (CONFIG.model.block_size) / 2
         for plane, ax in axes.iteritems():
             ax.get_xaxis().set_visible(False)
             ax.get_yaxis().set_visible(False)
@@ -336,7 +298,7 @@ class FloodFillRegion(object):
         return ani
 
     def get_viewer(self):
-        viewer = neuroglancer.Viewer(voxel_size=list(VOLUME_CONFIG['RESOLUTION']))
+        viewer = neuroglancer.Viewer(voxel_size=list(CONFIG.volume.resolution))
         viewer.add(np.transpose(self.image),
                    name='Image')
         viewer.add(np.transpose(self.target),
@@ -360,10 +322,10 @@ class HDF5Volume(object):
         self.label_data = self.file[label_dataset]
 
     def simple_training_generator(self, subvolume_size, batch_size, training_size, f_a_bins=None, partition=None):
-        subvolumes = self.SubvolumeGenerator(self, subvolume_size, VOLUME_CONFIG['DOWNSAMPLE'], partition)
+        subvolumes = self.SubvolumeGenerator(self, subvolume_size, CONFIG.volume.downsample, partition)
 
-        mask_input = np.full(np.append(subvolume_size, (1,)), MODEL_CONFIG['V_FALSE'], dtype='float32')
-        mask_input[tuple(np.array(mask_input.shape) / 2)] = MODEL_CONFIG['V_TRUE']
+        mask_input = np.full(np.append(subvolume_size, (1,)), CONFIG.model.v_false, dtype='float32')
+        mask_input[tuple(np.array(mask_input.shape) / 2)] = CONFIG.model.v_true
         mask_input = np.tile(mask_input, (batch_size, 1, 1, 1, 1))
 
         if f_a_bins is not None:
@@ -408,7 +370,7 @@ class HDF5Volume(object):
                        sample_weights)
 
     def moving_training_generator(self, subvolume_size, batch_size, training_size, callback_kludge, f_a_bins=None, partition=None):
-        subvolumes = self.SubvolumeGenerator(self, subvolume_size, VOLUME_CONFIG['DOWNSAMPLE'], partition)
+        subvolumes = self.SubvolumeGenerator(self, subvolume_size, CONFIG.volume.downsample, partition)
 
         regions = [None] * batch_size
         region_pos = [None] * batch_size
@@ -475,12 +437,12 @@ class HDF5Volume(object):
                        sample_weights)
 
     def region_generator(self, subvolume_size, partition=None, seed_margin=None):
-        subvolumes = self.SubvolumeGenerator(self, subvolume_size, VOLUME_CONFIG['DOWNSAMPLE'], partition)
+        subvolumes = self.SubvolumeGenerator(self, subvolume_size, CONFIG.volume.downsample, partition)
 
         if seed_margin is None:
             seed_margin = 10.0
 
-        margin = np.ceil(np.reciprocal(np.array(VOLUME_CONFIG['RESOLUTION']), dtype='float64') * seed_margin).astype('int64')
+        margin = np.ceil(np.reciprocal(np.array(CONFIG.volume.resolution), dtype='float64') * seed_margin).astype('int64')
 
         while 1:
             subvolume = subvolumes.next()
@@ -559,50 +521,50 @@ class HDF5Volume(object):
             assert label_mask.shape == tuple(self.size_zoom), 'Labels wrong size: {}'.format(label_mask.shape)
 
             f_a = np.count_nonzero(label_mask) / float(label_mask.size)
-            mask_target = np.full_like(label_mask, MODEL_CONFIG['V_FALSE'], dtype='float32')
-            mask_target[label_mask] = MODEL_CONFIG['V_TRUE']
+            mask_target = np.full_like(label_mask, CONFIG.model.v_false, dtype='float32')
+            mask_target[label_mask] = CONFIG.model.v_true
 
             return {'image': image_subvol, 'mask_target': mask_target, 'f_a': f_a}
 
 
 def make_network():
-    image_input = Input(shape=tuple(NETWORK_CONFIG['INPUT_SHAPE']), dtype='float32', name='image_input')
-    mask_input = Input(shape=tuple(NETWORK_CONFIG['INPUT_SHAPE']), dtype='float32', name='mask_input')
+    image_input = Input(shape=tuple(CONFIG.model.block_size) + (1,), dtype='float32', name='image_input')
+    mask_input = Input(shape=tuple(CONFIG.model.block_size) + (1,), dtype='float32', name='mask_input')
     ffn = merge([image_input, mask_input], mode='concat')
 
     # Convolve and activate before beginning the skip connection modules,
     # as discussed in the Appendix of He et al 2016.
     ffn = Convolution3D(32,
-                        NETWORK_CONFIG['CONV_X'],
-                        NETWORK_CONFIG['CONV_Y'],
-                        NETWORK_CONFIG['CONV_Z'],
+                        CONFIG.network.convolution_dim[0],
+                        CONFIG.network.convolution_dim[1],
+                        CONFIG.network.convolution_dim[2],
                         activation='relu',
                         border_mode='same')(ffn)
 
-    for _ in range(0, NETWORK_CONFIG['NUM_MODULES']):
+    for _ in range(0, CONFIG.network.num_modules):
         ffn = add_convolution_module(ffn)
 
     mask_output = Convolution3D(1, 1, 1, 1, name='mask_output', activation='hard_sigmoid')(ffn)
     ffn = Model(input=[image_input, mask_input], output=[mask_output])
     ffn.compile(loss='binary_crossentropy',
-                optimizer=SGD(lr=OPTIMIZER_CONFIG['LEARNING_RATE'],
-                              momentum=OPTIMIZER_CONFIG['MOMENTUM'],
-                              nesterov=OPTIMIZER_CONFIG['NESTEROV']))
+                optimizer=SGD(lr=CONFIG.optimizer.learning_rate,
+                              momentum=CONFIG.optimizer.momentum,
+                              nesterov=CONFIG.optimizer.nesterov_momentum))
 
     return ffn
 
 
 def add_convolution_module(model):
     model2 = Convolution3D(32,
-                           NETWORK_CONFIG['CONV_X'],
-                           NETWORK_CONFIG['CONV_Y'],
-                           NETWORK_CONFIG['CONV_Z'],
+                           CONFIG.network.convolution_dim[0],
+                           CONFIG.network.convolution_dim[1],
+                           CONFIG.network.convolution_dim[2],
                            activation='relu',
                            border_mode='same')(model)
     model2 = Convolution3D(32,
-                           NETWORK_CONFIG['CONV_X'],
-                           NETWORK_CONFIG['CONV_Y'],
-                           NETWORK_CONFIG['CONV_Z'],
+                           CONFIG.network.convolution_dim[0],
+                           CONFIG.network.convolution_dim[1],
+                           CONFIG.network.convolution_dim[2],
                            border_mode='same')(model2)
     model = merge([model, model2], mode='sum')
     # Note that the activation here differs from He et al 2016, as that
@@ -657,7 +619,7 @@ def fill_region_from_model(model_file, hdf5_file=None, bias=True):
 
     volume = HDF5Volume(hdf5_file, image_dataset, label_dataset)
 
-    regions = volume.region_generator(MODEL_CONFIG['TRAINING_FOV'] * 4)
+    regions = volume.region_generator(CONFIG.model.training_fov * 4)
 
     model = load_model(model_file)
 
@@ -714,26 +676,26 @@ def main(model_file=None):
     volumes = {k: HDF5Volume(f, image_dataset, label_dataset) for k, f in hdf5_files.iteritems()}
     num_volumes = len(volumes)
     validation_data = {k: v.simple_training_generator(
-            MODEL_CONFIG['BLOCK_SIZE'],
-            TRAINING_CONFIG['BATCH_SIZE'],
-            TRAINING_CONFIG['VALIDATION_SIZE'],
+            CONFIG.model.block_size,
+            CONFIG.training.batch_size,
+            CONFIG.training.validation_size,
             f_a_bins=f_a_bins,
             partition=(partitions, np.array((0, 0, 1)))) for k, v in volumes.iteritems()}
     validation_data = roundrobin(*validation_data.values())
 
     # Pre-train
     training_data = {k: v.simple_training_generator(
-            MODEL_CONFIG['BLOCK_SIZE'],
-            TRAINING_CONFIG['BATCH_SIZE'],
-            TRAINING_CONFIG['TRAINING_SIZE'],
+            CONFIG.model.block_size,
+            CONFIG.training.batch_size,
+            CONFIG.training.training_size,
             f_a_bins=f_a_bins,
             partition=(partitions, np.array((0, 0, 0)))) for k, v in volumes.iteritems()}
     training_data = roundrobin(*training_data.values())
     history = ffn.fit_generator(training_data,
-            samples_per_epoch=TRAINING_CONFIG['TRAINING_SIZE'] * num_volumes,
-            nb_epoch=TRAINING_CONFIG['PRETRAIN_NUM_EPOCHS'],
+            samples_per_epoch=CONFIG.training.training_size * num_volumes,
+            nb_epoch=CONFIG.training.simple_train_epochs,
             validation_data=validation_data,
-            nb_val_samples=TRAINING_CONFIG['VALIDATION_SIZE'] * num_volumes)
+            nb_val_samples=CONFIG.training.validation_size * num_volumes)
 
     # Moving training
     kludges = {k: {'inputs': None, 'outputs': None} for k in volumes.iterkeys()}
@@ -742,34 +704,34 @@ def main(model_file=None):
     early_stop = EarlyStopping(patience=20)
     tensorboard = TensorBoard()
     training_data = {k: v.moving_training_generator(
-            MODEL_CONFIG['TRAINING_FOV'],
-            TRAINING_CONFIG['BATCH_SIZE'],
-            TRAINING_CONFIG['TRAINING_SIZE'],
+            CONFIG.model.training_fov,
+            CONFIG.training.batch_size,
+            CONFIG.training.training_size,
             kludges[k],
             f_a_bins=f_a_bins,
             partition=(partitions, np.array((0, 0, 0)))) for k, v in volumes.iteritems()}
     training_data = roundrobin(*training_data.values())
     moving_history = ffn.fit_generator(training_data,
-            samples_per_epoch=TRAINING_CONFIG['TRAINING_SIZE'] * num_volumes,
-            nb_epoch=TRAINING_CONFIG['NUM_EPOCHS'],
-            initial_epoch=TRAINING_CONFIG['PRETRAIN_NUM_EPOCHS'],
+            samples_per_epoch=CONFIG.training.training_size * num_volumes,
+            nb_epoch=CONFIG.training.total_epochs,
+            initial_epoch=CONFIG.training.simple_train_epochs,
             max_q_size=1,
             nb_worker=1,
             callbacks=kludge_callbacks + [checkpoint, early_stop, tensorboard],
             validation_data=validation_data,
-            nb_val_samples=TRAINING_CONFIG['VALIDATION_SIZE'] * num_volumes)
+            nb_val_samples=CONFIG.training.validation_size * num_volumes)
     extend_keras_history(history, moving_history)
 
     # for _ in itertools.islice(training_data, 12):
     #     continue
     dupe_data = volumes['a'].simple_training_generator(
-            MODEL_CONFIG['BLOCK_SIZE'],
-            TRAINING_CONFIG['BATCH_SIZE'],
-            TRAINING_CONFIG['TRAINING_SIZE'])
+            CONFIG.model.block_size,
+            CONFIG.training.batch_size,
+            CONFIG.training.training_size)
     viz_ex = itertools.islice(dupe_data, 1)
 
     for inputs, targets in viz_ex:
-        viewer = neuroglancer.Viewer(voxel_size=list(VOLUME_CONFIG['RESOLUTION']))
+        viewer = neuroglancer.Viewer(voxel_size=list(CONFIG.volume.resolution))
         viewer.add(np.transpose(inputs['image_input'][0, :, :, :, 0]),
                    name='Image')
         viewer.add(np.transpose(inputs['mask_input'][0, :, :, :, 0]),
