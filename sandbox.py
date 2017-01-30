@@ -58,13 +58,12 @@ class FloodFillRegion(object):
         for move in map(np.array, [(1, 0, 0), (-1, 0, 0),
                      (0, 1, 0), (0, -1, 0),
                      (0, 0, 1), (0, 0, -1)]):
+            plane_min = ctr - (-2 * np.maximum(move, 0) + 1) * self.MOVE_DELTA
+            plane_max = ctr + (+2 * np.minimum(move, 0) + 1) * self.MOVE_DELTA + 1
             moves.append({'move': move,
-                          'v': mask[ctr[0] - (-2 * max(move[0], 0) + 1) * self.MOVE_DELTA[0]:
-                                    ctr[0] + (+2 * min(move[0], 0) + 1) * self.MOVE_DELTA[0] + 1,
-                                    ctr[1] - (-2 * max(move[1], 0) + 1) * self.MOVE_DELTA[1]:
-                                    ctr[1] + (+2 * min(move[1], 0) + 1) * self.MOVE_DELTA[1] + 1,
-                                    ctr[2] - (-2 * max(move[2], 0) + 1) * self.MOVE_DELTA[2]:
-                                    ctr[2] + (+2 * min(move[2], 0) + 1) * self.MOVE_DELTA[2] + 1].max()})
+                          'v': mask[plane_min[0]:plane_max[0],
+                                    plane_min[1]:plane_max[1],
+                                    plane_min[2]:plane_max[2]].max()})
         return moves
 
     def add_mask(self, mask_block, mask_pos):
