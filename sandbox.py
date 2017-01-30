@@ -37,7 +37,10 @@ V_TRUE = 0.95
 V_FALSE = 0.05
 
 LEARNING_RATE = 0.01
-BATCH_SIZE = 8
+MOMENTUM = 0.9
+NESTEROV = True
+
+BATCH_SIZE = 32
 TRAINING_SIZE = 24
 VALIDATION_SIZE = 16
 PRETRAIN_NUM_EPOCHS = 1
@@ -585,7 +588,7 @@ def make_network():
     mask_output = Convolution3D(1, 1, 1, 1, name='mask_output', activation='hard_sigmoid')(ffn)
     ffn = Model(input=[image_input, mask_input], output=[mask_output])
     ffn.compile(loss='binary_crossentropy',
-                optimizer=SGD(lr=LEARNING_RATE))
+                optimizer=SGD(lr=LEARNING_RATE, momentum=MOMENTUM, nesterov=NESTEROV))
 
     return ffn
 
