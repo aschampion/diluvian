@@ -5,7 +5,7 @@ import numpy as np
 import Queue
 import sys
 
-from keras.callbacks import Callback, EarlyStopping, ModelCheckpoint
+from keras.callbacks import Callback, EarlyStopping, ModelCheckpoint, TensorBoard
 from keras.layers import AveragePooling3D, Convolution3D, Input, merge
 from keras.layers.core import Activation, Lambda, Merge
 from keras.models import load_model, Model, Sequential
@@ -713,6 +713,7 @@ def main():
     kludge_callbacks = [PredictionCopy(kludge) for kludge in kludges.values()]
     checkpoint = ModelCheckpoint('weights.hdf5', save_best_only=True)
     early_stop = EarlyStopping(patience=20)
+    tensorboard = TensorBoard()
     training_data = {k: v.moving_training_generator(TRAINING_FOV,
                                        BATCH_SIZE,
                                        TRAINING_SIZE,
@@ -726,7 +727,7 @@ def main():
                                 initial_epoch=PRETRAIN_NUM_EPOCHS,
                                 max_q_size=1,
                                 nb_worker=1,
-                                callbacks=kludge_callbacks + [checkpoint, early_stop],
+                                callbacks=kludge_callbacks + [checkpoint, early_stop, tensorboard],
                                 validation_data=validation_data,
                                 nb_val_samples=VALIDATION_SIZE * num_volumes)
     extend_keras_history(history, moving_history)
