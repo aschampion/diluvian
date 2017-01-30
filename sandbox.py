@@ -329,7 +329,7 @@ class HDF5Volume(object):
 
         if f_a_bins is not None:
             f_a_counts = np.zeros_like(f_a_bins, dtype='uint64')
-            f_as = np.zeros(batch_size)
+        f_as = np.zeros(batch_size)
 
         sample_num = 0
         while 1:
@@ -337,20 +337,18 @@ class HDF5Volume(object):
                 subvolumes.reset()
                 sample_num = 0
 
-            batch_image_input = None
-            batch_mask_target = None
+            batch_image_input = [None] * batch_size
+            batch_mask_target = [None] * batch_size
 
             for batch_ind in range(0, batch_size):
                 subvolume = subvolumes.next()
 
-                image_input = pad_dims(subvolume['image'])
-                mask_target = pad_dims(subvolume['mask_target'])
+                batch_image_input[batch_ind] = pad_dims(subvolume['image'])
+                batch_mask_target[batch_ind] = pad_dims(subvolume['mask_target'])
+                f_as[batch_ind] = subvolume['f_a']
 
-                if f_a_bins is not None:
-                    f_as[batch_ind] = subvolume['f_a']
-
-                batch_image_input = np.concatenate((batch_image_input, image_input)) if batch_image_input is not None else image_input
-                batch_mask_target = np.concatenate((batch_mask_target, mask_target)) if batch_mask_target is not None else mask_target
+            batch_image_input = np.concatenate(batch_image_input)
+            batch_mask_target = np.concatenate(batch_mask_target)
 
             sample_num += batch_size
 
@@ -376,7 +374,7 @@ class HDF5Volume(object):
 
         if f_a_bins is not None:
             f_a_counts = np.zeros_like(f_a_bins, dtype='uint64')
-            f_as = np.zeros(batch_size)
+        f_as = np.zeros(batch_size)
 
         sample_num = 0
         while 1:
@@ -392,9 +390,9 @@ class HDF5Volume(object):
                     assert np.array_equal(callback_kludge['inputs']['image_input'][n, 0, 0, :, 0], batch_image_input[n, 0, 0, :, 0])
                     regions[n].add_mask(callback_kludge['outputs'][n, :, :, :, 0], region_pos[n])
 
-            batch_image_input = None
-            batch_mask_input = None
-            batch_mask_target = None
+            batch_image_input = [None] * batch_size
+            batch_mask_input = [None] * batch_size
+            batch_mask_target = [None] * batch_size
 
             for r, region in enumerate(regions):
                 if region is None or region.queue.empty():
@@ -405,17 +403,15 @@ class HDF5Volume(object):
 
                 block_data = region.get_next_block()
 
-                image_input = pad_dims(block_data['image'])
-                mask_input = pad_dims(block_data['mask'])
-                mask_target = pad_dims(block_data['target'])
+                batch_image_input[r] = pad_dims(block_data['image'])
+                batch_mask_input[r] = pad_dims(block_data['mask'])
+                batch_mask_target[r] = pad_dims(block_data['target'])
                 region_pos[r] = block_data['position']
+                f_as[r] = subvolume['f_a']
 
-                if f_a_bins is not None:
-                    f_as[r] = subvolume['f_a']
-
-                batch_image_input = np.concatenate((batch_image_input, image_input)) if batch_image_input is not None else image_input
-                batch_mask_input = np.concatenate((batch_mask_input, mask_input)) if batch_mask_input is not None else mask_input
-                batch_mask_target = np.concatenate((batch_mask_target, mask_target)) if batch_mask_target is not None else mask_target
+            batch_image_input = np.concatenate(batch_image_input)
+            batch_mask_input = np.concatenate(batch_mask_input)
+            batch_mask_target = np.concatenate(batch_mask_target)
 
             sample_num += batch_size
             inputs = {'image_input': batch_image_input,
