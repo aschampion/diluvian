@@ -42,7 +42,9 @@ class OptimizerConfig(object):
 
 class TrainingConfig(object):
     def __init__(self, settings):
-        self.batch_size = int(settings.get('batch_size', 8))
+        self.num_gpus = int(settings.get('num_gpus', 1))
+        self.gpu_batch_size = int(settings.get('gpu_batch_size', 8))
+        self.batch_size = self.num_gpus * self.gpu_batch_size
         self.training_size = int(settings.get('training_size', 256))
         self.validation_size = int(settings.get('validation_size', 256))
         self.simple_train_epochs = int(settings.get('simple_train_epochs', 10))

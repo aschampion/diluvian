@@ -68,7 +68,7 @@ class HDF5Volume(object):
             if f_a_bins is None:
                 yield ({'image_input': batch_image_input,
                         'mask_input': mask_input},
-                       {'mask_output': batch_mask_target})
+                       [batch_mask_target])
             else:
                 f_a_inds = np.digitize(f_as, f_a_bins) - 1
                 inds, counts = np.unique(f_a_inds, return_counts=True)
@@ -76,7 +76,7 @@ class HDF5Volume(object):
                 sample_weights = np.reciprocal(f_a_counts[f_a_inds], dtype='float64')
                 yield ({'image_input': batch_image_input,
                         'mask_input': mask_input},
-                       {'mask_output': batch_mask_target},
+                       [batch_mask_target],
                        sample_weights)
 
     def moving_training_generator(self, subvolume_size, batch_size, training_size, callback_kludge, f_a_bins=None, partition=None):
@@ -134,14 +134,14 @@ class HDF5Volume(object):
 
             if f_a_bins is None:
                 yield (inputs,
-                       {'mask_output': batch_mask_target})
+                       [batch_mask_target])
             else:
                 f_a_inds = np.digitize(f_as, f_a_bins) - 1
                 inds, counts = np.unique(f_a_inds, return_counts=True)
                 f_a_counts[inds] += counts.astype('uint64')
                 sample_weights = np.reciprocal(f_a_counts[f_a_inds], dtype='float64')
                 yield (inputs,
-                       {'mask_output': batch_mask_target},
+                       [batch_mask_target],
                        sample_weights)
 
     def region_generator(self, subvolume_size, partition=None, seed_margin=None):

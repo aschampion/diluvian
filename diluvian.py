@@ -15,6 +15,7 @@ from keras.models import load_model, Model
 from keras.optimizers import SGD
 
 from config import CONFIG
+from third_party.multi_gpu import make_parallel
 from util import extend_keras_history, get_color_shader, roundrobin
 from volumes import HDF5Volume
 
@@ -38,6 +39,8 @@ def make_network():
 
     mask_output = Convolution3D(1, 1, 1, 1, name='mask_output', activation='hard_sigmoid')(ffn)
     ffn = Model(input=[image_input, mask_input], output=[mask_output])
+    if CONFIG.training.num_gpus > 1:
+        ffn = make_parallel(ffn, CONFIG.training.num_gpus)
     ffn.compile(loss='binary_crossentropy',
                 optimizer=SGD(lr=CONFIG.optimizer.learning_rate,
                               momentum=CONFIG.optimizer.momentum,
@@ -159,7 +162,7 @@ def train_network(model_file=None):
             samples_per_epoch=CONFIG.training.training_size * num_volumes,
             nb_epoch=CONFIG.training.total_epochs,
             initial_epoch=CONFIG.training.simple_train_epochs,
-            max_q_size=1,
+            max_q_size=num_volumes,
             nb_worker=1,
             callbacks=kludge_callbacks + [checkpoint, early_stop, tensorboard],
             validation_data=validation_data,
@@ -181,7 +184,7 @@ def train_network(model_file=None):
         viewer.add(np.transpose(inputs['mask_input'][0, :, :, :, 0]),
                    name='Mask Input',
                    shader=get_color_shader(2))
-        viewer.add(np.transpose(targets['mask_output'][0, :, :, :, 0]),
+        viewer.add(np.transpose(targets[0][0, :, :, :, 0]),
                    name='Mask Target',
                    shader=get_color_shader(0))
         output = ffn.predict(inputs)

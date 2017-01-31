@@ -18,7 +18,8 @@ momentum = 0.9
 nesterov_momentum = true
 
 [training]
-batch_size = 32
+gpu_batch_size = 32
+num_gpus = 2
 training_size = 256
 validation_size = 32
 # training_size = 4096
