@@ -218,12 +218,12 @@ class HDF5Volume(object):
                 # A higher fidelity alternative would be to use the mode label
                 # for each downsample block. However, this is prohibitively
                 # slow using the scipy code preserved below as an example:
-                # label_subvol = label_subvol.reshape([region_size_zoom[0], zoom[0],
-                #                                      region_size_zoom[1], zoom[1],
-                #                                      region_size_zoom[2], zoom[2]])
-                # label_subvol = stats.mode(label_subvol, 5)[0]
-                # label_subvol = stats.mode(label_subvol, 3)[0]
-                # label_subvol = np.squeeze(stats.mode(label_subvol, 1)[0])
+                # label_mask = label_mask.reshape([self.size_zoom[0], self.zoom[0],
+                #                                  self.size_zoom[1], self.zoom[1],
+                #                                  self.size_zoom[2], self.zoom[2]])
+                # label_mask = stats.mode(label_mask, 5)[0]
+                # label_mask = stats.mode(label_mask, 3)[0]
+                # label_mask = np.squeeze(stats.mode(label_mask, 1)[0])
 
             assert image_subvol.shape == tuple(self.size_zoom), 'Image wrong size: {}'.format(image_subvol.shape)
             assert label_mask.shape == tuple(self.size_zoom), 'Labels wrong size: {}'.format(label_mask.shape)
