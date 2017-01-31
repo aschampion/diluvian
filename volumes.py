@@ -3,6 +3,9 @@
 
 import h5py
 import numpy as np
+import pytoml as toml
+
+from keras.utils.data_utils import get_file
 
 from config import CONFIG
 from regions import DenseRegion
@@ -10,6 +13,21 @@ from util import pad_dims
 
 
 class HDF5Volume(object):
+    @staticmethod
+    def from_toml(filename):
+        volumes = {}
+        with open(filename, 'rb') as fin:
+            datasets = toml.load(fin).get('dataset', [])
+            for dataset in datasets:
+                hdf5_file = dataset['hdf5_file']
+                if dataset.get('use_keras_cache', False):
+                    hdf5_file = get_file(hdf5_file, dataset['download_url'], md5_hash=dataset.get('download_md5', None))
+                volumes[dataset['name']] = HDF5Volume(hdf5_file,
+                                                      dataset['image_dataset'],
+                                                      dataset['label_dataset'])
+
+        return volumes
+
     def __init__(self, orig_file, image_dataset, label_dataset):
         self.file = h5py.File(orig_file, 'r')
         self.image_data = self.file[image_dataset]

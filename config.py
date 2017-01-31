@@ -44,6 +44,9 @@ class TrainingConfig(object):
         self.validation_size = int(settings.get('validation_size', 256))
         self.simple_train_epochs = int(settings.get('simple_train_epochs', 10))
         self.total_epochs = int(settings.get('total_epochs', 100))
+        self.fill_factor_bins = settings.get('fill_factor_bins', None)
+        if self.fill_factor_bins is not None:
+            self.fill_factor_bins = np.array(self.fill_factor_bins)
 
 
 class Config(object):

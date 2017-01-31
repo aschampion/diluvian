@@ -116,22 +116,11 @@ def train_network(model_file=None):
     else:
         ffn = load_model(model_file)
 
-    hdf5_files = {
-        'a': '/home/championa/code/catsop/cremi-export/orig/sample_A_20160501.hdf',
-        'b': '/home/championa/code/catsop/cremi-export/orig/sample_B_20160501.hdf',
-        'c': '/home/championa/code/catsop/cremi-export/orig/sample_C_20160501.hdf',
-    }
-    image_dataset = 'volumes/raw'
-    label_dataset = 'volumes/labels/neuron_ids'
+    volumes = HDF5Volume.from_toml('conf/datasets.toml')
 
-
-    # f_a_bins = np.array((0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.075, \
-    #                      0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0))
-    f_a_bins = None
+    f_a_bins = CONFIG.training.fill_factor_bins
     partitions = np.array((1, 1, 2))
 
-
-    volumes = {k: HDF5Volume(f, image_dataset, label_dataset) for k, f in hdf5_files.iteritems()}
     num_volumes = len(volumes)
     validation_data = {k: v.simple_training_generator(
             CONFIG.model.block_size,
