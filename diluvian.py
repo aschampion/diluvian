@@ -168,7 +168,7 @@ def train_network(model_file=None):
 
     # for _ in itertools.islice(training_data, 12):
     #     continue
-    dupe_data = volumes['a'].simple_training_generator(
+    dupe_data = volumes[list(volumes.keys())[0]].simple_training_generator(
             CONFIG.model.block_size,
             CONFIG.training.batch_size,
             CONFIG.training.training_size)
