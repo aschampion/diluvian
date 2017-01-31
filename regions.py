@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 
+import itertools
 import Queue
 
 import matplotlib.animation as animation

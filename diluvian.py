@@ -2,6 +2,7 @@
 
 
 import itertools
+import os
 
 import matplotlib.pyplot as plt
 import neuroglancer
@@ -84,15 +85,11 @@ class PredictionCopy(Callback):
             self.kludge['outputs'] = self.model.predict(self.kludge['inputs'])
 
 
-def fill_region_from_model(model_file, hdf5_file=None, bias=True):
-    if hdf5_file is None:
-        hdf5_file = '/home/championa/code/catsop/cremi-export/orig/sample_A_20160501.hdf'
-    image_dataset = 'volumes/raw'
-    label_dataset = 'volumes/labels/neuron_ids'
+def fill_region_from_model(model_file, volumes=None, bias=True):
+    if volumes is None:
+        volumes = HDF5Volume.from_toml(os.path.join(os.path.dirname(__file__), 'conf', 'cremi_datasets.toml'))
 
-    volume = HDF5Volume(hdf5_file, image_dataset, label_dataset)
-
-    regions = volume.region_generator(CONFIG.model.training_fov * 4)
+    regions = roundrobin(*[v.region_generator(CONFIG.model.training_fov * 4) for _, v in volumes.iteritems()])
 
     model = load_model(model_file)
 
@@ -116,7 +113,7 @@ def train_network(model_file=None):
     else:
         ffn = load_model(model_file)
 
-    volumes = HDF5Volume.from_toml('conf/datasets.toml')
+    volumes = HDF5Volume.from_toml(os.path.join(os.path.dirname(__file__), 'conf', 'cremi_datasets.toml'))
 
     f_a_bins = CONFIG.training.fill_factor_bins
     partitions = np.array((1, 1, 2))
