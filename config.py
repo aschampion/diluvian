@@ -35,9 +35,8 @@ class NetworkConfig(object):
 
 class OptimizerConfig(object):
     def __init__(self, settings):
-        self.learning_rate = float(settings.get('learning_rate', 0.001))
-        self.momentum = float(settings.get('momentum', 0.0))
-        self.nesterov_momentum = bool(settings.get('nesterov_momentum', False))
+        self.klass = str(settings.get('class', 'SGD'))
+        self.kwargs = {k: v for k, v in settings.iteritems() if k != 'class'}
 
 
 class TrainingConfig(object):

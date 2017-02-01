@@ -12,7 +12,7 @@ from keras.callbacks import Callback, EarlyStopping, ModelCheckpoint, TensorBoar
 from keras.layers import Convolution3D, Input, merge
 from keras.layers.core import Activation
 from keras.models import load_model, Model
-from keras.optimizers import SGD
+import keras.optimizers
 
 from config import CONFIG
 from third_party.multi_gpu import make_parallel
@@ -41,10 +41,9 @@ def make_network():
     ffn = Model(input=[image_input, mask_input], output=[mask_output])
     if CONFIG.training.num_gpus > 1:
         ffn = make_parallel(ffn, CONFIG.training.num_gpus)
+    optimizer = getattr(keras.optimizers, CONFIG.optimizer.klass)(**CONFIG.optimizer.kwargs)
     ffn.compile(loss='binary_crossentropy',
-                optimizer=SGD(lr=CONFIG.optimizer.learning_rate,
-                              momentum=CONFIG.optimizer.momentum,
-                              nesterov=CONFIG.optimizer.nesterov_momentum))
+                optimizer=optimizer)
 
     return ffn
 

@@ -13,9 +13,10 @@ num_modules = 8
 convolution_dim = [5, 5, 3]
 
 [optimizer]
-learning_rate = 0.01
-momentum = 0.9
-nesterov_momentum = true
+class = "SGD"
+lr = 0.001
+momentum = 0.5
+nesterov = true
 
 [training]
 gpu_batch_size = 32
