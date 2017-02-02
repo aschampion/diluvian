@@ -124,7 +124,6 @@ def train_network(model_file=None):
     volumes = HDF5Volume.from_toml(os.path.join(os.path.dirname(__file__), 'conf', 'cremi_datasets.toml'))
 
     f_a_bins = CONFIG.training.fill_factor_bins
-    partitions = np.array((1, 1, 2))
 
     num_volumes = len(volumes)
     validation_data = {k: v.simple_training_generator(
@@ -132,7 +131,7 @@ def train_network(model_file=None):
             CONFIG.training.batch_size,
             CONFIG.training.validation_size,
             f_a_bins=f_a_bins,
-            partition=(partitions, np.array((0, 0, 1)))) for k, v in volumes.iteritems()}
+            partition=(CONFIG.training.partitions, CONFIG.training.validation_partition)) for k, v in volumes.iteritems()}
     validation_data = roundrobin(*validation_data.values())
 
     # Pre-train
@@ -141,7 +140,7 @@ def train_network(model_file=None):
             CONFIG.training.batch_size,
             CONFIG.training.training_size,
             f_a_bins=f_a_bins,
-            partition=(partitions, np.array((0, 0, 0)))) for k, v in volumes.iteritems()}
+            partition=(CONFIG.training.partitions, CONFIG.training.training_partition)) for k, v in volumes.iteritems()}
     training_data = roundrobin(*training_data.values())
     history = ffn.fit_generator(training_data,
             samples_per_epoch=CONFIG.training.training_size * num_volumes,
@@ -161,7 +160,7 @@ def train_network(model_file=None):
             CONFIG.training.training_size,
             kludges[k],
             f_a_bins=f_a_bins,
-            partition=(partitions, np.array((0, 0, 0)))) for k, v in volumes.iteritems()}
+            partition=(CONFIG.training.partitions, CONFIG.training.training_partition)) for k, v in volumes.iteritems()}
     training_data = roundrobin(*training_data.values())
     moving_history = ffn.fit_generator(training_data,
             samples_per_epoch=CONFIG.training.training_size * num_volumes,

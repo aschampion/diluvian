@@ -51,6 +51,9 @@ class TrainingConfig(object):
         self.fill_factor_bins = settings.get('fill_factor_bins', None)
         if self.fill_factor_bins is not None:
             self.fill_factor_bins = np.array(self.fill_factor_bins)
+        self.partitions = np.array(settings.get('partitions', [0, 0, 0]))
+        self.training_partition = np.array(settings.get('training_partition', [0, 0, 0]))
+        self.validation_partition = np.array(settings.get('validation_partition', [0, 0, 1]))
 
 
 class Config(object):
