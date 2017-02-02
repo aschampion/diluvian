@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 
+import argparse
 import itertools
 import os
 
@@ -14,7 +15,7 @@ from keras.layers.core import Activation
 from keras.models import load_model, Model
 import keras.optimizers
 
-from config import CONFIG
+from config import CONFIG, Config
 from third_party.multi_gpu import make_parallel
 from util import extend_keras_history, get_color_shader, roundrobin
 from volumes import HDF5Volume
@@ -115,13 +116,14 @@ def fill_region_from_model(model_file, volumes=None, bias=True):
             s = raw_input("Press Enter when animation is complete...")
 
 
-def train_network(model_file=None):
+def train_network(model_file=None, volumes=None):
     if model_file is None:
         ffn = make_network()
     else:
         ffn = load_model(model_file)
 
-    volumes = HDF5Volume.from_toml(os.path.join(os.path.dirname(__file__), 'conf', 'cremi_datasets.toml'))
+    if volumes is None:
+        volumes = HDF5Volume.from_toml(os.path.join(os.path.dirname(__file__), 'conf', 'cremi_datasets.toml'))
 
     f_a_bins = CONFIG.training.fill_factor_bins
 
@@ -199,5 +201,43 @@ def train_network(model_file=None):
     plot_history(history)
     return history
 
+
+def cli():
+    global CONFIG
+
+    common_parser = argparse.ArgumentParser(add_help=False)
+
+    common_parser.add_argument('-c', '--config-file', action='append', dest='config_files', default=[],
+                               help='Configuration files to use. For defaults, see `conf/default.toml`. ' \
+                                    'Values are overwritten in the order provided')
+    common_parser.add_argument('-m', '--model-file', dest='model_file', default=None,
+                               help='Existing model file to use for prediction or continued training.')
+    common_parser.add_argument('-v', '--volume-file', dest='volume_file', default=None,
+                               help='Volume configuration file. For example, see `conf/cremi_datasets.toml`.')
+
+    parser = argparse.ArgumentParser(description='Train or run flood-filling networks on EM data.')
+
+    commandparsers = parser.add_subparsers(help='Commands', dest='command')
+
+    train_parser = commandparsers.add_parser('train', help='Train a network from labeled volumes.', parents=[common_parser])
+
+    fill_parser = commandparsers.add_parser('fill', help='Use a trained network to fill random regions in a volume.', parents=[common_parser])
+    fill_parser.add_argument('--no-bias', action='store_false', dest='bias', default=True)
+
+    args = parser.parse_args()
+
+    if args.config_files:
+        CONFIG = Config.from_toml(*args.config_files)
+    if args.volume_file:
+        volumes = HDF5Volume.from_toml(args.volume_file)
+    else:
+        volumes = None
+
+    if args.command == 'train':
+        train_network(args.model_file, volumes)
+    elif args.command == 'fill':
+        fill_region_from_model(args.model_file, volumes, args.bias)
+
+
 if __name__ == "__main__":
-    train_network()
+    cli()

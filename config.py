@@ -70,7 +70,11 @@ class Config(object):
         if settings_collection is not None:
             settings = settings_collection[0].copy()
             for s in settings_collection:
-                settings.update(s)
+                for c in s:
+                    if c in settings:
+                        settings[c].update(s[c])
+                    else:
+                        settings[c] = s[c]
         else:
             settings = {}
 
