@@ -116,7 +116,7 @@ def fill_region_from_model(model_file, volumes=None, bias=True):
             s = raw_input("Press Enter when animation is complete...")
 
 
-def train_network(model_file=None, volumes=None):
+def train_network(model_file=None, volumes=None, viewer=False, metric_plot=False):
     if model_file is None:
         ffn = make_network()
     else:
@@ -175,30 +175,34 @@ def train_network(model_file=None, volumes=None):
             nb_val_samples=CONFIG.training.validation_size * num_volumes)
     extend_keras_history(history, moving_history)
 
-    # for _ in itertools.islice(training_data, 12):
-    #     continue
-    dupe_data = volumes[list(volumes.keys())[0]].simple_training_generator(
-            CONFIG.model.block_size,
-            CONFIG.training.batch_size,
-            CONFIG.training.training_size)
-    viz_ex = itertools.islice(dupe_data, 1)
+    if viewer:
+        # for _ in itertools.islice(training_data, 12):
+        #     continue
+        dupe_data = volumes[list(volumes.keys())[0]].simple_training_generator(
+                CONFIG.model.block_size,
+                CONFIG.training.batch_size,
+                CONFIG.training.training_size)
+        viz_ex = itertools.islice(dupe_data, 1)
 
-    for inputs, targets in viz_ex:
-        viewer = neuroglancer.Viewer(voxel_size=list(CONFIG.volume.resolution))
-        viewer.add(np.transpose(inputs['image_input'][0, :, :, :, 0]),
-                   name='Image')
-        viewer.add(np.transpose(inputs['mask_input'][0, :, :, :, 0]),
-                   name='Mask Input',
-                   shader=get_color_shader(2))
-        viewer.add(np.transpose(targets[0][0, :, :, :, 0]),
-                   name='Mask Target',
-                   shader=get_color_shader(0))
-        output = ffn.predict(inputs)
-        viewer.add(np.transpose(output[0, :, :, :, 0]),
-                   name='Mask Output',
-                   shader=get_color_shader(1))
-        print viewer
-    plot_history(history)
+        for inputs, targets in viz_ex:
+            viewer = neuroglancer.Viewer(voxel_size=list(CONFIG.volume.resolution))
+            viewer.add(np.transpose(inputs['image_input'][0, :, :, :, 0]),
+                       name='Image')
+            viewer.add(np.transpose(inputs['mask_input'][0, :, :, :, 0]),
+                       name='Mask Input',
+                       shader=get_color_shader(2))
+            viewer.add(np.transpose(targets[0][0, :, :, :, 0]),
+                       name='Mask Target',
+                       shader=get_color_shader(0))
+            output = ffn.predict(inputs)
+            viewer.add(np.transpose(output[0, :, :, :, 0]),
+                       name='Mask Output',
+                       shader=get_color_shader(1))
+            print viewer
+
+    if metric_plot:
+        plot_history(history)
+
     return history
 
 
@@ -220,6 +224,8 @@ def cli():
     commandparsers = parser.add_subparsers(help='Commands', dest='command')
 
     train_parser = commandparsers.add_parser('train', help='Train a network from labeled volumes.', parents=[common_parser])
+    train_parser.add_argument('--viewer', action='store_true', dest='viewer', default=False)
+    train_parser.add_argument('--metric-plot', action='store_true', dest='metric_plot', default=False)
 
     fill_parser = commandparsers.add_parser('fill', help='Use a trained network to fill random regions in a volume.', parents=[common_parser])
     fill_parser.add_argument('--no-bias', action='store_false', dest='bias', default=True)
@@ -234,7 +240,10 @@ def cli():
         volumes = None
 
     if args.command == 'train':
-        train_network(args.model_file, volumes)
+        train_network(model_file=args.model_file,
+                      volumes=volumes,
+                      viewer=args.viewer,
+                      metric_plot=args.metric_plot)
     elif args.command == 'fill':
         fill_region_from_model(args.model_file, volumes, args.bias)
 
