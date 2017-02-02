@@ -37,7 +37,13 @@ def make_network():
     for _ in range(0, CONFIG.network.num_modules):
         ffn = add_convolution_module(ffn)
 
-    mask_output = Convolution3D(1, 1, 1, 1, name='mask_output', activation='hard_sigmoid')(ffn)
+    mask_output = Convolution3D(1,
+                                CONFIG.network.convolution_dim[0],
+                                CONFIG.network.convolution_dim[1],
+                                CONFIG.network.convolution_dim[2],
+                                border_mode='same',
+                                name='mask_output',
+                                activation='hard_sigmoid')(ffn)
     ffn = Model(input=[image_input, mask_input], output=[mask_output])
     if CONFIG.training.num_gpus > 1:
         ffn = make_parallel(ffn, CONFIG.training.num_gpus)
