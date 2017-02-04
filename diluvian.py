@@ -2,6 +2,7 @@
 
 
 import argparse
+import inspect
 import itertools
 import os
 
@@ -48,7 +49,10 @@ def make_network():
     ffn = Model(input=[image_input, mask_input], output=[mask_output])
     if CONFIG.training.num_gpus > 1:
         ffn = make_parallel(ffn, CONFIG.training.num_gpus)
-    optimizer = getattr(keras.optimizers, CONFIG.optimizer.klass)(**CONFIG.optimizer.kwargs)
+    optimizer_klass = getattr(keras.optimizers, CONFIG.optimizer.klass)
+    optimizer_kwargs = inspect.getargspec(optimizer_klass.__init__)[0]
+    optimizer_kwargs = {k: v for k, v in CONFIG.optimizer.kwargs.iteritems() if k in optimizer_kwargs}
+    optimizer = optimizer_klass(**optimizer_kwargs)
     ffn.compile(loss='binary_crossentropy',
                 optimizer=optimizer)
 
