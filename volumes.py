@@ -8,6 +8,7 @@ import pytoml as toml
 from keras.utils.data_utils import get_file
 
 from config import CONFIG
+from octrees import OctreeVolume
 from regions import DenseRegion
 from util import pad_dims
 
@@ -168,6 +169,37 @@ class HDF5Volume(object):
             region = DenseRegion(subvolume['image'], mask_target)
             yield region
 
+    def sparse_region_generator(self, partition=None, seed_margin=None):
+        subvolumes = self.SparseSubvolumeGenerator(self, CONFIG.volume.downsample, partition)
+
+        if seed_margin is None:
+            seed_margin = 10.0
+
+        margin = np.ceil(np.reciprocal(np.array(CONFIG.volume.resolution), dtype='float64') * seed_margin).astype('int64')
+
+        while 1:
+            subvolume = subvolumes.next()
+            mask_target = subvolume['mask_target']
+            ctr = np.array(subvolume['seed'])
+            seed_region = mask_target[ctr[0] - margin[0]:
+                                      ctr[0] + margin[0] + 1,
+                                      ctr[1] - margin[1]:
+                                      ctr[1] + margin[1] + 1,
+                                      ctr[2] - margin[2]:
+                                      ctr[2] + margin[2] + 1]
+            if not np.unique(seed_region).size == 1:
+                print 'Rejecting region with seed margin too small.'
+                continue
+            output_mask = OctreeVolume([64, 64, 24], subvolumes.volume_shape_orig, 'float32')
+            output_mask[subvolumes.volume_shape_orig[0][0]:subvolumes.volume_shape_orig[1][0],
+                        subvolumes.volume_shape_orig[0][1]:subvolumes.volume_shape_orig[1][1],
+                        subvolumes.volume_shape_orig[0][2]:subvolumes.volume_shape_orig[1][2]] = np.NAN
+            region = DenseRegion(subvolume['image'],
+                                 target=mask_target,
+                                 seed_pos=np.floor_divide(ctr, (CONFIG.model.block_size - 1) / 4),
+                                 mask=output_mask)
+            yield region
+
 
     class SubvolumeGenerator(object):
         def __init__(self, volume, size_zoom, downsample, partition=None):
@@ -175,7 +207,7 @@ class HDF5Volume(object):
                 partition = (np.array((1, 1, 1)), np.array((0, 0, 0)))
             self.volume = volume
             self.partition = partition
-            self.zoom = np.exp2(downsample).astype('int64')
+            self.zoom = np.exp2(downsample).astype('uint64')
             self.size_zoom = size_zoom
             self.size_orig = np.multiply(self.size_zoom, self.zoom)
             self.margin = np.floor_divide(self.size_orig, 2)
@@ -233,3 +265,58 @@ class HDF5Volume(object):
             mask_target[label_mask] = CONFIG.model.v_true
 
             return {'image': image_subvol, 'mask_target': mask_target, 'f_a': f_a}
+
+
+    class SparseSubvolumeGenerator(SubvolumeGenerator):
+        def __init__(self, volume, downsample, partition=None):
+            super(HDF5Volume.SparseSubvolumeGenerator, self).__init__(volume, CONFIG.model.block_size, downsample, partition)
+            self.volume_shape_orig = (np.zeros((3,), dtype='uint64'),
+                                      np.divide(np.flipud(np.array(self.volume.image_data.shape)), self.zoom))
+
+        def next(self):
+            ctr = tuple(self.random.randint(self.ctr_min[n], self.ctr_max[n]) for n in range(0, 3))
+            label_id = self.volume.label_data[tuple(reversed(ctr))]
+
+            def image_populator(bounds):
+                size = bounds[1] - bounds[0]
+                subvol = (np.flipud(np.multiply(bounds[0], self.zoom)),
+                          np.flipud(np.multiply(bounds[1], self.zoom)))
+                image_subvol = self.volume.image_data[
+                        subvol[0][0]:subvol[1][0],
+                        subvol[0][1]:subvol[1][1],
+                        subvol[0][2]:subvol[1][2]]
+
+                image_subvol = np.transpose(image_subvol.astype('float32')) / 256.0
+
+                if np.any(self.zoom > 1):
+                    image_subvol = image_subvol.reshape([size[0], self.zoom[0],
+                                                         size[1], self.zoom[1],
+                                                         size[2], self.zoom[2]]).mean(5).mean(3).mean(1)
+                return image_subvol
+
+            def label_populator(bounds):
+                size = bounds[1] - bounds[0]
+                subvol = (np.flipud(np.multiply(bounds[0], self.zoom)),
+                          np.flipud(np.multiply(bounds[1], self.zoom)))
+                label_subvol = self.volume.label_data[
+                        subvol[0][0]:subvol[1][0],
+                        subvol[0][1]:subvol[1][1],
+                        subvol[0][2]:subvol[1][2]]
+
+                label_subvol = np.transpose(label_subvol)
+                label_mask = label_subvol == label_id
+
+                if np.any(self.zoom > 1):
+                    label_mask = label_mask.reshape([size[0], self.zoom[0],
+                                                     size[1], self.zoom[1],
+                                                     size[2], self.zoom[2]]).all(5).all(3).all(1)
+                mask_target = np.full_like(label_mask, CONFIG.model.v_false, dtype='float32')
+                mask_target[label_mask] = CONFIG.model.v_true
+                return mask_target
+
+            image_tree = OctreeVolume([64, 64, 24], self.volume_shape_orig, 'float32', populator=image_populator)
+            target_tree = OctreeVolume([64, 64, 24], self.volume_shape_orig, 'float32', populator=label_populator)
+
+            f_a = 0.0
+
+            return {'image': image_tree, 'mask_target': target_tree, 'f_a': f_a, 'seed': np.divide(ctr, self.zoom)}

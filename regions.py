@@ -14,15 +14,18 @@ from util import get_color_shader, pad_dims
 
 
 class DenseRegion(object):
-    def __init__(self, image, target=None, seed_pos=None):
+    def __init__(self, image, target=None, seed_pos=None, mask=None):
         self.MOVE_DELTA = (CONFIG.model.block_size - 1) / 4
         self.queue = Queue.PriorityQueue()
         self.visited = set()
         self.image = image
         self.bounds = image.shape
         self.move_bounds = self.vox_to_pos(self.bounds) - 1
-        self.mask = np.empty(self.bounds, dtype='float32')
-        self.mask[:] = np.NAN
+        if mask is None:
+            self.mask = np.empty(self.bounds, dtype='float32')
+            self.mask[:] = np.NAN
+        else:
+            self.mask = mask
         self.target = target
         self.bias_against_merge = False
         self.move_based_on_new_mask = False
@@ -71,6 +74,10 @@ class DenseRegion(object):
             current_mask[update_mask] = mask_block[update_mask]
         else:
             current_mask[:] = mask_block
+
+        self.mask[mask_origin[0]:mask_origin[0] + mask_block.shape[0],
+                 mask_origin[1]:mask_origin[1] + mask_block.shape[1],
+                 mask_origin[2]:mask_origin[2] + mask_block.shape[2]] = current_mask
 
         if self.move_based_on_new_mask:
             new_moves = self.get_moves(mask_block)
@@ -125,6 +132,7 @@ class DenseRegion(object):
             if verbose:
                 moves += batch_moves
                 pbar.total = moves + self.queue.qsize()
+                pbar.set_description('Move ' + str(batch_block_data[-1]['position']))
                 pbar.update(batch_moves)
 
             image_input = np.concatenate([pad_dims(b['image']) for b in batch_block_data])
@@ -290,14 +298,25 @@ class DenseRegion(object):
 
         return ani
 
-    def get_viewer(self):
-        viewer = neuroglancer.Viewer(voxel_size=list(CONFIG.volume.resolution))
-        viewer.add(np.transpose(self.image),
-                   name='Image')
-        viewer.add(np.transpose(self.target),
-                   name='Mask Target',
-                   shader=get_color_shader(0))
-        viewer.add(np.transpose(self.mask),
-                   name='Mask Output',
-                   shader=get_color_shader(1))
+    def get_viewer(self, transpose=False):
+        if transpose:
+            viewer = neuroglancer.Viewer(voxel_size=list(CONFIG.volume.resolution))
+            viewer.add(np.transpose(self.image),
+                       name='Image')
+            viewer.add(np.transpose(self.target),
+                       name='Mask Target',
+                       shader=get_color_shader(0))
+            viewer.add(np.transpose(self.mask),
+                       name='Mask Output',
+                       shader=get_color_shader(1))
+        else:
+            viewer = neuroglancer.Viewer(voxel_size=list(np.flipud(CONFIG.volume.resolution)))
+            viewer.add(self.image,
+                       name='Image')
+            viewer.add(self.target,
+                       name='Mask Target',
+                       shader=get_color_shader(0))
+            viewer.add(self.mask,
+                       name='Mask Output',
+                       shader=get_color_shader(1))
         return viewer
