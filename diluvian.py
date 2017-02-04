@@ -116,11 +116,14 @@ def fill_region_from_model(model_file, volumes=None, bias=True):
             s = raw_input("Press Enter when animation is complete...")
 
 
-def train_network(model_file=None, volumes=None, viewer=False, metric_plot=False):
+def train_network(model_file=None, model_checkpoint_file=None, volumes=None, viewer=False, metric_plot=False):
     if model_file is None:
         ffn = make_network()
     else:
         ffn = load_model(model_file)
+
+    if model_checkpoint_file is None:
+        model_checkpoint_file = 'weights.hdf5'
 
     if volumes is None:
         volumes = HDF5Volume.from_toml(os.path.join(os.path.dirname(__file__), 'conf', 'cremi_datasets.toml'))
@@ -153,7 +156,7 @@ def train_network(model_file=None, volumes=None, viewer=False, metric_plot=False
     # Moving training
     kludges = {k: {'inputs': None, 'outputs': None} for k in volumes.iterkeys()}
     kludge_callbacks = [PredictionCopy(kludge) for kludge in kludges.values()]
-    checkpoint = ModelCheckpoint('weights.hdf5', save_best_only=True)
+    checkpoint = ModelCheckpoint(model_checkpoint_file, save_best_only=True)
     early_stop = EarlyStopping(patience=20)
     tensorboard = TensorBoard()
     training_data = {k: v.moving_training_generator(
@@ -224,6 +227,9 @@ def cli():
     commandparsers = parser.add_subparsers(help='Commands', dest='command')
 
     train_parser = commandparsers.add_parser('train', help='Train a network from labeled volumes.', parents=[common_parser])
+    train_parser.add_argument('-mc', '--model-checkpoint-file', dest='model_checkpoint_file', default=None,
+                              help='Filename for model checkpoints. ' \
+                                   'Can use Keras format arguments: https://keras.io/callbacks/#modelcheckpoint')
     train_parser.add_argument('--viewer', action='store_true', dest='viewer', default=False)
     train_parser.add_argument('--metric-plot', action='store_true', dest='metric_plot', default=False)
 
@@ -241,6 +247,7 @@ def cli():
 
     if args.command == 'train':
         train_network(model_file=args.model_file,
+                      model_checkpoint_file=args.model_checkpoint_file,
                       volumes=volumes,
                       viewer=args.viewer,
                       metric_plot=args.metric_plot)
