@@ -216,9 +216,9 @@ def cli():
 
     common_parser.add_argument('-c', '--config-file', action='append', dest='config_files', default=[],
                                help='Configuration files to use. For defaults, see `conf/default.toml`. ' \
-                                    'Values are overwritten in the order provided')
+                                    'Values are overwritten in the order provided.')
     common_parser.add_argument('-m', '--model-file', dest='model_file', default=None,
-                               help='Existing model file to use for prediction or continued training.')
+                               help='Existing network model file to use for prediction or continued training.')
     common_parser.add_argument('-v', '--volume-file', dest='volume_file', default=None,
                                help='Volume configuration file. For example, see `conf/cremi_datasets.toml`.')
 
@@ -226,15 +226,21 @@ def cli():
 
     commandparsers = parser.add_subparsers(help='Commands', dest='command')
 
-    train_parser = commandparsers.add_parser('train', help='Train a network from labeled volumes.', parents=[common_parser])
+    train_parser = commandparsers.add_parser('train', parents=[common_parser],
+                                             help='Train a network from labeled volumes.')
     train_parser.add_argument('-mc', '--model-checkpoint-file', dest='model_checkpoint_file', default=None,
                               help='Filename for model checkpoints. ' \
                                    'Can use Keras format arguments: https://keras.io/callbacks/#modelcheckpoint')
-    train_parser.add_argument('--viewer', action='store_true', dest='viewer', default=False)
-    train_parser.add_argument('--metric-plot', action='store_true', dest='metric_plot', default=False)
+    train_parser.add_argument('--viewer', action='store_true', dest='viewer', default=False,
+                              help='Create a neuroglancer viewer for a training sample at the end of training.')
+    train_parser.add_argument('--metric-plot', action='store_true', dest='metric_plot', default=False,
+                              help='Plot metric history at the end of training.')
 
-    fill_parser = commandparsers.add_parser('fill', help='Use a trained network to fill random regions in a volume.', parents=[common_parser])
-    fill_parser.add_argument('--no-bias', action='store_false', dest='bias', default=True)
+    fill_parser = commandparsers.add_parser('fill', parents=[common_parser],
+                                            help='Use a trained network to fill random regions in a volume.')
+    fill_parser.add_argument('--no-bias', action='store_false', dest='bias', default=True,
+                             help='Overwrite prediction mask at the end of each field of view inference ' \
+                                  'rather than using the anti-merge bias update.')
 
     args = parser.parse_args()
 
