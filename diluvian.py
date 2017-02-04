@@ -120,7 +120,8 @@ def fill_region_from_model(model_file, volumes=None, bias=True):
             s = raw_input("Press Enter when animation is complete...")
 
 
-def train_network(model_file=None, model_checkpoint_file=None, volumes=None, viewer=False, metric_plot=False):
+def train_network(model_file=None, model_checkpoint_file=None, volumes=None,
+                  tensorboard=False, viewer=False, metric_plot=False):
     if model_file is None:
         ffn = make_network()
     else:
@@ -159,10 +160,12 @@ def train_network(model_file=None, model_checkpoint_file=None, volumes=None, vie
 
     # Moving training
     kludges = {k: {'inputs': None, 'outputs': None} for k in volumes.iterkeys()}
-    kludge_callbacks = [PredictionCopy(kludge) for kludge in kludges.values()]
-    checkpoint = ModelCheckpoint(model_checkpoint_file, save_best_only=True)
-    early_stop = EarlyStopping(patience=20)
-    tensorboard = TensorBoard()
+    callbacks = [PredictionCopy(kludge) for kludge in kludges.values()]
+    callbacks.append(ModelCheckpoint(model_checkpoint_file, save_best_only=True))
+    callbacks.append(EarlyStopping(patience=20))
+    if tensorboard:
+        callbacks.append(TensorBoard())
+
     training_data = {k: v.moving_training_generator(
             CONFIG.model.training_fov,
             CONFIG.training.batch_size,
@@ -177,7 +180,7 @@ def train_network(model_file=None, model_checkpoint_file=None, volumes=None, vie
             initial_epoch=CONFIG.training.simple_train_epochs,
             max_q_size=num_volumes,
             nb_worker=1,
-            callbacks=kludge_callbacks + [checkpoint, early_stop, tensorboard],
+            callbacks=callbacks,
             validation_data=validation_data,
             nb_val_samples=CONFIG.training.validation_size * num_volumes)
     extend_keras_history(history, moving_history)
@@ -235,6 +238,8 @@ def cli():
     train_parser.add_argument('-mc', '--model-checkpoint-file', dest='model_checkpoint_file', default=None,
                               help='Filename for model checkpoints. ' \
                                    'Can use Keras format arguments: https://keras.io/callbacks/#modelcheckpoint')
+    train_parser.add_argument('--tensorboard', action='store_true', dest='tensorboard', default=False,
+                              help='Output tensorboard log files while training.')
     train_parser.add_argument('--viewer', action='store_true', dest='viewer', default=False,
                               help='Create a neuroglancer viewer for a training sample at the end of training.')
     train_parser.add_argument('--metric-plot', action='store_true', dest='metric_plot', default=False,
@@ -259,6 +264,7 @@ def cli():
         train_network(model_file=args.model_file,
                       model_checkpoint_file=args.model_checkpoint_file,
                       volumes=volumes,
+                      tensorboard=args.tensorboard,
                       viewer=args.viewer,
                       metric_plot=args.metric_plot)
     elif args.command == 'fill':
