@@ -98,7 +98,7 @@ class PredictionCopy(Callback):
             self.kludge['outputs'] = self.model.predict(self.kludge['inputs'])
 
 
-def fill_region_from_model(model_file, volumes=None, bias=True):
+def fill_region_from_model(model_file, volumes=None, bias=True, move_batch_size=1):
     if volumes is None:
         volumes = HDF5Volume.from_toml(os.path.join(os.path.dirname(__file__), 'conf', 'cremi_datasets.toml'))
 
@@ -108,7 +108,7 @@ def fill_region_from_model(model_file, volumes=None, bias=True):
 
     for region in regions:
         region.bias_against_merge = bias
-        region.fill(model, verbose=True)
+        region.fill(model, verbose=True, move_batch_size=move_batch_size)
         viewer = region.get_viewer()
         print viewer
         s = raw_input("Press Enter to continue, a to export animation, q to quit...")
@@ -250,6 +250,8 @@ def cli():
     fill_parser.add_argument('--no-bias', action='store_false', dest='bias', default=True,
                              help='Overwrite prediction mask at the end of each field of view inference ' \
                                   'rather than using the anti-merge bias update.')
+    fill_parser.add_argument('--move-batch-size', dest='move_batch_size', default=1, type=int,
+                             help='Maximum number of fill moves to process in each prediction batch.')
 
     args = parser.parse_args()
 
@@ -268,7 +270,10 @@ def cli():
                       viewer=args.viewer,
                       metric_plot=args.metric_plot)
     elif args.command == 'fill':
-        fill_region_from_model(args.model_file, volumes, args.bias)
+        fill_region_from_model(args.model_file,
+                               volumes=volumes,
+                               bias=args.bias,
+                               move_batch_size=args.move_batch_size)
 
 
 if __name__ == "__main__":
