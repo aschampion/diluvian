@@ -162,7 +162,7 @@ def train_network(model_file=None, model_checkpoint_file=None, volumes=None,
     kludges = {k: {'inputs': None, 'outputs': None} for k in volumes.iterkeys()}
     callbacks = [PredictionCopy(kludge) for kludge in kludges.values()]
     callbacks.append(ModelCheckpoint(model_checkpoint_file, save_best_only=True))
-    callbacks.append(EarlyStopping(patience=20))
+    callbacks.append(EarlyStopping(patience=CONFIG.training.patience))
     if tensorboard:
         callbacks.append(TensorBoard())
 

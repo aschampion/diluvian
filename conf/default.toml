@@ -33,3 +33,4 @@ total_epochs = 2
 partitions = [1, 1, 2]
 training_partition = [0, 0, 0]
 validation_partition = [0, 0, 1]
+patience = 20

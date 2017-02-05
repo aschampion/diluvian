@@ -55,6 +55,7 @@ class TrainingConfig(object):
         self.partitions = np.array(settings.get('partitions', [0, 0, 0]))
         self.training_partition = np.array(settings.get('training_partition', [0, 0, 0]))
         self.validation_partition = np.array(settings.get('validation_partition', [0, 0, 1]))
+        self.patience = int(np.array(settings.get('patience', 10)))
 
 
 class Config(object):
