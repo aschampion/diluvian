@@ -35,8 +35,6 @@ class DenseRegion(object):
         self.queue.put((None, seed_pos))
         seed_vox = self.pos_to_vox(seed_pos)
         self.mask[tuple(seed_vox)] = CONFIG.model.v_true
-        # self.ffrid = np.array_str(seed_pos)
-        # print 'FFR {0}'.format(self.ffrid)
 
     def unfilled_copy(self):
         copy = DenseRegion(self.image, self.target, self.seed_pos)
@@ -90,11 +88,9 @@ class DenseRegion(object):
             if tuple(new_ctr) not in self.visited and move['v'] >= CONFIG.model.t_move:
                 self.visited.add(tuple(new_ctr))
                 self.queue.put((-move['v'], tuple(new_ctr)))
-                # print 'FFR {0} queuing {1} ({2})'.format(self.ffrid, np.array_str(new_ctr), move['v'])
 
     def get_next_block(self):
         next_pos = np.asarray(self.queue.get()[1])
-        # print 'FFR {0} dequeuing {1}'.format(self.ffrid, np.array_str(next_pos))
         next_vox = self.pos_to_vox(next_pos)
         margin = (CONFIG.model.block_size - 1) / 2
         block_min = next_vox - margin
@@ -218,7 +214,6 @@ class DenseRegion(object):
         plt.tight_layout()
 
         def update_fn(vox):
-            # print 'vox: {} npv: {} vq: {} pq: {}'.format(np.array_str(vox), np.array_str(update_fn.next_pos_vox), update_fn.vox_queue.qsize(), self.queue.qsize())
             if np.array_equal(np.round(vox).astype('int64'), update_fn.next_pos_vox):
                 if update_fn.block_data is not None:
                     image_input = pad_dims(update_fn.block_data['image'])
