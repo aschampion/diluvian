@@ -209,12 +209,12 @@ class HDF5Volume(object):
             self.partition = partition
             self.zoom = np.exp2(downsample).astype('uint64')
             self.size_zoom = size_zoom
-            self.size_orig = np.multiply(self.size_zoom, self.zoom)
+            self.size_orig = np.multiply(self.size_zoom, self.zoom).astype('uint64')
             self.margin = np.floor_divide(self.size_orig, 2)
             # HDF5 coordinates are z, y, x
             self.partition_size = np.floor_divide(np.flipud(np.array(self.volume.image_data.shape)), self.partition[0])
-            self.ctr_min = np.multiply(self.partition_size, self.partition[1]) + self.margin
-            self.ctr_max = np.multiply(self.partition_size, self.partition[1] + 1) - self.margin - 1
+            self.ctr_min = (np.multiply(self.partition_size, self.partition[1]) + self.margin).astype('uint64')
+            self.ctr_max = (np.multiply(self.partition_size, self.partition[1] + 1) - self.margin - 1).astype('uint64')
             self.random = np.random.RandomState(0)
 
         def __iter__(self):
@@ -224,16 +224,17 @@ class HDF5Volume(object):
             self.random.seed(0)
 
         def next(self):
-            ctr = tuple(self.random.randint(self.ctr_min[n], self.ctr_max[n]) for n in range(0, 3))
-            subvol = ((ctr[2] - self.margin[2], ctr[2] + self.margin[2] + (self.size_orig[2] % 2)),
-                      (ctr[1] - self.margin[1], ctr[1] + self.margin[1] + (self.size_orig[1] % 2)),
-                      (ctr[0] - self.margin[0], ctr[0] + self.margin[0] + (self.size_orig[0] % 2)))
-            image_subvol = self.volume.image_data[subvol[0][0]:subvol[0][1],
-                                      subvol[1][0]:subvol[1][1],
-                                      subvol[2][0]:subvol[2][1]]
-            label_subvol = self.volume.label_data[subvol[0][0]:subvol[0][1],
-                                      subvol[1][0]:subvol[1][1],
-                                      subvol[2][0]:subvol[2][1]]
+            ctr = np.array([self.random.randint(self.ctr_min[n], self.ctr_max[n]) for n in range(3)]).astype('uint64')
+            subvol = (ctr - self.margin,
+                      ctr + self.margin + np.mod(self.size_orig, 2))
+            image_subvol = self.volume.image_data[
+                    subvol[0][2]:subvol[1][2],
+                    subvol[0][1]:subvol[1][1],
+                    subvol[0][0]:subvol[1][0]]
+            label_subvol = self.volume.label_data[
+                    subvol[0][2]:subvol[1][2],
+                    subvol[0][1]:subvol[1][1],
+                    subvol[0][0]:subvol[1][0]]
 
             image_subvol = np.transpose(image_subvol.astype('float32')) / 256.0
             label_subvol = np.transpose(label_subvol)
