@@ -214,6 +214,8 @@ def train_network(model_file=None, model_checkpoint_file=None, volumes=None,
                        shader=get_color_shader(1))
             print viewer
 
+            raw_input("Press any key to exit...")
+
     if metric_plot:
         plot_history(history)
 
