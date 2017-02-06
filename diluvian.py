@@ -121,6 +121,7 @@ def fill_region_from_model(model_file, volumes=None, bias=True, move_batch_size=
 
 
 def train_network(model_file=None, model_checkpoint_file=None, volumes=None,
+                  in_memory=True,
                   tensorboard=False, viewer=False, metric_plot=False):
     if model_file is None:
         ffn = make_network()
@@ -132,6 +133,9 @@ def train_network(model_file=None, model_checkpoint_file=None, volumes=None,
 
     if volumes is None:
         volumes = HDF5Volume.from_toml(os.path.join(os.path.dirname(__file__), 'conf', 'cremi_datasets.toml'))
+
+    if in_memory:
+        volumes = {k: v.to_memory_volume() for k, v in volumes.iteritems()}
 
     f_a_bins = CONFIG.training.fill_factor_bins
 
@@ -235,6 +239,8 @@ def cli():
 
     train_parser = commandparsers.add_parser('train', parents=[common_parser],
                                              help='Train a network from labeled volumes.')
+    train_parser.add_argument('--no-in-memory', action='store_false', dest='in_memory', default=True,
+                             help='Do not preload entire volumes into memory.')
     train_parser.add_argument('-mc', '--model-checkpoint-file', dest='model_checkpoint_file', default=None,
                               help='Filename for model checkpoints. ' \
                                    'Can use Keras format arguments: https://keras.io/callbacks/#modelcheckpoint')
@@ -266,6 +272,7 @@ def cli():
         train_network(model_file=args.model_file,
                       model_checkpoint_file=args.model_checkpoint_file,
                       volumes=volumes,
+                      in_memory=args.in_memory,
                       tensorboard=args.tensorboard,
                       viewer=args.viewer,
                       metric_plot=args.metric_plot)

@@ -13,26 +13,18 @@ from regions import DenseRegion
 from util import pad_dims
 
 
-class HDF5Volume(object):
-    @staticmethod
-    def from_toml(filename):
-        volumes = {}
-        with open(filename, 'rb') as fin:
-            datasets = toml.load(fin).get('dataset', [])
-            for dataset in datasets:
-                hdf5_file = dataset['hdf5_file']
-                if dataset.get('use_keras_cache', False):
-                    hdf5_file = get_file(hdf5_file, dataset['download_url'], md5_hash=dataset.get('download_md5', None))
-                volumes[dataset['name']] = HDF5Volume(hdf5_file,
-                                                      dataset['image_dataset'],
-                                                      dataset['label_dataset'])
+class Volume(object):
+    def __init__(self, image_data, label_data):
+        self.image_data = image_data
+        self.label_data = label_data
+        self.image_data.flags.writeable = False
+        self.label_data.flags.writeable = False
 
-        return volumes
+    def xyz_coord_to_local(self, a):
+        return a
 
-    def __init__(self, orig_file, image_dataset, label_dataset):
-        self.file = h5py.File(orig_file, 'r')
-        self.image_data = self.file[image_dataset]
-        self.label_data = self.file[label_dataset]
+    def xyz_mat_to_local(self, m):
+        return m
 
     def simple_training_generator(self, subvolume_size, batch_size, training_size, f_a_bins=None, partition=None):
         subvolumes = self.SubvolumeGenerator(self, subvolume_size, CONFIG.volume.downsample, partition)
@@ -212,7 +204,7 @@ class HDF5Volume(object):
             self.size_orig = np.multiply(self.size_zoom, self.zoom).astype('uint64')
             self.margin = np.floor_divide(self.size_orig, 2)
             # HDF5 coordinates are z, y, x
-            self.partition_size = np.floor_divide(np.flipud(np.array(self.volume.image_data.shape)), self.partition[0])
+            self.partition_size = np.floor_divide(self.volume.xyz_coord_to_local(np.array(self.volume.image_data.shape)), self.partition[0])
             self.ctr_min = (np.multiply(self.partition_size, self.partition[1]) + self.margin).astype('uint64')
             self.ctr_max = (np.multiply(self.partition_size, self.partition[1] + 1) - self.margin - 1).astype('uint64')
             self.random = np.random.RandomState(0)
@@ -225,19 +217,19 @@ class HDF5Volume(object):
 
         def next(self):
             ctr = np.array([self.random.randint(self.ctr_min[n], self.ctr_max[n]) for n in range(3)]).astype('uint64')
-            subvol = (ctr - self.margin,
-                      ctr + self.margin + np.mod(self.size_orig, 2))
+            subvol = (self.volume.xyz_coord_to_local(ctr - self.margin),
+                      self.volume.xyz_coord_to_local(ctr + self.margin + np.mod(self.size_orig, 2)))
             image_subvol = self.volume.image_data[
-                    subvol[0][2]:subvol[1][2],
+                    subvol[0][0]:subvol[1][0],
                     subvol[0][1]:subvol[1][1],
-                    subvol[0][0]:subvol[1][0]]
+                    subvol[0][2]:subvol[1][2]]
             label_subvol = self.volume.label_data[
-                    subvol[0][2]:subvol[1][2],
+                    subvol[0][0]:subvol[1][0],
                     subvol[0][1]:subvol[1][1],
-                    subvol[0][0]:subvol[1][0]]
+                    subvol[0][2]:subvol[1][2]]
 
-            image_subvol = np.transpose(image_subvol.astype('float32')) / 256.0
-            label_subvol = np.transpose(label_subvol)
+            image_subvol = self.volume.xyz_mat_to_local(image_subvol.astype('float32')) / 256.0
+            label_subvol = self.volume.xyz_mat_to_local(label_subvol)
             label_id = label_subvol[tuple(np.array(label_subvol.shape) / 2)]
             label_mask = label_subvol == label_id
 
@@ -272,7 +264,7 @@ class HDF5Volume(object):
         def __init__(self, volume, downsample, partition=None):
             super(HDF5Volume.SparseSubvolumeGenerator, self).__init__(volume, CONFIG.model.block_size, downsample, partition)
             self.volume_shape_orig = (np.zeros((3,), dtype='uint64'),
-                                      np.divide(np.flipud(np.array(self.volume.image_data.shape)), self.zoom))
+                                      np.divide(self.volume.xyz_coord_to_local(np.array(self.volume.image_data.shape)), self.zoom))
 
         def next(self):
             ctr = tuple(self.random.randint(self.ctr_min[n], self.ctr_max[n]) for n in range(0, 3))
@@ -280,14 +272,14 @@ class HDF5Volume(object):
 
             def image_populator(bounds):
                 size = bounds[1] - bounds[0]
-                subvol = (np.flipud(np.multiply(bounds[0], self.zoom)),
-                          np.flipud(np.multiply(bounds[1], self.zoom)))
+                subvol = (self.volume.xyz_coord_to_local(np.multiply(bounds[0], self.zoom)),
+                          self.volume.xyz_coord_to_local(np.multiply(bounds[1], self.zoom)))
                 image_subvol = self.volume.image_data[
                         subvol[0][0]:subvol[1][0],
                         subvol[0][1]:subvol[1][1],
                         subvol[0][2]:subvol[1][2]]
 
-                image_subvol = np.transpose(image_subvol.astype('float32')) / 256.0
+                image_subvol = self.volume.xyz_mat_to_local(image_subvol.astype('float32')) / 256.0
 
                 if np.any(self.zoom > 1):
                     image_subvol = image_subvol.reshape([size[0], self.zoom[0],
@@ -297,14 +289,14 @@ class HDF5Volume(object):
 
             def label_populator(bounds):
                 size = bounds[1] - bounds[0]
-                subvol = (np.flipud(np.multiply(bounds[0], self.zoom)),
-                          np.flipud(np.multiply(bounds[1], self.zoom)))
+                subvol = (self.volume.xyz_coord_to_local(np.multiply(bounds[0], self.zoom)),
+                          self.volume.xyz_coord_to_local(np.multiply(bounds[1], self.zoom)))
                 label_subvol = self.volume.label_data[
                         subvol[0][0]:subvol[1][0],
                         subvol[0][1]:subvol[1][1],
                         subvol[0][2]:subvol[1][2]]
 
-                label_subvol = np.transpose(label_subvol)
+                label_subvol = self.volume.xyz_mat_to_local(label_subvol)
                 label_mask = label_subvol == label_id
 
                 if np.any(self.zoom > 1):
@@ -321,3 +313,35 @@ class HDF5Volume(object):
             f_a = 0.0
 
             return {'image': image_tree, 'mask_target': target_tree, 'f_a': f_a, 'seed': np.divide(ctr, self.zoom)}
+
+
+class HDF5Volume(Volume):
+    @staticmethod
+    def from_toml(filename):
+        volumes = {}
+        with open(filename, 'rb') as fin:
+            datasets = toml.load(fin).get('dataset', [])
+            for dataset in datasets:
+                hdf5_file = dataset['hdf5_file']
+                if dataset.get('use_keras_cache', False):
+                    hdf5_file = get_file(hdf5_file, dataset['download_url'], md5_hash=dataset.get('download_md5', None))
+                volumes[dataset['name']] = HDF5Volume(hdf5_file,
+                                                      dataset['image_dataset'],
+                                                      dataset['label_dataset'])
+
+        return volumes
+
+    def __init__(self, orig_file, image_dataset, label_dataset):
+        self.file = h5py.File(orig_file, 'r')
+        self.image_data = self.file[image_dataset]
+        self.label_data = self.file[label_dataset]
+
+    def xyz_coord_to_local(self, a):
+        return np.flipud(a)
+
+    def xyz_mat_to_local(self, m):
+        return np.transpose(m)
+
+    def to_memory_volume(self):
+        return Volume(self.xyz_mat_to_local(self.image_data[:, :, :]),
+                      self.xyz_mat_to_local(self.label_data[:, :, :]))
