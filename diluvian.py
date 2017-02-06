@@ -100,7 +100,7 @@ class PredictionCopy(Callback):
 
 def fill_region_from_model(model_file, volumes=None, bias=True, move_batch_size=1):
     if volumes is None:
-        volumes = HDF5Volume.from_toml(os.path.join(os.path.dirname(__file__), 'conf', 'cremi_datasets.toml'))
+        raise ValueError('Volumes must be provided.')
 
     regions = roundrobin(*[v.region_generator(CONFIG.model.training_fov * 4) for _, v in volumes.iteritems()])
 
@@ -121,7 +121,6 @@ def fill_region_from_model(model_file, volumes=None, bias=True, move_batch_size=
 
 
 def train_network(model_file=None, model_checkpoint_file=None, volumes=None,
-                  in_memory=True,
                   tensorboard=False, viewer=False, metric_plot=False):
     if model_file is None:
         ffn = make_network()
@@ -132,10 +131,7 @@ def train_network(model_file=None, model_checkpoint_file=None, volumes=None,
         model_checkpoint_file = 'weights.hdf5'
 
     if volumes is None:
-        volumes = HDF5Volume.from_toml(os.path.join(os.path.dirname(__file__), 'conf', 'cremi_datasets.toml'))
-
-    if in_memory:
-        volumes = {k: v.to_memory_volume() for k, v in volumes.iteritems()}
+        raise ValueError('Volumes must be provided.')
 
     f_a_bins = CONFIG.training.fill_factor_bins
 
@@ -234,6 +230,8 @@ def cli():
                                help='Existing network model file to use for prediction or continued training.')
     common_parser.add_argument('-v', '--volume-file', dest='volume_file', default=None,
                                help='Volume configuration file. For example, see `conf/cremi_datasets.toml`.')
+    common_parser.add_argument('--no-in-memory', action='store_false', dest='in_memory', default=True,
+                               help='Do not preload entire volumes into memory.')
 
     parser = argparse.ArgumentParser(description='Train or run flood-filling networks on EM data.')
 
@@ -241,8 +239,6 @@ def cli():
 
     train_parser = commandparsers.add_parser('train', parents=[common_parser],
                                              help='Train a network from labeled volumes.')
-    train_parser.add_argument('--no-in-memory', action='store_false', dest='in_memory', default=True,
-                             help='Do not preload entire volumes into memory.')
     train_parser.add_argument('-mc', '--model-checkpoint-file', dest='model_checkpoint_file', default=None,
                               help='Filename for model checkpoints. ' \
                                    'Can use Keras format arguments: https://keras.io/callbacks/#modelcheckpoint')
@@ -268,13 +264,15 @@ def cli():
     if args.volume_file:
         volumes = HDF5Volume.from_toml(args.volume_file)
     else:
-        volumes = None
+        volumes = HDF5Volume.from_toml(os.path.join(os.path.dirname(__file__), 'conf', 'cremi_datasets.toml'))
+
+    if args.in_memory:
+        volumes = {k: v.to_memory_volume() for k, v in volumes.iteritems()}
 
     if args.command == 'train':
         train_network(model_file=args.model_file,
                       model_checkpoint_file=args.model_checkpoint_file,
                       volumes=volumes,
-                      in_memory=args.in_memory,
                       tensorboard=args.tensorboard,
                       viewer=args.viewer,
                       metric_plot=args.metric_plot)
