@@ -10,9 +10,8 @@ class OctreeVolume(object):
         self.bounds = (bounds[0].astype('uint64'), bounds[1].astype('uint64'))
         self.dtype = np.dtype(dtype)
         self.populator = populator
-        ceil_bounds = np.power(self.leaf_size,
-                               np.ceil(np.log2(self.bounds[1] - self.bounds[0]) /
-                                       np.log2(self.leaf_size))).astype('uint64')
+        ceil_bounds = self.leaf_size*np.exp2(np.ceil(np.log2((self.bounds[1] - self.bounds[0]) /
+                                                             self.leaf_size.astype('float64')))).astype('uint64').max()
         self.root_node = BranchNode(self, (self.bounds[0], self.bounds[0] + ceil_bounds), clip_bound=self.bounds[1])
 
     @property
