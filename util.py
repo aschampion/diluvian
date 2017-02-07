@@ -35,7 +35,7 @@ def extend_keras_history(a, b):
 def get_color_shader(channel):
     value_str = 'toNormalized(getDataValue(0))'
     channels = ['0', '0', '0', value_str]
-    channels[channel] = value_str
+    channels[channel] = '1'
     shader = """
 void main() {{
   emitRGBA(vec4({}));
