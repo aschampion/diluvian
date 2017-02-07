@@ -4,7 +4,7 @@
 import numpy as np
 
 
-class OctreeVolume(object):
+class OctreeMatrix(object):
     def __init__(self, leaf_size, bounds, dtype, populator=None):
         self.leaf_size = np.asarray(leaf_size).astype('uint64')
         self.bounds = (bounds[0].astype('uint64'), bounds[1].astype('uint64'))

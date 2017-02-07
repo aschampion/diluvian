@@ -11,7 +11,7 @@ import requests
 from keras.utils.data_utils import get_file
 
 from config import CONFIG
-from octrees import OctreeVolume
+from octrees import OctreeMatrix
 from regions import DenseRegion
 from util import pad_dims
 
@@ -181,7 +181,7 @@ class Volume(object):
             if not np.unique(seed_region).size == 1:
                 print 'Rejecting region with seed margin too small.'
                 continue
-            output_mask = OctreeVolume([64, 64, 24], subvolumes.volume_shape_orig, 'float32')
+            output_mask = OctreeMatrix([64, 64, 24], subvolumes.volume_shape_orig, 'float32')
             output_mask[subvolumes.volume_shape_orig[0][0]:subvolumes.volume_shape_orig[1][0],
                         subvolumes.volume_shape_orig[0][1]:subvolumes.volume_shape_orig[1][1],
                         subvolumes.volume_shape_orig[0][2]:subvolumes.volume_shape_orig[1][2]] = np.NAN
@@ -306,8 +306,8 @@ class Volume(object):
                 mask_target[label_mask] = CONFIG.model.v_true
                 return mask_target
 
-            image_tree = OctreeVolume([64, 64, 24], self.volume_shape_orig, 'float32', populator=image_populator)
-            target_tree = OctreeVolume([64, 64, 24], self.volume_shape_orig, 'float32', populator=label_populator)
+            image_tree = OctreeMatrix([64, 64, 24], self.volume_shape_orig, 'float32', populator=image_populator)
+            target_tree = OctreeMatrix([64, 64, 24], self.volume_shape_orig, 'float32', populator=label_populator)
 
             f_a = 0.0
 
@@ -386,12 +386,12 @@ class ImageStackVolume(Volume):
             return image_subvol
 
         data_size = (np.zeros(3), np.divide(stack_info['bounds'], scale).astype('uint64'))
-        self.image_data = OctreeVolume([512, 512, 10],
+        self.image_data = OctreeMatrix([512, 512, 10],
                                        data_size,
                                        'uint8',
                                        populator=image_populator)
 
-        self.label_data = OctreeVolume([64, 64, 24], data_size, 'uint64')
+        self.label_data = OctreeMatrix([64, 64, 24], data_size, 'uint64')
         self.label_data[data_size[0][0]:data_size[1][0],
                         data_size[0][1]:data_size[1][1],
                         data_size[0][2]:data_size[1][2]] = 1
