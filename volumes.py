@@ -267,8 +267,8 @@ class Volume(object):
                                       np.divide(self.volume.xyz_coord_to_local(np.array(self.volume.image_data.shape)), self.zoom))
 
         def next(self):
-            ctr = tuple(self.random.randint(self.ctr_min[n], self.ctr_max[n]) for n in range(0, 3))
-            label_id = self.volume.label_data[tuple(reversed(ctr))]
+            ctr = np.array([self.random.randint(self.ctr_min[n], self.ctr_max[n]) for n in range(3)]).astype('uint64')
+            label_id = self.volume.label_data[tuple(self.volume.xyz_coord_to_local(ctr))]
 
             def image_populator(bounds):
                 size = bounds[1] - bounds[0]
