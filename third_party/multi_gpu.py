@@ -49,6 +49,15 @@ def make_parallel(model, gpu_count):
         merged = []
         for outputs in outputs_all:
             merged.append(merge(outputs, mode='concat', concat_axis=0))
-            
-        return Model(input=model.inputs, output=merged)
+
+        # From https://github.com/kuza55/keras-extras/issues/3#issuecomment-264408864
+        new_model = Model(input=model.inputs, output=merged)
+        func_type = type(model.save)
+
+        # monkeypatch the save to save just the underlying model
+        def new_save(_, *args, **kwargs):
+            model.save(*args, **kwargs)
+        new_model.save = func_type(new_save, new_model)
+
+        return new_model
 
