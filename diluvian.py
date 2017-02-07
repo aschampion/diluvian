@@ -98,7 +98,8 @@ class PredictionCopy(Callback):
             self.kludge['outputs'] = self.model.predict(self.kludge['inputs'])
 
 
-def fill_region_from_model(model_file, volumes=None, bias=True, move_batch_size=1, max_moves=None):
+def fill_region_from_model(model_file, volumes=None, bias=True, move_batch_size=1,
+                           max_moves=None, multi_gpu_model_kludge=None):
     if volumes is None:
         raise ValueError('Volumes must be provided.')
 
@@ -108,7 +109,11 @@ def fill_region_from_model(model_file, volumes=None, bias=True, move_batch_size=
 
     for region in regions:
         region.bias_against_merge = bias
-        region.fill(model, verbose=True, move_batch_size=move_batch_size, max_moves=max_moves)
+        region.fill(model,
+                    verbose=True,
+                    move_batch_size=move_batch_size,
+                    max_moves=max_moves,
+                    multi_gpu_pad_kludge=multi_gpu_model_kludge)
         viewer = region.get_viewer()
         print viewer
         s = raw_input("Press Enter to continue, a to export animation, q to quit...")
@@ -258,6 +263,9 @@ def cli():
                              help='Maximum number of fill moves to process in each prediction batch.')
     fill_parser.add_argument('--max-moves', dest='max_moves', default=None, type=int,
                              help='Cancel filling after this many moves.')
+    fill_parser.add_argument('--multi-gpu-model-kludge', dest='multi_gpu_model_kludge', default=None, type=int,
+                             help='Fix using a multi-GPU trained model that was not saved properly by '
+                                  'setting this to the number of training GPUs.')
 
     args = parser.parse_args()
 
@@ -283,7 +291,8 @@ def cli():
                                volumes=volumes,
                                bias=args.bias,
                                move_batch_size=args.move_batch_size,
-                               max_moves=args.max_moves)
+                               max_moves=args.max_moves,
+                               multi_gpu_model_kludge=args.multi_gpu_model_kludge)
 
 
 if __name__ == "__main__":

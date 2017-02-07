@@ -117,7 +117,7 @@ class DenseRegion(object):
                 'target': target_block,
                 'position': next_pos}
 
-    def fill(self, model, verbose=False, move_batch_size=1, max_moves=None):
+    def fill(self, model, verbose=False, move_batch_size=1, max_moves=None, multi_gpu_pad_kludge=None):
         moves = 0
         if verbose:
             pbar = tqdm(desc='Move queue')
@@ -132,6 +132,17 @@ class DenseRegion(object):
 
             image_input = np.concatenate([pad_dims(b['image']) for b in batch_block_data])
             mask_input = np.concatenate([pad_dims(b['mask']) for b in batch_block_data])
+
+            # For models generated with make_parallel that saved the parallel
+            # model, not the original model, some kludge is necessary so that
+            # the batch size is large enough to give each GPU in the parallel
+            # model an equal number of samples.
+            if multi_gpu_pad_kludge is not None and image_input.shape[0] % multi_gpu_pad_kludge != 0:
+                missing_samples = multi_gpu_pad_kludge - (image_input.shape[0] % multi_gpu_pad_kludge)
+                fill_dim = list(image_input.shape)
+                fill_dim[0] = missing_samples
+                image_input = np.concatenate((image_input, np.zeros(fill_dim, dtype=image_input.dtype)))
+                mask_input = np.concatenate((mask_input, np.zeros(fill_dim, dtype=mask_input.dtype)))
 
             output = model.predict({'image_input': image_input,
                                     'mask_input': mask_input})
