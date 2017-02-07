@@ -143,18 +143,16 @@ class Volume(object):
         if seed_margin is None:
             seed_margin = 10.0
 
-        margin = np.ceil(np.reciprocal(np.array(CONFIG.volume.resolution), dtype='float64') * seed_margin).astype('int64')
+        margin = np.ceil(np.reciprocal(np.array(CONFIG.volume.resolution), dtype='float64') * seed_margin).astype('uint64')
 
         while 1:
             subvolume = subvolumes.next()
             mask_target = subvolume['mask_target']
-            ctr = np.array(mask_target.shape) / 2
-            seed_region = mask_target[ctr[0] - margin[0]:
-                                      ctr[0] + margin[0] + 1,
-                                      ctr[1] - margin[1]:
-                                      ctr[1] + margin[1] + 1,
-                                      ctr[2] - margin[2]:
-                                      ctr[2] + margin[2] + 1]
+            ctr = np.array(mask_target.shape, dtype='uint64') / 2
+            seed_fov = (ctr - margin, ctr + margin + 1)
+            seed_region = mask_target[seed_fov[0][0]:seed_fov[1][0],
+                                      seed_fov[0][1]:seed_fov[1][1],
+                                      seed_fov[0][2]:seed_fov[1][2]]
             if not np.unique(seed_region).size == 1:
                 print 'Rejecting region with seed margin too small.'
                 continue
@@ -167,18 +165,16 @@ class Volume(object):
         if seed_margin is None:
             seed_margin = 10.0
 
-        margin = np.ceil(np.reciprocal(np.array(CONFIG.volume.resolution), dtype='float64') * seed_margin).astype('int64')
+        margin = np.ceil(np.reciprocal(np.array(CONFIG.volume.resolution), dtype='float64') * seed_margin).astype('uint64')
 
         while 1:
             subvolume = subvolumes.next()
             mask_target = subvolume['mask_target']
             ctr = np.array(subvolume['seed'])
-            seed_region = mask_target[ctr[0] - margin[0]:
-                                      ctr[0] + margin[0] + 1,
-                                      ctr[1] - margin[1]:
-                                      ctr[1] + margin[1] + 1,
-                                      ctr[2] - margin[2]:
-                                      ctr[2] + margin[2] + 1]
+            seed_fov = (ctr - margin, ctr + margin + 1)
+            seed_region = mask_target[seed_fov[0][0]:seed_fov[1][0],
+                                      seed_fov[0][1]:seed_fov[1][1],
+                                      seed_fov[0][2]:seed_fov[1][2]]
             if not np.unique(seed_region).size == 1:
                 print 'Rejecting region with seed margin too small.'
                 continue
