@@ -1,9 +1,29 @@
 # -*- coding: utf-8 -*-
 
 
+import collections
 import itertools
 
+import neuroglancer
 import numpy as np
+
+
+class WrappedViewer(neuroglancer.Viewer):
+    def __init__(self, voxel_coordinates=None, **kwargs):
+        super(WrappedViewer, self).__init__(**kwargs)
+        self.voxel_coordinates = voxel_coordinates
+
+    def get_json_state(self):
+        state = super(WrappedViewer, self).get_json_state()
+        if self.voxel_coordinates is not None:
+            if 'navigation' not in state:
+                state['navigation'] = collections.OrderedDict()
+            if 'pose' not in state['navigation']:
+                state['navigation']['pose'] = collections.OrderedDict()
+            if 'position' not in state['navigation']['pose']:
+                state['navigation']['pose']['position'] = collections.OrderedDict()
+            state['navigation']['pose']['position']['voxelCoordinates'] = map(int, list(self.voxel_coordinates))
+        return state
 
 
 def extend_keras_history(a, b):

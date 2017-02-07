@@ -5,12 +5,11 @@ import itertools
 import Queue
 
 import matplotlib.animation as animation
-import neuroglancer
 import numpy as np
 from tqdm import tqdm
 
 from config import CONFIG
-from util import get_color_shader, pad_dims
+from util import get_color_shader, pad_dims, WrappedViewer
 
 
 class DenseRegion(object):
@@ -298,7 +297,8 @@ class DenseRegion(object):
 
     def get_viewer(self, transpose=False):
         if transpose:
-            viewer = neuroglancer.Viewer(voxel_size=list(CONFIG.volume.resolution))
+            viewer = WrappedViewer(voxel_size=list(CONFIG.volume.resolution),
+                                   voxel_coordinates=self.pos_to_vox(self.seed_pos))
             viewer.add(np.transpose(self.image),
                        name='Image')
             viewer.add(np.transpose(self.target),
@@ -308,7 +308,8 @@ class DenseRegion(object):
                        name='Mask Output',
                        shader=get_color_shader(1))
         else:
-            viewer = neuroglancer.Viewer(voxel_size=list(np.flipud(CONFIG.volume.resolution)))
+            viewer = WrappedViewer(voxel_size=list(np.flipud(CONFIG.volume.resolution)),
+                                   voxel_coordinates=np.flipud(self.pos_to_vox(self.seed_pos)))
             viewer.add(self.image,
                        name='Image')
             viewer.add(self.target,
