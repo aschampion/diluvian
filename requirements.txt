@@ -3,7 +3,9 @@ Keras==1.2.1
 matplotlib==2.0.0
 neuroglancer==0.0.8
 numpy==1.12.0
+Pillow==4.0.0
 pytoml==0.1.11
+requests==2.13.0
 scipy==0.18.1
 tensorflow-gpu==0.12.1
 tqdm==4.11.2

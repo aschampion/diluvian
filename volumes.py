@@ -2,8 +2,11 @@
 
 
 import h5py
+import math
 import numpy as np
+from PIL import Image
 import pytoml as toml
+import requests
 
 from keras.utils.data_utils import get_file
 
@@ -341,3 +344,77 @@ class HDF5Volume(Volume):
     def to_memory_volume(self):
         return Volume(self.xyz_mat_to_local(self.image_data[:, :, :]),
                       self.xyz_mat_to_local(self.label_data[:, :, :]))
+
+
+class ImageStackVolume(Volume):
+    def __init__(self, stack_info, tile_source_parameters):
+        self.stack_info = stack_info
+        self.tile_source_parameters = tile_source_parameters
+        self.zoom_level = min(CONFIG.volume.downsample[0], CONFIG.volume.downsample[1])
+        # Hard code CATMAID tile source type 5 for now:
+        self.url_format = '{source_base_url}{zoom_level}/{z}/{row}/{col}.{file_extension}'
+        scale = np.exp2(np.array([self.zoom_level, self.zoom_level, 0])).astype('uint64')
+
+        def image_populator(bounds):
+            image_subvol = np.zeros(tuple(bounds[1] - bounds[0]), dtype='uint8')
+            tw = self.tile_source_parameters['tile_width']
+            th = self.tile_source_parameters['tile_height']
+            col_range = map(int, (math.floor(bounds[0][0]/tw), math.ceil(bounds[1][0]/tw)))
+            row_range = map(int, (math.floor(bounds[0][1]/th), math.ceil(bounds[1][1]/th)))
+            tile_size = np.array([tw, th, 1]).astype('int64')
+            for z in xrange(bounds[0][2], bounds[1][2]):
+                for r in xrange(*row_range):
+                    for c in xrange(*col_range):
+                        url = self.url_format.format(zoom_level=self.zoom_level, z=z, row=r, col=c, **self.tile_source_parameters)
+                        try:
+                            im = np.transpose(np.array(Image.open(requests.get(url, stream=True).raw)))
+                        except IOError:
+                            im = np.full((tw, th), 0, dtype='uint8')
+                        tile_coord = np.array([c, r, z]).astype('int64')
+                        tile_loc = np.multiply(tile_coord, tile_size)
+
+                        subvol = (np.maximum(np.zeros(3), tile_loc - bounds[0]).astype('uint64'),
+                                  np.minimum(np.array(image_subvol.shape), tile_loc + tile_size - bounds[0]).astype('uint64'))
+                        tile_sub = (np.maximum(np.zeros(3), bounds[0] - tile_loc).astype('uint64'),
+                                    np.minimum(tile_size, bounds[1] - tile_loc).astype('uint64'))
+
+                        image_subvol[subvol[0][0]:subvol[1][0],
+                                     subvol[0][1]:subvol[1][1],
+                                     subvol[0][2]             ] = im[tile_sub[0][0]:tile_sub[1][0],
+                                                                     tile_sub[0][1]:tile_sub[1][1]]
+
+            return image_subvol
+
+        data_size = (np.zeros(3), np.divide(stack_info['bounds'], scale).astype('uint64'))
+        self.image_data = OctreeVolume([512, 512, 10],
+                                       data_size,
+                                       'uint8',
+                                       populator=image_populator)
+
+        self.label_data = OctreeVolume([64, 64, 24], data_size, 'uint64')
+        self.label_data[data_size[0][0]:data_size[1][0],
+                        data_size[0][1]:data_size[1][1],
+                        data_size[0][2]:data_size[1][2]] = 1
+
+    class SubvolumeGenerator(Volume.SubvolumeGenerator):
+        def __init__(self, volume, size_zoom, downsample, partition=None):
+            adjusted_downsample = downsample.copy()
+            if volume.zoom_level is not None:
+                adjusted_downsample[0:2] -= volume.zoom_level
+            super(ImageStackVolume.SubvolumeGenerator, self).__init__(volume, size_zoom, adjusted_downsample, partition)
+
+    class SparseSubvolumeGenerator(Volume.SubvolumeGenerator):
+        def __init__(self, volume, downsample, partition=None):
+            adjusted_downsample = downsample.copy()
+            if volume.zoom_level is not None:
+                adjusted_downsample[0:2] -= volume.zoom_level
+            super(ImageStackVolume.SparseSubvolumeGenerator, self).__init__(volume, CONFIG.model.block_size, adjusted_downsample, partition)
+            self.volume_shape_orig = (np.zeros(3, dtype='uint64'), np.array(self.volume.image_data.shape))
+
+
+        def next(self):
+            ctr = np.array([self.random.randint(self.ctr_min[n], self.ctr_max[n]) for n in range(3)]).astype('uint64')
+
+            f_a = 0.0
+
+            return {'image': self.volume.image_data, 'mask_target': self.volume.label_data, 'f_a': f_a, 'seed': ctr}
