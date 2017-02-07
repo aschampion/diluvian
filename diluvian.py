@@ -98,7 +98,7 @@ class PredictionCopy(Callback):
             self.kludge['outputs'] = self.model.predict(self.kludge['inputs'])
 
 
-def fill_region_from_model(model_file, volumes=None, bias=True, move_batch_size=1):
+def fill_region_from_model(model_file, volumes=None, bias=True, move_batch_size=1, max_moves=None):
     if volumes is None:
         raise ValueError('Volumes must be provided.')
 
@@ -108,7 +108,7 @@ def fill_region_from_model(model_file, volumes=None, bias=True, move_batch_size=
 
     for region in regions:
         region.bias_against_merge = bias
-        region.fill(model, verbose=True, move_batch_size=move_batch_size)
+        region.fill(model, verbose=True, move_batch_size=move_batch_size, max_moves=max_moves)
         viewer = region.get_viewer()
         print viewer
         s = raw_input("Press Enter to continue, a to export animation, q to quit...")
@@ -256,6 +256,8 @@ def cli():
                                   'rather than using the anti-merge bias update.')
     fill_parser.add_argument('--move-batch-size', dest='move_batch_size', default=1, type=int,
                              help='Maximum number of fill moves to process in each prediction batch.')
+    fill_parser.add_argument('--max-moves', dest='max_moves', default=None, type=int,
+                             help='Cancel filling after this many moves.')
 
     args = parser.parse_args()
 
@@ -280,7 +282,8 @@ def cli():
         fill_region_from_model(args.model_file,
                                volumes=volumes,
                                bias=args.bias,
-                               move_batch_size=args.move_batch_size)
+                               move_batch_size=args.move_batch_size,
+                               max_moves=args.max_moves)
 
 
 if __name__ == "__main__":

@@ -118,7 +118,7 @@ class DenseRegion(object):
                 'target': target_block,
                 'position': next_pos}
 
-    def fill(self, model, verbose=False, move_batch_size=1):
+    def fill(self, model, verbose=False, move_batch_size=1, max_moves=None):
         moves = 0
         if verbose:
             pbar = tqdm(desc='Move queue')
@@ -139,6 +139,9 @@ class DenseRegion(object):
 
             for ind, block_data in enumerate(batch_block_data):
                 self.add_mask(output[ind, :, :, :, 0], block_data['position'])
+
+            if max_moves is not None and moves > max_moves:
+                break
 
         if verbose:
             pbar.close()
