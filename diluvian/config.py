@@ -12,13 +12,26 @@ import numpy as np
 import pytoml as toml
 
 
-class VolumeConfig(object):
+class BaseConfig:
+    def __str__(self):
+        sanitized = {}
+        for k, v in self.__dict__.iteritems():
+            if isinstance(v, np.ndarray):
+                sanitized[k] = v.tolist()
+            else:
+                sanitized[k] = v
+        return toml.dumps(sanitized)
+
+    __repr__ = __str__
+
+
+class VolumeConfig(BaseConfig):
     def __init__(self, settings):
         self.downsample = np.array(settings.get('downsample', [0, 0, 0]))
         self.resolution = np.array(settings.get('resolution', [1, 1, 1]))
 
 
-class ModelConfig(object):
+class ModelConfig(BaseConfig):
     def __init__(self, settings):
         self.block_size = np.array(settings.get('block_size', [33, 33, 17]))
         self.v_true = float(settings.get('v_true', 0.095))
@@ -27,20 +40,20 @@ class ModelConfig(object):
         self.training_fov = np.array(settings.get('training_fov', self.block_size + ((self.block_size - 1) / 2)))
 
 
-class NetworkConfig(object):
+class NetworkConfig(BaseConfig):
     def __init__(self, settings):
         self.num_modules = int(settings.get('num_modules', 8))
         self.convolution_dim = np.array(settings.get('convolution_dim', [3, 3, 3]))
         self.output_activation = str(settings.get('output_activation', 'sigmoid'))
 
 
-class OptimizerConfig(object):
+class OptimizerConfig(BaseConfig):
     def __init__(self, settings):
         self.klass = str(settings.get('class', 'SGD'))
         self.kwargs = {k: v for k, v in settings.iteritems() if k != 'class'}
 
 
-class TrainingConfig(object):
+class TrainingConfig(BaseConfig):
     def __init__(self, settings):
         self.num_gpus = int(settings.get('num_gpus', 1))
         self.gpu_batch_size = int(settings.get('gpu_batch_size', 8))
@@ -58,7 +71,7 @@ class TrainingConfig(object):
         self.patience = int(np.array(settings.get('patience', 10)))
 
 
-class Config(object):
+class Config(BaseConfig):
     def from_toml(self, *filenames):
         settings = []
         for filename in filenames:

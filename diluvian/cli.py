@@ -88,7 +88,7 @@ def main():
         prop = CONFIG
         for p in properties:
             prop = getattr(prop, p)
-        print '{}: {}'.format(args.config_property, prop)
+        print prop
 
 
 def load_volumes(volume_file, in_memory):
