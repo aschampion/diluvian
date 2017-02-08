@@ -87,4 +87,4 @@ class Config(object):
         self.training = TrainingConfig(settings.get('training', {}))
 
 
-CONFIG = Config.from_toml(os.path.join(os.path.dirname(__file__), 'conf', 'default.toml'))
+CONFIG = Config.from_toml(os.path.join(os.path.dirname(__file__), '..', 'conf', 'default.toml'))

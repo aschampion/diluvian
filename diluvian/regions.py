@@ -8,8 +8,8 @@ import matplotlib.animation as animation
 import numpy as np
 from tqdm import tqdm
 
-from config import CONFIG
-from util import get_color_shader, pad_dims, WrappedViewer
+from .config import CONFIG
+from .util import get_color_shader, pad_dims, WrappedViewer
 
 
 class DenseRegion(object):

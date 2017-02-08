@@ -10,10 +10,10 @@ import requests
 
 from keras.utils.data_utils import get_file
 
-from config import CONFIG
-from octrees import OctreeMatrix
-from regions import DenseRegion
-from util import pad_dims
+from .config import CONFIG
+from .octrees import OctreeMatrix
+from .regions import DenseRegion
+from .util import pad_dims
 
 
 class Volume(object):
