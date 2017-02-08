@@ -75,11 +75,14 @@ class Volume(object):
                        [batch_mask_target],
                        sample_weights)
 
-    def moving_training_generator(self, subvolume_size, batch_size, training_size, callback_kludge, f_a_bins=None, partition=None):
+    def moving_training_generator(self, subvolume_size, batch_size, training_size, callback_kludge,
+                                  f_a_bins=None, partition=None, verbose=False):
         subvolumes = self.SubvolumeGenerator(self, subvolume_size, CONFIG.volume.downsample, partition)
 
         regions = [None] * batch_size
         region_pos = [None] * batch_size
+        move_counts = [0] * batch_size
+        epoch_move_counts = []
 
         if f_a_bins is not None:
             f_a_counts = np.zeros_like(f_a_bins, dtype='uint64')
@@ -89,6 +92,9 @@ class Volume(object):
         while 1:
             if sample_num >= training_size:
                 subvolumes.reset()
+                if verbose and len(epoch_move_counts):
+                    print ' Average moves: {}'.format(sum(epoch_move_counts)/float(len(epoch_move_counts)))
+                epoch_move_counts = []
                 sample_num = 0
 
             # Before clearing last batches, reuse them to predict mask outputs
@@ -109,6 +115,10 @@ class Volume(object):
 
                     regions[r] = DenseRegion(subvolume['image'], subvolume['mask_target'])
                     region = regions[r]
+                    epoch_move_counts.append(move_counts[r])
+                    move_counts[r] = 0
+                else:
+                    move_counts[r] += 1
 
                 block_data = region.get_next_block()
 

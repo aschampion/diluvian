@@ -174,7 +174,8 @@ def train_network(model_file=None, model_checkpoint_file=None, volumes=None,
             CONFIG.training.training_size,
             kludges[k],
             f_a_bins=f_a_bins,
-            partition=(CONFIG.training.partitions, CONFIG.training.training_partition)) for k, v in volumes.iteritems()}
+            partition=(CONFIG.training.partitions, CONFIG.training.training_partition),
+            verbose=True) for k, v in volumes.iteritems()}
     training_data = roundrobin(*training_data.values())
     moving_history = ffn.fit_generator(training_data,
             samples_per_epoch=CONFIG.training.training_size * num_volumes,
