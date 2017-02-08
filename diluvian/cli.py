@@ -51,6 +51,11 @@ def main():
                              help='Fix using a multi-GPU trained model that was not saved properly by '
                                   'setting this to the number of training GPUs.')
 
+    check_config_parser = commandparsers.add_parser('check-config', parents=[common_parser],
+                                                    help='Check a configuration value.')
+    check_config_parser.add_argument('config_property',
+                                     help='Name of the property to show, e.g., `training.batch_size`.')
+
     args = parser.parse_args()
 
     if args.config_files:
@@ -77,6 +82,12 @@ def main():
                                move_batch_size=args.move_batch_size,
                                max_moves=args.max_moves,
                                multi_gpu_model_kludge=args.multi_gpu_model_kludge)
+    elif args.command == 'check-config':
+        properties = args.config_property.split('.')
+        prop = CONFIG
+        for p in properties:
+            prop = getattr(prop, p)
+        print '{}: {}'.format(args.config_property, prop)
 
 
 if __name__ == "__main__":
