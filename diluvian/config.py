@@ -59,14 +59,13 @@ class TrainingConfig(object):
 
 
 class Config(object):
-    @staticmethod
-    def from_toml(*filenames):
+    def from_toml(self, *filenames):
         settings = []
         for filename in filenames:
             with open(filename, 'rb') as fin:
                 settings.append(toml.load(fin))
 
-        return Config(settings)
+        return self.__init__(settings)
 
     def __init__(self, settings_collection=None):
         if settings_collection is not None:
@@ -87,4 +86,5 @@ class Config(object):
         self.training = TrainingConfig(settings.get('training', {}))
 
 
-CONFIG = Config.from_toml(os.path.join(os.path.dirname(__file__), '..', 'conf', 'default.toml'))
+CONFIG = Config()
+CONFIG.from_toml(os.path.join(os.path.dirname(__file__), '..', 'conf', 'default.toml'))

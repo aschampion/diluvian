@@ -4,14 +4,12 @@
 import argparse
 import os
 
-from .config import CONFIG, Config
+from .config import CONFIG
 from .diluvian import fill_region_from_model, train_network
 from .volumes import HDF5Volume
 
 
 def main():
-    global CONFIG
-
     common_parser = argparse.ArgumentParser(add_help=False)
 
     common_parser.add_argument('-c', '--config-file', action='append', dest='config_files', default=[],
@@ -56,7 +54,7 @@ def main():
     args = parser.parse_args()
 
     if args.config_files:
-        CONFIG = Config.from_toml(*args.config_files)
+        CONFIG.from_toml(*args.config_files)
     if args.volume_file:
         volumes = HDF5Volume.from_toml(args.volume_file)
     else:
