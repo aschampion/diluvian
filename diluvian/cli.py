@@ -5,8 +5,6 @@ import argparse
 import os
 
 from .config import CONFIG
-from .diluvian import fill_region_from_model, train_network
-from .volumes import HDF5Volume
 
 
 def main():
@@ -60,34 +58,52 @@ def main():
 
     if args.config_files:
         CONFIG.from_toml(*args.config_files)
-    if args.volume_file:
-        volumes = HDF5Volume.from_toml(args.volume_file)
-    else:
-        volumes = HDF5Volume.from_toml(os.path.join(os.path.dirname(__file__), '..', 'conf', 'cremi_datasets.toml'))
-
-    if args.in_memory:
-        volumes = {k: v.to_memory_volume() for k, v in volumes.iteritems()}
 
     if args.command == 'train':
+        # Late import to prevent loading large modules for short CLI commands.
+        from .diluvian import train_network
+
+        volumes = load_volumes(args.volume_file, args.in_memory)
         train_network(model_file=args.model_file,
                       model_checkpoint_file=args.model_checkpoint_file,
                       volumes=volumes,
                       tensorboard=args.tensorboard,
                       viewer=args.viewer,
                       metric_plot=args.metric_plot)
+
     elif args.command == 'fill':
+        # Late import to prevent loading large modules for short CLI commands.
+        from .diluvian import fill_region_from_model
+
+        volumes = load_volumes(args.volume_file, args.in_memory)
         fill_region_from_model(args.model_file,
                                volumes=volumes,
                                bias=args.bias,
                                move_batch_size=args.move_batch_size,
                                max_moves=args.max_moves,
                                multi_gpu_model_kludge=args.multi_gpu_model_kludge)
+
     elif args.command == 'check-config':
         properties = args.config_property.split('.')
         prop = CONFIG
         for p in properties:
             prop = getattr(prop, p)
         print '{}: {}'.format(args.config_property, prop)
+
+
+def load_volumes(volume_file, in_memory):
+    # Late import to prevent loading large modules for short CLI commands.
+    from .volumes import HDF5Volume
+
+    if volume_file:
+        volumes = HDF5Volume.from_toml(volume_file)
+    else:
+        volumes = HDF5Volume.from_toml(os.path.join(os.path.dirname(__file__), '..', 'conf', 'cremi_datasets.toml'))
+
+    if in_memory:
+        volumes = {k: v.to_memory_volume() for k, v in volumes.iteritems()}
+
+    return volumes
 
 
 if __name__ == "__main__":
