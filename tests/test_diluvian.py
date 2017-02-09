@@ -13,6 +13,8 @@ import numpy as np
 import pytest
 
 from diluvian import octrees
+from diluvian import regions
+from diluvian.config import CONFIG
 
 
 def test_octree_bounds():
@@ -36,3 +38,22 @@ def test_octree_bounds():
                     assert ot.root_node.children[i][j][k] is None, "Clip bounds should make most nodes empty."
                 else:
                     assert isinstance(ot.root_node.children[i][j][k], expected_type), "Nodes are wrong type."
+
+
+def test_region_moves():
+    mock_image = np.zeros(tuple(CONFIG.model.training_fov), dtype='float32')
+    region = regions.DenseRegion(mock_image)
+    mock_mask = np.zeros(tuple(CONFIG.model.block_size), dtype='float32')
+    ctr = np.array(mock_mask.shape) / 2 + 1
+    expected_moves = {}
+    for i, move in enumerate(map(np.array, [(1, 0, 0), (-1, 0, 0),
+                                            (0, 1, 0), (0, -1, 0),
+                                            (0, 0, 1), (0, 0, -1)])):
+        val = 0.1 * (i + 1)
+        coord = ctr + (region.MOVE_DELTA * move) + np.array([2, 2, 2]) * (np.ones(3) - np.abs(move))
+        mock_mask[tuple(coord.astype('int64'))] = val
+        expected_moves[tuple(move)] = val
+
+    moves = region.get_moves(mock_mask)
+    for move in moves:
+        np.testing.assert_allclose(expected_moves[tuple(move['move'])], move['v'])
