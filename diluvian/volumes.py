@@ -365,46 +365,46 @@ class ImageStackVolume(Volume):
         self.url_format = '{source_base_url}{zoom_level}/{z}/{row}/{col}.{file_extension}'
         scale = np.exp2(np.array([self.zoom_level, self.zoom_level, 0])).astype('uint64')
 
-        def image_populator(bounds):
-            image_subvol = np.zeros(tuple(bounds[1] - bounds[0]), dtype='uint8')
-            tw = self.tile_source_parameters['tile_width']
-            th = self.tile_source_parameters['tile_height']
-            col_range = map(int, (math.floor(bounds[0][0]/tw), math.ceil(bounds[1][0]/tw)))
-            row_range = map(int, (math.floor(bounds[0][1]/th), math.ceil(bounds[1][1]/th)))
-            tile_size = np.array([tw, th, 1]).astype('int64')
-            for z in xrange(bounds[0][2], bounds[1][2]):
-                for r in xrange(*row_range):
-                    for c in xrange(*col_range):
-                        url = self.url_format.format(zoom_level=self.zoom_level, z=z, row=r, col=c, **self.tile_source_parameters)
-                        try:
-                            im = np.transpose(np.array(Image.open(requests.get(url, stream=True).raw)))
-                        except IOError:
-                            im = np.full((tw, th), 0, dtype='uint8')
-                        tile_coord = np.array([c, r, z]).astype('int64')
-                        tile_loc = np.multiply(tile_coord, tile_size)
-
-                        subvol = (np.maximum(np.zeros(3), tile_loc - bounds[0]).astype('uint64'),
-                                  np.minimum(np.array(image_subvol.shape), tile_loc + tile_size - bounds[0]).astype('uint64'))
-                        tile_sub = (np.maximum(np.zeros(3), bounds[0] - tile_loc).astype('uint64'),
-                                    np.minimum(tile_size, bounds[1] - tile_loc).astype('uint64'))
-
-                        image_subvol[subvol[0][0]:subvol[1][0],
-                                     subvol[0][1]:subvol[1][1],
-                                     subvol[0][2]             ] = im[tile_sub[0][0]:tile_sub[1][0],
-                                                                     tile_sub[0][1]:tile_sub[1][1]]
-
-            return image_subvol
-
         data_size = (np.zeros(3), np.divide(stack_info['bounds'], scale).astype('uint64'))
         self.image_data = OctreeMatrix([512, 512, 10],
                                        data_size,
                                        'uint8',
-                                       populator=image_populator)
+                                       populator=self.image_populator)
 
         self.label_data = OctreeMatrix([64, 64, 24], data_size, 'uint64')
         self.label_data[data_size[0][0]:data_size[1][0],
                         data_size[0][1]:data_size[1][1],
                         data_size[0][2]:data_size[1][2]] = 1
+
+    def image_populator(self, bounds):
+        image_subvol = np.zeros(tuple(bounds[1] - bounds[0]), dtype='uint8')
+        tw = self.tile_source_parameters['tile_width']
+        th = self.tile_source_parameters['tile_height']
+        col_range = map(int, (math.floor(bounds[0][0]/tw), math.ceil(bounds[1][0]/tw)))
+        row_range = map(int, (math.floor(bounds[0][1]/th), math.ceil(bounds[1][1]/th)))
+        tile_size = np.array([tw, th, 1]).astype('int64')
+        for z in xrange(bounds[0][2], bounds[1][2]):
+            for r in xrange(*row_range):
+                for c in xrange(*col_range):
+                    url = self.url_format.format(zoom_level=self.zoom_level, z=z, row=r, col=c, **self.tile_source_parameters)
+                    try:
+                        im = np.transpose(np.array(Image.open(requests.get(url, stream=True).raw)))
+                    except IOError:
+                        im = np.full((tw, th), 0, dtype='uint8')
+                    tile_coord = np.array([c, r, z]).astype('int64')
+                    tile_loc = np.multiply(tile_coord, tile_size)
+
+                    subvol = (np.maximum(np.zeros(3), tile_loc - bounds[0]).astype('uint64'),
+                              np.minimum(np.array(image_subvol.shape), tile_loc + tile_size - bounds[0]).astype('uint64'))
+                    tile_sub = (np.maximum(np.zeros(3), bounds[0] - tile_loc).astype('uint64'),
+                                np.minimum(tile_size, bounds[1] - tile_loc).astype('uint64'))
+
+                    image_subvol[subvol[0][0]:subvol[1][0],
+                                 subvol[0][1]:subvol[1][1],
+                                 subvol[0][2]             ] = im[tile_sub[0][0]:tile_sub[1][0],
+                                                                 tile_sub[0][1]:tile_sub[1][1]]
+
+        return image_subvol
 
     class SubvolumeGenerator(Volume.SubvolumeGenerator):
         def __init__(self, volume, size_zoom, downsample, partition=None):
