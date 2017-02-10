@@ -361,8 +361,14 @@ class ImageStackVolume(Volume):
         self.stack_info = stack_info
         self.tile_source_parameters = tile_source_parameters
         self.zoom_level = min(CONFIG.volume.downsample[0], CONFIG.volume.downsample[1])
-        # Hard code CATMAID tile source type 5 for now:
-        self.url_format = '{source_base_url}{zoom_level}/{z}/{row}/{col}.{file_extension}'
+        # See https://catmaid.readthedocs.io/en/stable/tile_sources.html
+        self.url_format = {
+            1: '{source_base_url}{z}/{row}_{col}_{zoom_level}.{file_extension}',
+            4: '{source_base_url}{z}/{zoom_level}/{row}_{col}.{file_extension}',
+            5: '{source_base_url}{zoom_level}/{z}/{row}/{col}.{file_extension}',
+            7: '{source_base_url}largeDataTileSource/{tile_width}/{tile_height}/{zoom_level}/{z}/{row}/{col}.{file_extension}',
+            9: '{source_base_url}{z}/{row}_{col}_{zoom_level}.{file_extension}',
+        }[tile_source_parameters['tile_source_type']]
         scale = np.exp2(np.array([self.zoom_level, self.zoom_level, 0])).astype('uint64')
 
         data_size = (np.zeros(3), np.divide(stack_info['bounds'], scale).astype('uint64'))
