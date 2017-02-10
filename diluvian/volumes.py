@@ -357,21 +357,29 @@ class HDF5Volume(Volume):
 
 
 class ImageStackVolume(Volume):
-    def __init__(self, stack_info, tile_source_parameters):
-        self.stack_info = stack_info
-        self.tile_source_parameters = tile_source_parameters
-        self.zoom_level = min(CONFIG.volume.downsample[0], CONFIG.volume.downsample[1])
+    @staticmethod
+    def from_catmaid_stack(stack_info, tile_source_parameters):
         # See https://catmaid.readthedocs.io/en/stable/tile_sources.html
-        self.url_format = {
-            1: '{source_base_url}{z}/{row}_{col}_{zoom_level}.{file_extension}',
-            4: '{source_base_url}{z}/{zoom_level}/{row}_{col}.{file_extension}',
-            5: '{source_base_url}{zoom_level}/{z}/{row}/{col}.{file_extension}',
-            7: '{source_base_url}largeDataTileSource/{tile_width}/{tile_height}/{zoom_level}/{z}/{row}/{col}.{file_extension}',
-            9: '{source_base_url}{z}/{row}_{col}_{zoom_level}.{file_extension}',
-        }[tile_source_parameters['tile_source_type']]
+        format_url = {
+            1: '{source_base_url}{{z}}/{{row}}_{{col}}_{{zoom_level}}.{file_extension}',
+            4: '{source_base_url}{{z}}/{{zoom_level}}/{{row}}_{{col}}.{file_extension}',
+            5: '{source_base_url}{{zoom_level}}/{{z}}/{{row}}/{{col}}.{file_extension}',
+            7: '{source_base_url}largeDataTileSource/{tile_width}/{tile_height}/{{zoom_level}}/{{z}}/{{row}}/{{col}}.{file_extension}',
+            9: '{source_base_url}{{z}}/{{row}}_{{col}}_{{zoom_level}}.{file_extension}',
+        }[tile_source_parameters['tile_source_type']].format(**tile_source_parameters)
+        bounds = np.array(stack_info['bounds'], dtype='uint64')
+        tile_width = int(tile_source_parameters['tile_width'])
+        tile_height = int(tile_source_parameters['tile_height'])
+        return ImageStackVolume(bounds, tile_width, tile_height, format_url)
+
+    def __init__(self, bounds, tile_width, tile_height, tile_format_url):
+        self.tile_width = tile_width
+        self.tile_height = tile_height
+        self.tile_format_url = tile_format_url
+        self.zoom_level = min(CONFIG.volume.downsample[0], CONFIG.volume.downsample[1])
         scale = np.exp2(np.array([self.zoom_level, self.zoom_level, 0])).astype('uint64')
 
-        data_size = (np.zeros(3), np.divide(stack_info['bounds'], scale).astype('uint64'))
+        data_size = (np.zeros(3), np.divide(bounds, scale).astype('uint64'))
         self.image_data = OctreeMatrix([512, 512, 10],
                                        data_size,
                                        'uint8',
@@ -384,19 +392,17 @@ class ImageStackVolume(Volume):
 
     def image_populator(self, bounds):
         image_subvol = np.zeros(tuple(bounds[1] - bounds[0]), dtype='uint8')
-        tw = self.tile_source_parameters['tile_width']
-        th = self.tile_source_parameters['tile_height']
-        col_range = map(int, (math.floor(bounds[0][0]/tw), math.ceil(bounds[1][0]/tw)))
-        row_range = map(int, (math.floor(bounds[0][1]/th), math.ceil(bounds[1][1]/th)))
-        tile_size = np.array([tw, th, 1]).astype('int64')
+        col_range = map(int, (math.floor(bounds[0][0]/self.tile_width), math.ceil(bounds[1][0]/self.tile_width)))
+        row_range = map(int, (math.floor(bounds[0][1]/self.tile_height), math.ceil(bounds[1][1]/self.tile_height)))
+        tile_size = np.array([self.tile_width, self.tile_height, 1]).astype('int64')
         for z in xrange(bounds[0][2], bounds[1][2]):
             for r in xrange(*row_range):
                 for c in xrange(*col_range):
-                    url = self.url_format.format(zoom_level=self.zoom_level, z=z, row=r, col=c, **self.tile_source_parameters)
+                    url = self.tile_format_url.format(zoom_level=self.zoom_level, z=z, row=r, col=c)
                     try:
                         im = np.transpose(np.array(Image.open(requests.get(url, stream=True).raw)))
                     except IOError:
-                        im = np.full((tw, th), 0, dtype='uint8')
+                        im = np.full((self.tile_width, self.tile_height), 0, dtype='uint8')
                     tile_coord = np.array([c, r, z]).astype('int64')
                     tile_loc = np.multiply(tile_coord, tile_size)
 
