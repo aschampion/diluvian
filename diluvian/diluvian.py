@@ -70,7 +70,10 @@ def add_convolution_module(model):
                            border_mode='same')(model2)
     model = merge([model, model2], mode='sum')
     # Note that the activation here differs from He et al 2016, as that
-    # activation is not on the skip connection path.
+    # activation is not on the skip connection path. However, this is not
+    # likely to be important, see:
+    # http://torch.ch/blog/2016/02/04/resnets.html
+    # https://github.com/gcr/torch-residual-networks
     model = Activation('relu')(model)
 
     return model
