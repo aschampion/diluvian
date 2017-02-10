@@ -212,7 +212,6 @@ class Volume(object):
             self.size_zoom = size_zoom
             self.size_orig = np.multiply(self.size_zoom, self.zoom).astype('uint64')
             self.margin = np.floor_divide(self.size_orig, 2)
-            # HDF5 coordinates are z, y, x
             self.partition_size = np.floor_divide(self.volume.xyz_coord_to_local(np.array(self.volume.image_data.shape)), self.partition[0])
             self.ctr_min = (np.multiply(self.partition_size, self.partition[1]) + self.margin).astype('uint64')
             self.ctr_max = (np.multiply(self.partition_size, self.partition[1] + 1) - self.margin - 1).astype('uint64')
