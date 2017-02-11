@@ -42,6 +42,7 @@ class ModelConfig(BaseConfig):
 
 class NetworkConfig(BaseConfig):
     def __init__(self, settings):
+        self.factory = str(settings.get('factory'))
         self.num_modules = int(settings.get('num_modules', 8))
         self.convolution_dim = np.array(settings.get('convolution_dim', [3, 3, 3]))
         self.output_activation = str(settings.get('output_activation', 'sigmoid'))

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 
+import importlib
 import inspect
 import itertools
 
@@ -19,7 +20,7 @@ from .third_party.multi_gpu import make_parallel
 from .util import extend_keras_history, get_color_shader, roundrobin
 
 
-def make_network():
+def make_flood_fill_network():
     image_input = Input(shape=tuple(CONFIG.model.block_size) + (1,), dtype='float32', name='image_input')
     mask_input = Input(shape=tuple(CONFIG.model.block_size) + (1,), dtype='float32', name='mask_input')
     ffn = merge([image_input, mask_input], mode='concat')
@@ -128,7 +129,10 @@ def fill_region_from_model(model_file, volumes=None, bias=True, move_batch_size=
 def train_network(model_file=None, model_checkpoint_file=None, volumes=None,
                   tensorboard=False, viewer=False, metric_plot=False):
     if model_file is None:
-        ffn = make_network()
+        factory_mod_name, factory_func_name = CONFIG.network.factory.rsplit('.', 1)
+        factory_mod = importlib.import_module(factory_mod_name)
+        factory = getattr(factory_mod, factory_func_name)
+        ffn = factory()
     else:
         ffn = load_model(model_file)
 
