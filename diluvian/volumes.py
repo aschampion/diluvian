@@ -17,11 +17,12 @@ from .util import pad_dims
 
 
 class Volume(object):
-    def __init__(self, image_data, label_data):
+    def __init__(self, image_data, label_data, resolution):
         self.image_data = image_data
         self.label_data = label_data
         self.image_data.flags.writeable = False
         self.label_data.flags.writeable = False
+        self.resolution = resolution
 
     def xyz_coord_to_local(self, a):
         return a
@@ -343,6 +344,10 @@ class HDF5Volume(Volume):
         self.file = h5py.File(orig_file, 'r')
         self.image_data = self.file[image_dataset]
         self.label_data = self.file[label_dataset]
+        if 'resolution' in self.file[image_dataset].attrs:
+            self.resolution = np.array(self.file[image_dataset].attrs['resolution'])
+        else:
+            self.resolution = np.ones(3)
 
     def xyz_coord_to_local(self, a):
         return np.flipud(a)
@@ -352,7 +357,8 @@ class HDF5Volume(Volume):
 
     def to_memory_volume(self):
         return Volume(self.xyz_mat_to_local(self.image_data[:, :, :]),
-                      self.xyz_mat_to_local(self.label_data[:, :, :]))
+                      self.xyz_mat_to_local(self.label_data[:, :, :]),
+                      self.xyz_coord_to_local(self.resolution))
 
 
 class ImageStackVolume(Volume):
@@ -367,11 +373,13 @@ class ImageStackVolume(Volume):
             9: '{source_base_url}{{z}}/{{row}}_{{col}}_{{zoom_level}}.{file_extension}',
         }[tile_source_parameters['tile_source_type']].format(**tile_source_parameters)
         bounds = np.array(stack_info['bounds'], dtype='uint64')
+        resolution = np.array(stack_info['resolution'])
         tile_width = int(tile_source_parameters['tile_width'])
         tile_height = int(tile_source_parameters['tile_height'])
-        return ImageStackVolume(bounds, tile_width, tile_height, format_url)
+        return ImageStackVolume(bounds, resolution, tile_width, tile_height, format_url)
 
-    def __init__(self, bounds, tile_width, tile_height, tile_format_url):
+    def __init__(self, bounds, resolution, tile_width, tile_height, tile_format_url):
+        self.resolution = resolution
         self.tile_width = tile_width
         self.tile_height = tile_height
         self.tile_format_url = tile_format_url
