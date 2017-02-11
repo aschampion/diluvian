@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
 
+import logging
+
 import h5py
 import math
 import numpy as np
@@ -77,7 +79,7 @@ class Volume(object):
                        sample_weights)
 
     def moving_training_generator(self, subvolume_size, batch_size, training_size, callback_kludge,
-                                  f_a_bins=None, partition=None, verbose=False):
+                                  f_a_bins=None, partition=None):
         subvolumes = self.SubvolumeGenerator(self, subvolume_size, CONFIG.volume.downsample, partition)
 
         regions = [None] * batch_size
@@ -93,8 +95,8 @@ class Volume(object):
         while 1:
             if sample_num >= training_size:
                 subvolumes.reset()
-                if verbose and len(epoch_move_counts):
-                    print ' Average moves: {}'.format(sum(epoch_move_counts)/float(len(epoch_move_counts)))
+                if len(epoch_move_counts):
+                    logging.info(' Average moves: %s', sum(epoch_move_counts)/float(len(epoch_move_counts)))
                 epoch_move_counts = []
                 sample_num = 0
 
@@ -168,7 +170,7 @@ class Volume(object):
                                       seed_fov[0][1]:seed_fov[1][1],
                                       seed_fov[0][2]:seed_fov[1][2]]
             if not np.unique(seed_region).size == 1:
-                print 'Rejecting region with seed margin too small.'
+                logging.info('Rejecting region with seed margin too small.')
                 continue
             region = DenseRegion(subvolume['image'], mask_target)
             yield region
@@ -190,7 +192,7 @@ class Volume(object):
                                       seed_fov[0][1]:seed_fov[1][1],
                                       seed_fov[0][2]:seed_fov[1][2]]
             if not np.unique(seed_region).size == 1:
-                print 'Rejecting region with seed margin too small.'
+                loggin.info('Rejecting region with seed margin too small.')
                 continue
             output_mask = OctreeMatrix([64, 64, 24], subvolumes.volume_shape_orig, 'float32')
             output_mask[subvolumes.volume_shape_orig[0][0]:subvolumes.volume_shape_orig[1][0],
@@ -415,6 +417,7 @@ class ImageStackVolume(Volume):
                     try:
                         im = np.transpose(np.array(Image.open(requests.get(url, stream=True).raw)))
                     except IOError:
+                        logging.debug('Failed to load tile: %s', url)
                         im = np.full((self.tile_width, self.tile_height), 0, dtype='uint8')
                     tile_coord = np.array([c, r, z]).astype('int64')
                     tile_loc = np.multiply(tile_coord, tile_size)

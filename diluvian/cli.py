@@ -2,6 +2,7 @@
 
 
 import argparse
+import logging
 import os
 
 from .config import CONFIG
@@ -19,6 +20,9 @@ def main():
                                help='Volume configuration file. For example, see `conf/cremi_datasets.toml`.')
     common_parser.add_argument('--no-in-memory', action='store_false', dest='in_memory', default=True,
                                help='Do not preload entire volumes into memory.')
+    common_parser.add_argument('-l', '--log', dest='log_level',
+                               choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+                               help='Set the logging level.')
 
     parser = argparse.ArgumentParser(description='Train or run flood-filling networks on EM data.')
 
@@ -55,6 +59,9 @@ def main():
                                      help='Name of the property to show, e.g., `training.batch_size`.')
 
     args = parser.parse_args()
+
+    if args.log_level:
+        logging.basicConfig(level=logging.getLevelName(args.log_level))
 
     if args.config_files:
         CONFIG.from_toml(*args.config_files)
