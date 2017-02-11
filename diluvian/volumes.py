@@ -376,13 +376,16 @@ class ImageStackVolume(Volume):
         resolution = np.array(stack_info['resolution'])
         tile_width = int(tile_source_parameters['tile_width'])
         tile_height = int(tile_source_parameters['tile_height'])
-        return ImageStackVolume(bounds, resolution, tile_width, tile_height, format_url)
+        return ImageStackVolume(bounds, resolution, tile_width, tile_height, format_url, stack_info['broken_slices'])
 
-    def __init__(self, bounds, resolution, tile_width, tile_height, tile_format_url):
+    def __init__(self, bounds, resolution, tile_width, tile_height, tile_format_url, missing_z=None):
         self.resolution = resolution
         self.tile_width = tile_width
         self.tile_height = tile_height
         self.tile_format_url = tile_format_url
+        if missing_z is None:
+            missing_z = []
+        self.missing_z = frozenset(missing_z)
         self.zoom_level = min(CONFIG.volume.downsample[0], CONFIG.volume.downsample[1])
         scale = np.exp2(np.array([self.zoom_level, self.zoom_level, 0])).astype('uint64')
 
@@ -403,6 +406,9 @@ class ImageStackVolume(Volume):
         row_range = map(int, (math.floor(bounds[0][1]/self.tile_height), math.ceil(bounds[1][1]/self.tile_height)))
         tile_size = np.array([self.tile_width, self.tile_height, 1]).astype('int64')
         for z in xrange(bounds[0][2], bounds[1][2]):
+            if z in self.missing_z:
+                image_subvol[:, :, int(z - bounds[0][2])] = 0
+                continue
             for r in xrange(*row_range):
                 for c in xrange(*col_range):
                     url = self.tile_format_url.format(zoom_level=self.zoom_level, z=z, row=r, col=c)
