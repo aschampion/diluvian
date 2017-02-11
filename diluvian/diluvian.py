@@ -27,7 +27,7 @@ def make_flood_fill_network():
 
     # Convolve and activate before beginning the skip connection modules,
     # as discussed in the Appendix of He et al 2016.
-    ffn = Convolution3D(32,
+    ffn = Convolution3D(CONFIG.network.convolution_filters,
                         CONFIG.network.convolution_dim[0],
                         CONFIG.network.convolution_dim[1],
                         CONFIG.network.convolution_dim[2],
@@ -58,13 +58,13 @@ def make_flood_fill_network():
 
 
 def add_convolution_module(model):
-    model2 = Convolution3D(32,
+    model2 = Convolution3D(CONFIG.network.convolution_filters,
                            CONFIG.network.convolution_dim[0],
                            CONFIG.network.convolution_dim[1],
                            CONFIG.network.convolution_dim[2],
                            activation='relu',
                            border_mode='same')(model)
-    model2 = Convolution3D(32,
+    model2 = Convolution3D(CONFIG.network.convolution_filters,
                            CONFIG.network.convolution_dim[0],
                            CONFIG.network.convolution_dim[1],
                            CONFIG.network.convolution_dim[2],
