@@ -10,11 +10,18 @@ import numpy as np
 from tqdm import tqdm
 
 from .config import CONFIG
+from .octrees import OctreeMatrix
 from .util import get_color_shader, pad_dims, WrappedViewer
 
 
 class DenseRegion(object):
-    def __init__(self, image, target=None, seed_pos=None, mask=None):
+    @staticmethod
+    def from_subvolume(subvolume):
+        return DenseRegion(subvolume['image'],
+                           target=subvolume['mask_target'],
+                           seed_vox=subvolume['seed'])
+
+    def __init__(self, image, target=None, seed_vox=None, mask=None):
         self.MOVE_DELTA = (CONFIG.model.block_size - 1) / 4
         self.queue = Queue.PriorityQueue()
         self.visited = set()
@@ -22,18 +29,27 @@ class DenseRegion(object):
         self.bounds = image.shape
         self.move_bounds = self.vox_to_pos(self.bounds) - 1
         if mask is None:
-            self.mask = np.empty(self.bounds, dtype='float32')
+            if isinstance(self.image, OctreeMatrix):
+                self.mask = OctreeMatrix(self.image.leaf_size, self.bounds, 'float32')
+            else:
+                self.mask = np.empty(self.bounds, dtype='float32')
             self.mask[:] = np.NAN
         else:
             self.mask = mask
         self.target = target
         self.bias_against_merge = False
         self.move_based_on_new_mask = False
-        if seed_pos is None:
+        if seed_vox is None:
             seed_pos = np.floor_divide(self.move_bounds, 2) + 1
+        else:
+            seed_pos = self.vox_to_pos(seed_vox)
+            assert self.pos_in_bounds(seed_pos), 'Seed position must be in region bounds.'
         self.seed_pos = seed_pos
         self.queue.put((None, seed_pos))
         seed_vox = self.pos_to_vox(seed_pos)
+        if self.target is not None:
+            np.testing.assert_almost_equal(self.target[tuple(seed_vox)], CONFIG.model.v_true,
+                                           err_msg='Seed position should be in target body.')
         self.mask[tuple(seed_vox)] = CONFIG.model.v_true
 
     def unfilled_copy(self):
@@ -42,10 +58,13 @@ class DenseRegion(object):
         copy.move_based_on_new_mask = self.move_based_on_new_mask
 
     def vox_to_pos(self, vox):
-        return np.floor_divide(vox, self.MOVE_DELTA)
+        return np.floor_divide(vox, self.MOVE_DELTA).astype('int64')
 
     def pos_to_vox(self, pos):
-        return pos * self.MOVE_DELTA
+        return (pos * self.MOVE_DELTA).astype('int64')
+
+    def pos_in_bounds(self, pos):
+        return np.all(np.less(pos, self.move_bounds)) and np.all(pos > 1)
 
     def get_moves(self, mask):
         moves = []
@@ -82,12 +101,12 @@ class DenseRegion(object):
         else:
             new_moves = self.get_moves(current_mask)
         for move in new_moves:
-            new_ctr = mask_pos + move['move']
-            if np.any(np.greater_equal(new_ctr, self.move_bounds)) or np.any(new_ctr <= 1):
+            new_pos = mask_pos + move['move']
+            if not self.pos_in_bounds(new_pos):
                continue
-            if tuple(new_ctr) not in self.visited and move['v'] >= CONFIG.model.t_move:
-                self.visited.add(tuple(new_ctr))
-                self.queue.put((-move['v'], tuple(new_ctr)))
+            if tuple(new_pos) not in self.visited and move['v'] >= CONFIG.model.t_move:
+                self.visited.add(tuple(new_pos))
+                self.queue.put((-move['v'], tuple(new_pos)))
 
     def get_next_block(self):
         next_pos = np.asarray(self.queue.get()[1])

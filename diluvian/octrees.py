@@ -19,6 +19,10 @@ class OctreeMatrix(object):
         return tuple(self.root_node.get_size())
 
     def get_checked_np_key(self, key):
+        # Special exception for [:] for uniform assignment.
+        if len(key) == 1 and isinstance(key, slice) and key.start is None and key.stop is None:
+            return self.bounds
+
         if len(key) != 3:
             raise IndexError('Octrees may only be indexed in 3 dimensions')
 
@@ -28,8 +32,8 @@ class OctreeMatrix(object):
             if isinstance(k, slice):
                 if k.step is not None:
                     raise IndexError('Octrees do not yet support step slicing')
-                npkey[0][i] = k.start
-                npkey[1][i] = k.stop
+                npkey[0][i] = k.start if k.start is not None else self.bounds[0][i]
+                npkey[1][i] = k.stop if k.stop is not None else self.bounds[1][i]
             else:
                 npkey[0][i] = k
                 npkey[1][i] = k + 1

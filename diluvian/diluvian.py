@@ -18,6 +18,7 @@ import keras.optimizers
 from .config import CONFIG
 from .third_party.multi_gpu import make_parallel
 from .util import extend_keras_history, get_color_shader, roundrobin
+from .volumes import simple_training_generator, moving_training_generator
 
 
 def make_flood_fill_network():
@@ -104,7 +105,7 @@ def fill_region_from_model(model_file, volumes=None, bias=True, move_batch_size=
     if volumes is None:
         raise ValueError('Volumes must be provided.')
 
-    regions = roundrobin(*[v.region_generator(CONFIG.model.training_fov * 4) for _, v in volumes.iteritems()])
+    regions = roundrobin(*[v.region_generator(CONFIG.model.training_fov * 4 - 3) for _, v in volumes.iteritems()])
 
     model = load_model(model_file)
 
@@ -145,21 +146,25 @@ def train_network(model_file=None, model_checkpoint_file=None, volumes=None,
     f_a_bins = CONFIG.training.fill_factor_bins
 
     num_volumes = len(volumes)
-    validation_data = {k: v.simple_training_generator(
-            CONFIG.model.block_size,
+    validation_data = {k: simple_training_generator(
+            v.SubvolumeGenerator(v,
+                                 CONFIG.model.block_size,
+                                 CONFIG.volume.downsample,
+                                 partition=(CONFIG.training.partitions, CONFIG.training.validation_partition)),
             CONFIG.training.batch_size,
             CONFIG.training.validation_size,
-            f_a_bins=f_a_bins,
-            partition=(CONFIG.training.partitions, CONFIG.training.validation_partition)) for k, v in volumes.iteritems()}
+            f_a_bins=f_a_bins) for k, v in volumes.iteritems()}
     validation_data = roundrobin(*validation_data.values())
 
     # Pre-train
-    training_data = {k: v.simple_training_generator(
-            CONFIG.model.block_size,
+    training_data = {k: simple_training_generator(
+            v.SubvolumeGenerator(v,
+                                 CONFIG.model.block_size,
+                                 CONFIG.volume.downsample,
+                                 partition=(CONFIG.training.partitions, CONFIG.training.training_partition)),
             CONFIG.training.batch_size,
             CONFIG.training.training_size,
-            f_a_bins=f_a_bins,
-            partition=(CONFIG.training.partitions, CONFIG.training.training_partition)) for k, v in volumes.iteritems()}
+            f_a_bins=f_a_bins) for k, v in volumes.iteritems()}
     training_data = roundrobin(*training_data.values())
     history = ffn.fit_generator(training_data,
             samples_per_epoch=CONFIG.training.training_size * num_volumes,
@@ -175,14 +180,15 @@ def train_network(model_file=None, model_checkpoint_file=None, volumes=None,
     if tensorboard:
         callbacks.append(TensorBoard())
 
-    training_data = {k: v.moving_training_generator(
-            CONFIG.model.training_fov,
+    training_data = {k: moving_training_generator(
+            v.SubvolumeGenerator(v,
+                                 CONFIG.model.training_fov,
+                                 CONFIG.volume.downsample,
+                                 partition=(CONFIG.training.partitions, CONFIG.training.training_partition)),
             CONFIG.training.batch_size,
             CONFIG.training.training_size,
             kludges[k],
-            f_a_bins=f_a_bins,
-            partition=(CONFIG.training.partitions, CONFIG.training.training_partition),
-            ) for k, v in volumes.iteritems()}
+            f_a_bins=f_a_bins) for k, v in volumes.iteritems()}
     training_data = roundrobin(*training_data.values())
     moving_history = ffn.fit_generator(training_data,
             samples_per_epoch=CONFIG.training.training_size * num_volumes,
