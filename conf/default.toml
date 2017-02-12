@@ -7,6 +7,7 @@ block_size = [65, 65, 13]
 v_true = 0.95
 v_false = 0.05
 t_move = 0.9
+move_check_thickness = 1
 
 [network]
 factory = 'diluvian.diluvian.make_flood_fill_network'

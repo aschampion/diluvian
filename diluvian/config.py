@@ -37,6 +37,7 @@ class ModelConfig(BaseConfig):
         self.v_true = float(settings.get('v_true', 0.095))
         self.v_false = float(settings.get('v_false', 0.05))
         self.t_move = float(settings.get('t_move', 0.9))
+        self.move_check_thickness = int(settings.get('move_check_thickness', 1))
         self.training_fov = np.array(settings.get('training_fov', self.block_size + ((self.block_size - 1) / 2)))
 
 

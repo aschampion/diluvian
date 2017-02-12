@@ -28,6 +28,7 @@ class DenseRegion(object):
         self.image = image
         self.bounds = image.shape
         self.move_bounds = self.vox_to_pos(self.bounds) - 1
+        self.move_check_thickness = CONFIG.model.move_check_thickness
         if mask is None:
             if isinstance(self.image, OctreeMatrix):
                 self.mask = OctreeMatrix(self.image.leaf_size, self.bounds, 'float32')
@@ -72,8 +73,8 @@ class DenseRegion(object):
         for move in map(np.array, [(1, 0, 0), (-1, 0, 0),
                      (0, 1, 0), (0, -1, 0),
                      (0, 0, 1), (0, 0, -1)]):
-            plane_min = ctr - (-2 * np.maximum(move, 0) + 1) * self.MOVE_DELTA
-            plane_max = ctr + (+2 * np.minimum(move, 0) + 1) * self.MOVE_DELTA + 1
+            plane_min = ctr - (-2 * np.maximum(move, 0) + 1) * self.MOVE_DELTA - np.abs(move) * (self.move_check_thickness - 1)
+            plane_max = ctr + (+2 * np.minimum(move, 0) + 1) * self.MOVE_DELTA + np.abs(move) * (self.move_check_thickness - 1) + 1
             moves.append({'move': move,
                           'v': mask[plane_min[0]:plane_max[0],
                                     plane_min[1]:plane_max[1],
