@@ -48,12 +48,6 @@ def make_flood_fill_network():
     ffn = Model(input=[image_input, mask_input], output=[mask_output])
     if CONFIG.training.num_gpus > 1:
         ffn = make_parallel(ffn, CONFIG.training.num_gpus)
-    optimizer_klass = getattr(keras.optimizers, CONFIG.optimizer.klass)
-    optimizer_kwargs = inspect.getargspec(optimizer_klass.__init__)[0]
-    optimizer_kwargs = {k: v for k, v in CONFIG.optimizer.kwargs.iteritems() if k in optimizer_kwargs}
-    optimizer = optimizer_klass(**optimizer_kwargs)
-    ffn.compile(loss='binary_crossentropy',
-                optimizer=optimizer)
 
     return ffn
 
@@ -79,6 +73,15 @@ def add_convolution_module(model):
     model = Activation('relu')(model)
 
     return model
+
+
+def compile_network(model):
+    optimizer_klass = getattr(keras.optimizers, CONFIG.optimizer.klass)
+    optimizer_kwargs = inspect.getargspec(optimizer_klass.__init__)[0]
+    optimizer_kwargs = {k: v for k, v in CONFIG.optimizer.kwargs.iteritems() if k in optimizer_kwargs}
+    optimizer = optimizer_klass(**optimizer_kwargs)
+    model.compile(loss='binary_crossentropy',
+                  optimizer=optimizer)
 
 
 def plot_history(history):
@@ -137,6 +140,11 @@ def train_network(model_file=None, model_checkpoint_file=None, volumes=None,
         ffn = factory()
     else:
         ffn = load_model(model_file)
+
+    # Multi-GPU models are saved as a single-GPU model prior to compilation,
+    # so if loading from such a model file it will need to be recompiled.
+    if not hasattr(ffn, 'optimizer'):
+        compile_network(ffn)
 
     if model_checkpoint_file is None:
         model_checkpoint_file = 'weights.hdf5'
