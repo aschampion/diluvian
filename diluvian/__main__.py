@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+"""Command line interface for diluvian."""
 
 
 import argparse
@@ -72,6 +73,7 @@ def _make_main_parser():
 
 
 def main():
+    """Entry point for the diluvian command line interface."""
     parser = _make_main_parser()
 
     args = parser.parse_args()
@@ -115,6 +117,19 @@ def main():
 
 
 def load_volumes(volume_file, in_memory):
+    """Load HDF5 volumes specified in a TOML description file.
+
+    Parameters
+    ----------
+    volume_file : str
+        Filename of the TOML volume description to load.
+    in_memory : bool
+        If true, the entire dataset is read into an in-memory volume.
+
+    Returns
+    -------
+    diluvian.volumes.Volume
+    """
     # Late import to prevent loading large modules for short CLI commands.
     from .volumes import HDF5Volume
 
