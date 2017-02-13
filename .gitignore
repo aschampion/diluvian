@@ -54,6 +54,9 @@ coverage.xml
 
 # Sphinx documentation
 docs/_build/
+docs/diluvian.rst
+docs/diluvian.third_party.rst
+docs/modules.rst
 
 # PyBuilder
 target/
