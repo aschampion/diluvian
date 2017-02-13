@@ -41,15 +41,21 @@ def _make_main_parser():
 
     train_parser = commandparsers.add_parser('train', parents=[common_parser],
                                              help='Train a network from labeled volumes.')
+    train_parser.add_argument('-mo', '--model-output-filebase', dest='model_output_filebase', default=None,
+                              help='Base filename for the best trained model and other output artifacts, '
+                                   'such as metric plots and configuration state.')
     train_parser.add_argument('-mc', '--model-checkpoint-file', dest='model_checkpoint_file', default=None,
-                              help='Filename for model checkpoints. '
+                              help='Filename for model checkpoints at every epoch. '
+                                   'This is different that the model output file; if provided, this HDF5 model '
+                                   'file is saved every epoch regardless of validation performance.'
                                    'Can use Keras format arguments: https://keras.io/callbacks/#modelcheckpoint')
     train_parser.add_argument('--tensorboard', action='store_true', dest='tensorboard', default=False,
                               help='Output tensorboard log files while training.')
     train_parser.add_argument('--viewer', action='store_true', dest='viewer', default=False,
                               help='Create a neuroglancer viewer for a training sample at the end of training.')
     train_parser.add_argument('--metric-plot', action='store_true', dest='metric_plot', default=False,
-                              help='Plot metric history at the end of training.')
+                              help='Plot metric history at the end of training. '
+                                   'Will be saved as a PNG with the model output base filename.')
 
     fill_parser = commandparsers.add_parser('fill', parents=[common_parser],
                                             help='Use a trained network to fill random regions in a volume.')
@@ -90,8 +96,9 @@ def main():
 
         volumes = load_volumes(args.volume_file, args.in_memory)
         train_network(model_file=args.model_file,
-                      model_checkpoint_file=args.model_checkpoint_file,
                       volumes=volumes,
+                      model_output_filebase=args.model_output_filebase,
+                      model_checkpoint_file=args.model_checkpoint_file,
                       tensorboard=args.tensorboard,
                       viewer=args.viewer,
                       metric_plot=args.metric_plot)

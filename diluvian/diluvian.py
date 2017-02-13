@@ -5,6 +5,8 @@ import importlib
 import inspect
 import itertools
 
+import matplotlib as mpl
+mpl.use('Agg')
 import matplotlib.pyplot as plt
 import neuroglancer
 import numpy as np
@@ -85,13 +87,16 @@ def compile_network(model):
 
 
 def plot_history(history):
-    plt.plot(history.history['loss'])
-    plt.plot(history.history['val_loss'])
-    plt.title('model loss')
-    plt.ylabel('loss')
-    plt.xlabel('epoch')
-    plt.legend(['train', 'test'], loc='upper right')
-    plt.show()
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.plot(history.history['loss'])
+    ax.plot(history.history['val_loss'])
+    fig.suptitle('model loss')
+    ax.set_ylabel('loss')
+    ax.set_xlabel('epoch')
+    ax.legend(['train', 'test'], loc='upper right')
+
+    return fig
 
 
 class PredictionCopy(Callback):
@@ -131,7 +136,8 @@ def fill_region_from_model(model_file, volumes=None, bias=True, move_batch_size=
             s = raw_input("Press Enter when animation is complete...")
 
 
-def train_network(model_file=None, model_checkpoint_file=None, volumes=None,
+def train_network(model_file=None, volumes=None,
+                  model_output_filebase=None, model_checkpoint_file=None,
                   tensorboard=False, viewer=False, metric_plot=False):
     if model_file is None:
         factory_mod_name, factory_func_name = CONFIG.network.factory.rsplit('.', 1)
@@ -146,8 +152,8 @@ def train_network(model_file=None, model_checkpoint_file=None, volumes=None,
     if not hasattr(ffn, 'optimizer'):
         compile_network(ffn)
 
-    if model_checkpoint_file is None:
-        model_checkpoint_file = 'weights.hdf5'
+    if model_output_filebase is None:
+        model_output_filebase = 'weights'
 
     if volumes is None:
         raise ValueError('Volumes must be provided.')
@@ -185,7 +191,9 @@ def train_network(model_file=None, model_checkpoint_file=None, volumes=None,
     # Moving training
     kludges = {k: {'inputs': None, 'outputs': None} for k in volumes.iterkeys()}
     callbacks = [PredictionCopy(kludge) for kludge in kludges.values()]
-    callbacks.append(ModelCheckpoint(model_checkpoint_file, save_best_only=True))
+    callbacks.append(ModelCheckpoint(model_output_filebase + '.hdf5', save_best_only=True))
+    if model_checkpoint_file:
+        callbacks.append(ModelCheckpoint(model_checkpoint_file))
     callbacks.append(EarlyStopping(patience=CONFIG.training.patience))
     if tensorboard:
         callbacks.append(TensorBoard())
@@ -240,6 +248,7 @@ def train_network(model_file=None, model_checkpoint_file=None, volumes=None,
             raw_input("Press any key to exit...")
 
     if metric_plot:
-        plot_history(history)
+        fig = plot_history(history)
+        fig.savefig(model_output_filebase + '.png')
 
     return history
