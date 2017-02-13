@@ -10,7 +10,6 @@ Tests for `diluvian` module.
 
 
 import numpy as np
-import pytest
 
 from diluvian import octrees
 from diluvian import regions

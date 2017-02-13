@@ -12,7 +12,7 @@ def main():
     common_parser = argparse.ArgumentParser(add_help=False)
 
     common_parser.add_argument('-c', '--config-file', action='append', dest='config_files', default=[],
-                               help='Configuration files to use. For defaults, see `conf/default.toml`. ' \
+                               help='Configuration files to use. For defaults, see `conf/default.toml`. '
                                     'Values are overwritten in the order provided.')
     common_parser.add_argument('-m', '--model-file', dest='model_file', default=None,
                                help='Existing network model file to use for prediction or continued training.')
@@ -31,7 +31,7 @@ def main():
     train_parser = commandparsers.add_parser('train', parents=[common_parser],
                                              help='Train a network from labeled volumes.')
     train_parser.add_argument('-mc', '--model-checkpoint-file', dest='model_checkpoint_file', default=None,
-                              help='Filename for model checkpoints. ' \
+                              help='Filename for model checkpoints. '
                                    'Can use Keras format arguments: https://keras.io/callbacks/#modelcheckpoint')
     train_parser.add_argument('--tensorboard', action='store_true', dest='tensorboard', default=False,
                               help='Output tensorboard log files while training.')
@@ -43,7 +43,7 @@ def main():
     fill_parser = commandparsers.add_parser('fill', parents=[common_parser],
                                             help='Use a trained network to fill random regions in a volume.')
     fill_parser.add_argument('--no-bias', action='store_false', dest='bias', default=True,
-                             help='Overwrite prediction mask at the end of each field of view inference ' \
+                             help='Overwrite prediction mask at the end of each field of view inference '
                                   'rather than using the anti-merge bias update.')
     fill_parser.add_argument('--move-batch-size', dest='move_batch_size', default=1, type=int,
                              help='Maximum number of fill moves to process in each prediction batch.')

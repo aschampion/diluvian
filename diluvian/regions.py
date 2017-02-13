@@ -71,10 +71,12 @@ class DenseRegion(object):
         moves = []
         ctr = (np.asarray(mask.shape) - 1) / 2 + 1
         for move in map(np.array, [(1, 0, 0), (-1, 0, 0),
-                     (0, 1, 0), (0, -1, 0),
-                     (0, 0, 1), (0, 0, -1)]):
-            plane_min = ctr - (-2 * np.maximum(move, 0) + 1) * self.MOVE_DELTA - np.abs(move) * (self.move_check_thickness - 1)
-            plane_max = ctr + (+2 * np.minimum(move, 0) + 1) * self.MOVE_DELTA + np.abs(move) * (self.move_check_thickness - 1) + 1
+                                   (0, 1, 0), (0, -1, 0),
+                                   (0, 0, 1), (0, 0, -1)]):
+            plane_min = ctr - (-2 * np.maximum(move, 0) + 1) * self.MOVE_DELTA \
+                            - np.abs(move) * (self.move_check_thickness - 1)
+            plane_max = ctr + (+2 * np.minimum(move, 0) + 1) * self.MOVE_DELTA \
+                            + np.abs(move) * (self.move_check_thickness - 1) + 1
             moves.append({'move': move,
                           'v': mask[plane_min[0]:plane_max[0],
                                     plane_min[1]:plane_max[1],
@@ -94,8 +96,8 @@ class DenseRegion(object):
             current_mask[:] = mask_block
 
         self.mask[mask_origin[0]:mask_origin[0] + mask_block.shape[0],
-                 mask_origin[1]:mask_origin[1] + mask_block.shape[1],
-                 mask_origin[2]:mask_origin[2] + mask_block.shape[2]] = current_mask
+                  mask_origin[1]:mask_origin[1] + mask_block.shape[1],
+                  mask_origin[2]:mask_origin[2] + mask_block.shape[2]] = current_mask
 
         if self.move_based_on_new_mask:
             new_moves = self.get_moves(mask_block)
@@ -104,7 +106,7 @@ class DenseRegion(object):
         for move in new_moves:
             new_pos = mask_pos + move['move']
             if not self.pos_in_bounds(new_pos):
-               continue
+                continue
             if tuple(new_pos) not in self.visited and move['v'] >= CONFIG.model.t_move:
                 self.visited.add(tuple(new_pos))
                 self.queue.put((-move['v'], tuple(new_pos)))
@@ -143,7 +145,8 @@ class DenseRegion(object):
         if verbose:
             pbar = tqdm(desc='Move queue')
         while not self.queue.empty():
-            batch_block_data = [self.get_next_block() for _ in itertools.takewhile(lambda _: not self.queue.empty(), range(move_batch_size))]
+            batch_block_data = [self.get_next_block() for _ in
+                                itertools.takewhile(lambda _: not self.queue.empty(), range(move_batch_size))]
             batch_moves = len(batch_block_data)
             if verbose:
                 moves += batch_moves
@@ -283,16 +286,15 @@ class DenseRegion(object):
                 masked_data = np.ma.masked_where(image_data < 0.5, image_data)
                 im.set_data(masked_data)
 
-            for plane, ax in axes.iteritems():
-                aspect = get_aspect(plane)
+            for plane in axes.iterkeys():
                 lines['h'][plane].set_ydata(get_hv(vox - margin, plane)['h'])
                 lines['v'][plane].set_xdata(get_hv(vox + margin, plane)['v'])
                 lines['bl'][plane].set_xdata(get_hv(vox - margin, plane)['v'])
                 lines['bt'][plane].set_ydata(get_hv(vox + margin, plane)['h'])
 
             return images['image'].values() + images['mask'].values() + \
-                   lines['h'].values() + lines['v'].values() + \
-                   lines['bl'].values() + lines['bt'].values()
+                lines['h'].values() + lines['v'].values() + \
+                lines['bl'].values() + lines['bt'].values()
 
         update_fn.moves = 0
         update_fn.block_data = None
@@ -304,16 +306,11 @@ class DenseRegion(object):
         update_fn.vox_queue.put(current_vox)
 
         def vox_gen():
-            # count = 0
-            # limit = 1000
             last_vox = None
             while 1:
-                # print 'gen {}'.format(update_fn.vox_queue.qsize())
                 if update_fn.vox_queue.empty():
-                    # print 'Done animating'
                     return
                 else:
-                # count += 1
                     last_vox = update_fn.vox_queue.get()
                     yield last_vox
 

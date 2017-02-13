@@ -123,7 +123,8 @@ def fill_region_from_model(model_file, volumes=None, bias=True, move_batch_size=
             break
         elif s == 'a':
             region_copy = region.unfilled_copy()
-            ani = region_copy.fill_animation(model, 'export.mp4', verbose=True)
+            # Must assign the animation to a variable so that it is not GCed.
+            ani = region_copy.fill_animation(model, 'export.mp4', verbose=True) # noqa
             s = raw_input("Press Enter when animation is complete...")
 
 
@@ -166,7 +167,8 @@ def train_network(model_file=None, model_checkpoint_file=None, volumes=None,
             CONFIG.training.training_size,
             f_a_bins=f_a_bins) for k, v in volumes.iteritems()}
     training_data = roundrobin(*training_data.values())
-    history = ffn.fit_generator(training_data,
+    history = ffn.fit_generator(
+            training_data,
             samples_per_epoch=CONFIG.training.training_size * num_volumes,
             nb_epoch=CONFIG.training.simple_train_epochs,
             validation_data=validation_data,
@@ -190,7 +192,8 @@ def train_network(model_file=None, model_checkpoint_file=None, volumes=None,
             kludges[k],
             f_a_bins=f_a_bins) for k, v in volumes.iteritems()}
     training_data = roundrobin(*training_data.values())
-    moving_history = ffn.fit_generator(training_data,
+    moving_history = ffn.fit_generator(
+            training_data,
             samples_per_epoch=CONFIG.training.training_size * num_volumes,
             nb_epoch=CONFIG.training.total_epochs,
             initial_epoch=CONFIG.training.simple_train_epochs,

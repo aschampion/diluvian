@@ -33,6 +33,10 @@ class Volume(object):
     def xyz_mat_to_local(self, m):
         return m
 
+    @property
+    def shape(self):
+        return tuple(self.xyz_coord_to_local(np.array(self.image_data.shape)))
+
     def region_generator(self, subvolume_size):
         subvolumes = self.SubvolumeGenerator(self, subvolume_size, CONFIG.volume.downsample)
         subvolumes = itertools.ifilter(has_uniform_seed_margin, subvolumes)
@@ -48,7 +52,7 @@ class Volume(object):
             self.size_zoom = size_zoom
             self.size_orig = np.multiply(self.size_zoom, self.zoom).astype('uint64')
             self.margin = np.floor_divide(self.size_orig, 2)
-            self.partition_size = np.floor_divide(self.volume.xyz_coord_to_local(np.array(self.volume.image_data.shape)), self.partition[0])
+            self.partition_size = np.floor_divide(np.array(self.volume.shape), self.partition[0])
             self.ctr_min = (np.multiply(self.partition_size, self.partition[1]) + self.margin).astype('uint64')
             self.ctr_max = (np.multiply(self.partition_size, self.partition[1] + 1) - self.margin - 1).astype('uint64')
             self.random = np.random.RandomState(0)
@@ -106,14 +110,19 @@ class Volume(object):
             mask_target = np.full_like(label_mask, CONFIG.model.v_false, dtype='float32')
             mask_target[label_mask] = CONFIG.model.v_true
 
-            return {'image': image_subvol, 'mask_target': mask_target, 'f_a': f_a, 'seed': np.divide(subvol_ctr, self.zoom)}
-
+            return {'image': image_subvol,
+                    'mask_target': mask_target,
+                    'f_a': f_a,
+                    'seed': np.divide(subvol_ctr, self.zoom), }
 
     class SparseSubvolumeGenerator(SubvolumeGenerator):
         def __init__(self, volume, downsample, partition=None):
-            super(HDF5Volume.SparseSubvolumeGenerator, self).__init__(volume, CONFIG.model.block_size, downsample, partition)
+            super(HDF5Volume.SparseSubvolumeGenerator, self).__init__(volume,
+                                                                      CONFIG.model.block_size,
+                                                                      downsample,
+                                                                      partition)
             self.volume_shape_orig = (np.zeros((3,), dtype='uint64'),
-                                      np.divide(self.volume.xyz_coord_to_local(np.array(self.volume.image_data.shape)), self.zoom))
+                                      np.divide(np.array(self.volume.shape), self.zoom))
 
         def next(self):
             ctr = np.array([self.random.randint(self.ctr_min[n], self.ctr_max[n]) for n in range(3)]).astype('uint64')
@@ -209,7 +218,8 @@ class ImageStackVolume(Volume):
             1: '{source_base_url}{{z}}/{{row}}_{{col}}_{{zoom_level}}.{file_extension}',
             4: '{source_base_url}{{z}}/{{zoom_level}}/{{row}}_{{col}}.{file_extension}',
             5: '{source_base_url}{{zoom_level}}/{{z}}/{{row}}/{{col}}.{file_extension}',
-            7: '{source_base_url}largeDataTileSource/{tile_width}/{tile_height}/{{zoom_level}}/{{z}}/{{row}}/{{col}}.{file_extension}',
+            7: '{source_base_url}largeDataTileSource/{tile_width}/{tile_height}/'
+               '{{zoom_level}}/{{z}}/{{row}}/{{col}}.{file_extension}',
             9: '{source_base_url}{{z}}/{{row}}_{{col}}_{{zoom_level}}.{file_extension}',
         }[tile_source_parameters['tile_source_type']].format(**tile_source_parameters)
         bounds = np.array(stack_info['bounds'], dtype='uint64')
@@ -259,14 +269,15 @@ class ImageStackVolume(Volume):
                     tile_loc = np.multiply(tile_coord, tile_size)
 
                     subvol = (np.maximum(np.zeros(3), tile_loc - bounds[0]).astype('uint64'),
-                              np.minimum(np.array(image_subvol.shape), tile_loc + tile_size - bounds[0]).astype('uint64'))
+                              np.minimum(np.array(image_subvol.shape),
+                                         tile_loc + tile_size - bounds[0]).astype('uint64'))
                     tile_sub = (np.maximum(np.zeros(3), bounds[0] - tile_loc).astype('uint64'),
                                 np.minimum(tile_size, bounds[1] - tile_loc).astype('uint64'))
 
                     image_subvol[subvol[0][0]:subvol[1][0],
                                  subvol[0][1]:subvol[1][1],
-                                 subvol[0][2]             ] = im[tile_sub[0][0]:tile_sub[1][0],
-                                                                 tile_sub[0][1]:tile_sub[1][1]]
+                                 subvol[0][2]] = im[tile_sub[0][0]:tile_sub[1][0],
+                                                    tile_sub[0][1]:tile_sub[1][1]]
 
         return image_subvol
 
@@ -282,9 +293,11 @@ class ImageStackVolume(Volume):
             adjusted_downsample = downsample.copy()
             if volume.zoom_level is not None:
                 adjusted_downsample[0:2] -= volume.zoom_level
-            super(ImageStackVolume.SparseSubvolumeGenerator, self).__init__(volume, CONFIG.model.block_size, adjusted_downsample, partition)
+            super(ImageStackVolume.SparseSubvolumeGenerator, self).__init__(volume,
+                                                                            CONFIG.model.block_size,
+                                                                            adjusted_downsample,
+                                                                            partition)
             self.volume_shape_orig = (np.zeros(3, dtype='uint64'), np.array(self.volume.image_data.shape))
-
 
         def next(self):
             ctr = np.array([self.random.randint(self.ctr_min[n], self.ctr_max[n]) for n in range(3)]).astype('uint64')
@@ -345,6 +358,7 @@ def moving_training_generator(subvolumes, batch_size, training_size, callback_kl
     region_pos = [None] * batch_size
     move_counts = [0] * batch_size
     epoch_move_counts = []
+    batch_image_input = [None] * batch_size
 
     if f_a_bins is not None:
         f_a_counts = np.zeros_like(f_a_bins, dtype='uint64')
@@ -364,7 +378,8 @@ def moving_training_generator(subvolumes, batch_size, training_size, callback_kl
         active_regions = [n for n, region in enumerate(regions) if region is not None]
         if active_regions and callback_kludge['outputs'] is not None:
             for n in active_regions:
-                assert np.array_equal(callback_kludge['inputs']['image_input'][n, 0, 0, :, 0], batch_image_input[n, 0, 0, :, 0])
+                assert np.array_equal(callback_kludge['inputs']['image_input'][n, 0, 0, :, 0],
+                                      batch_image_input[n, 0, 0, :, 0])
                 regions[n].add_mask(callback_kludge['outputs'][n, :, :, :, 0], region_pos[n])
 
         batch_image_input = [None] * batch_size

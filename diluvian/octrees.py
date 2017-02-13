@@ -41,7 +41,8 @@ class OctreeMatrix(object):
         if np.any(np.less(npkey[0], self.bounds[0])) or \
            np.any(np.greater(npkey[1], self.bounds[1])) or \
            np.any(np.greater_equal(npkey[0], npkey[1])):
-           raise IndexError('Invalid indices: outside bounds or empty interval: {} (bounds {})'.format(str(key), str(self.bounds)))
+            raise IndexError('Invalid indices: outside bounds or empty interval: '
+                             '{} (bounds {})'.format(str(key), str(self.bounds)))
 
         return npkey
 
@@ -137,8 +138,9 @@ class BranchNode(Node):
         if (not hasattr(value, '__len__') or len(value) == 1) and \
            np.array_equal(key[0], self.bounds[0]) and \
            np.array_equal(key[1], self.clip_bound):
-           self.replace(UniformBranchNode(self.parent, self.bounds, self.get_volume().dtype, value, clip_bound=self.clip_bound))
-           return
+            self.replace(UniformBranchNode(self.parent, self.bounds, self.get_volume().dtype, value,
+                                           clip_bound=self.clip_bound))
+            return
 
         inds = self.get_children_mask(key)
 
@@ -230,7 +232,8 @@ class UniformBranchNode(UniformNode):
                     if np.any(np.less_equal(child_size, volume.leaf_size)):
                         child = UniformLeafNode(replacement, child_bounds, self.dtype, self.value)
                     else:
-                        child = UniformBranchNode(replacement, child_bounds, self.dtype, self.value, clip_bound=child_clip_bound)
+                        child = UniformBranchNode(replacement, child_bounds, self.dtype, self.value,
+                                                  clip_bound=child_clip_bound)
                     replacement.children[i][j][k] = child
         self.replace(replacement)
         replacement[key] = value
