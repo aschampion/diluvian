@@ -10,6 +10,6 @@ Command Line Interface
 ======================
 
 .. argparse::
-   :module: diluvian.cli
+   :module: diluvian.__main__
    :func: _make_main_parser
    :prog: diluvian

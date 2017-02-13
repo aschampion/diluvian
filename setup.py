@@ -44,7 +44,7 @@ setup(
                  'diluvian'},
     entry_points={
         'console_scripts': [
-            'diluvian=diluvian.cli:main'
+            'diluvian=diluvian.__main__:main'
         ]
     },
     include_package_data=True,
