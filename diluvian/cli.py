@@ -8,7 +8,17 @@ import os
 from .config import CONFIG
 
 
-def main():
+def _make_main_parser():
+    """Construct the argparse parser for the main CLI.
+
+    This exists as a separate function so the parser can be used to
+    auto-generate CLI documentation in Sphinx.
+
+    Returns
+    -------
+    argparse.ArgumentParser
+        Parser for the main CLI and all subcommands.
+    """
     common_parser = argparse.ArgumentParser(add_help=False)
 
     common_parser.add_argument('-c', '--config-file', action='append', dest='config_files', default=[],
@@ -57,6 +67,12 @@ def main():
                                                     help='Check a configuration value.')
     check_config_parser.add_argument('config_property',
                                      help='Name of the property to show, e.g., `training.batch_size`.')
+
+    return parser
+
+
+def main():
+    parser = _make_main_parser()
 
     args = parser.parse_args()
 
