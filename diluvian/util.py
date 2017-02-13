@@ -2,6 +2,7 @@
 
 
 import collections
+import csv
 import itertools
 
 import neuroglancer
@@ -30,6 +31,29 @@ def extend_keras_history(a, b):
     a.epoch.extend(b.epoch)
     for k, v in b.history.items():
         a.history.setdefault(k, []).extend(v)
+
+
+def write_keras_history_to_csv(history, filename):
+    """Write Keras history to a CSV file.
+
+    If the file already exists it will be overwritten.
+
+    Parameters
+    ----------
+    history : keras.callbacks.History
+    filename : str
+    """
+    with open(filename, 'wb') as csvfile:
+        writer = csv.writer(csvfile)
+        metric_cols = history.history.keys()
+        indices = [i[0] for i in sorted(enumerate(metric_cols), key=lambda x: x[1])]
+        metric_cols.sort()
+        cols = ['epoch'] + metric_cols
+        sorted_metrics = history.history.values()
+        sorted_metrics = [sorted_metrics[i] for i in indices]
+        writer.writerow(cols)
+        for row in zip(history.epoch, *sorted_metrics):
+            writer.writerow(row)
 
 
 def get_color_shader(channel):

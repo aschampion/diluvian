@@ -19,7 +19,7 @@ import keras.optimizers
 
 from .config import CONFIG
 from .third_party.multi_gpu import make_parallel
-from .util import extend_keras_history, get_color_shader, roundrobin
+from .util import extend_keras_history, get_color_shader, roundrobin, write_keras_history_to_csv
 from .volumes import simple_training_generator, moving_training_generator
 
 
@@ -153,7 +153,7 @@ def train_network(model_file=None, volumes=None,
         compile_network(ffn)
 
     if model_output_filebase is None:
-        model_output_filebase = 'weights'
+        model_output_filebase = 'model_output'
 
     if volumes is None:
         raise ValueError('Volumes must be provided.')
@@ -219,6 +219,8 @@ def train_network(model_file=None, volumes=None,
             validation_data=validation_data,
             nb_val_samples=CONFIG.training.validation_size * num_volumes)
     extend_keras_history(history, moving_history)
+
+    write_keras_history_to_csv(history, model_output_filebase + '.csv')
 
     if viewer:
         # for _ in itertools.islice(training_data, 12):
