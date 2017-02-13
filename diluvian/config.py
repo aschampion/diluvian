@@ -34,7 +34,7 @@ class VolumeConfig(BaseConfig):
 class ModelConfig(BaseConfig):
     def __init__(self, settings):
         self.block_size = np.array(settings.get('block_size', [33, 33, 17]))
-        self.v_true = float(settings.get('v_true', 0.095))
+        self.v_true = float(settings.get('v_true', 0.95))
         self.v_false = float(settings.get('v_false', 0.05))
         self.t_move = float(settings.get('t_move', 0.9))
         self.move_check_thickness = int(settings.get('move_check_thickness', 1))
