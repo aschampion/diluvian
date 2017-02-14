@@ -1,9 +1,9 @@
 [volume]
-downsample = [1, 1, 0]
-resolution = [8, 8, 40]
+downsample = [2, 2, 0]
+resolution = [16, 16, 40]
 
 [model]
-block_size = [65, 65, 13]
+block_size = [33, 33, 13]
 v_true = 0.95
 v_false = 0.05
 t_move = 0.9
@@ -12,7 +12,7 @@ move_check_thickness = 1
 [network]
 factory = 'diluvian.diluvian.make_flood_fill_network'
 num_modules = 8
-convolution_dim = [5, 5, 3]
+convolution_dim = [3, 3, 3]
 convolution_filters = 32
 output_activation = "sigmoid"
 
@@ -24,7 +24,7 @@ nesterov = true
 
 [training]
 gpu_batch_size = 32
-num_gpus = 2
+num_gpus = 1
 training_size = 256
 validation_size = 32
 simple_train_epochs = 1
