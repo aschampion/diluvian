@@ -6,7 +6,9 @@ import inspect
 import itertools
 
 import matplotlib as mpl
-mpl.use('Agg')
+# Use the 'Agg' backend to allow the generation of plots even if no X server
+# is available. The matplotlib backend must be set before importing pyplot.
+mpl.use('Agg')  # noqa
 import matplotlib.pyplot as plt
 import neuroglancer
 import numpy as np
