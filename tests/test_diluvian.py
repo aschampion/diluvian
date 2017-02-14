@@ -38,6 +38,11 @@ def test_octree_bounds():
                 else:
                     assert isinstance(ot.root_node.children[i][j][k], expected_type), "Nodes are wrong type."
 
+    np.testing.assert_almost_equal(ot.fullness(), 2.0/3.0, err_msg='Octree fullness should be relative to clip bounds.')
+
+    ot[10, 5, 4] = 5  # Break the remaining top-level uniform branch node.
+    np.testing.assert_almost_equal(ot.fullness(), 1.0, err_msg='Octree fullness should be relative to clip bounds.')
+
 
 def test_region_moves():
     mock_image = np.zeros(tuple(CONFIG.model.training_fov), dtype='float32')

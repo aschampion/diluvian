@@ -56,6 +56,10 @@ class OctreeMatrix(object):
 
         self.root_node[npkey] = value
 
+    def fullness(self):
+        potential_leaves = np.prod(np.ceil(np.true_divide(self.bounds[1] - self.bounds[0], self.leaf_size)))
+        return self.root_node.count_leaves() / float(potential_leaves)
+
     def get_volume(self):
         return self
 
@@ -71,6 +75,9 @@ class Node(object):
         self.parent = parent
         self.bounds = (bounds[0].copy(), bounds[1].copy())
         self.clip_bound = clip_bound
+
+    def count_leaves(self):
+        return 0
 
     def get_intersection(self, key):
         return (np.maximum(self.bounds[0], key[0]),
@@ -95,9 +102,12 @@ class BranchNode(Node):
         self.midpoint = (self.bounds[1] + self.bounds[0]) / 2
         self.children = [[[None for _ in range(2)] for _ in range(2)] for _ in range(2)]
 
+    def count_leaves(self):
+        return sum(c.count_leaves() for s in self.children for r in s for c in r if c is not None)
+
     def get_children_mask(self, key):
         p = (np.less(key[0], self.midpoint),
-             np.greater_equal(key[1], self.midpoint))
+             np.greater(key[1], self.midpoint))
 
         # TODO must be some way to do combinatorial ops like this with numpy.
         return np.where([[[p[i][0] and p[j][1] and p[k][2] for k in range(2)] for j in range(2)] for i in range(2)])
@@ -193,6 +203,9 @@ class LeafNode(Node):
         super(LeafNode, self).__init__(parent, bounds)
         self.data = data.copy()
 
+    def count_leaves(self):
+        return 1
+
     def __getitem__(self, key):
         ind = (key[0] - self.bounds[0], key[1] - self.bounds[0])
         return self.data[ind[0][0]:ind[1][0],
@@ -226,7 +239,7 @@ class UniformBranchNode(UniformNode):
                     child_bounds, child_clip_bound = replacement.get_child_bounds(i, j, k)
                     # If this child is entirely outside the clip bounds, it will never be accessed
                     # or populated and thus can be omitted.
-                    if child_clip_bound is not None and np.any(np.greater(child_bounds[0], child_clip_bound)):
+                    if child_clip_bound is not None and np.any(np.greater_equal(child_bounds[0], child_clip_bound)):
                         continue
                     child_size = child_bounds[1] - child_bounds[0]
                     if np.any(np.less_equal(child_size, volume.leaf_size)):
@@ -244,3 +257,6 @@ class UniformLeafNode(UniformNode):
         replacement = LeafNode(self.parent, self.bounds, self[self.bounds])
         self.replace(replacement)
         replacement[key] = value
+
+    def count_leaves(self):
+        return 1
