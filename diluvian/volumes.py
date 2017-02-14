@@ -68,7 +68,18 @@ class Volume(object):
             self.random.seed(0)
 
         def next(self):
-            ctr = np.array([self.random.randint(self.ctr_min[n], self.ctr_max[n]) for n in range(3)]).astype('uint64')
+            while True:
+                # Only accept subvolumes where the central seed voxel will be
+                # of a uniform label after downsampling. For more stringent
+                # seed region uniformity filtering, see has_uniform_seed_margin.
+                ctr = np.array([self.random.randint(self.ctr_min[n], self.ctr_max[n])
+                                for n in range(3)]).astype('uint64')
+                seed_min = ctr - np.floor_divide(self.zoom, 2).astype('uint64')
+                seed_max = ctr + np.floor_divide(self.zoom, 2).astype('uint64') + np.mod(self.zoom, 2)
+                if np.unique(self.volume.label_data[seed_min[0]:seed_max[0],
+                                                    seed_min[1]:seed_max[1],
+                                                    seed_min[2]:seed_max[2]]).size == 1:
+                    break
             subvol = (self.volume.xyz_coord_to_local(ctr - self.margin),
                       self.volume.xyz_coord_to_local(ctr + self.margin + np.mod(self.size_orig, 2)))
             image_subvol = self.volume.image_data[
