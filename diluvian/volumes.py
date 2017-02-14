@@ -101,18 +101,15 @@ class Volume(object):
                 image_subvol = image_subvol.reshape([self.size_zoom[0], self.zoom[0],
                                                      self.size_zoom[1], self.zoom[1],
                                                      self.size_zoom[2], self.zoom[2]]).mean(5).mean(3).mean(1)
+                # Downsample body mask by considering blocks where the majority
+                # of voxels are in the body to be in the body. Alternatives are:
+                # - Conjunction (tends to introduce false splits)
+                # - Disjunction (tends to overdilate and merge)
+                # - Mode label (computationally expensive)
                 label_mask = label_mask.reshape([self.size_zoom[0], self.zoom[0],
                                                  self.size_zoom[1], self.zoom[1],
-                                                 self.size_zoom[2], self.zoom[2]]).all(5).all(3).all(1)
-                # A higher fidelity alternative would be to use the mode label
-                # for each downsample block. However, this is prohibitively
-                # slow using the scipy code preserved below as an example:
-                # label_mask = label_mask.reshape([self.size_zoom[0], self.zoom[0],
-                #                                  self.size_zoom[1], self.zoom[1],
-                #                                  self.size_zoom[2], self.zoom[2]])
-                # label_mask = stats.mode(label_mask, 5)[0]
-                # label_mask = stats.mode(label_mask, 3)[0]
-                # label_mask = np.squeeze(stats.mode(label_mask, 1)[0])
+                                                 self.size_zoom[2], self.zoom[2]]).mean(5).mean(3).mean(1)
+                label_mask = label_mask > 0.5
 
             assert image_subvol.shape == tuple(self.size_zoom), 'Image wrong size: {}'.format(image_subvol.shape)
             assert label_mask.shape == tuple(self.size_zoom), 'Labels wrong size: {}'.format(label_mask.shape)
