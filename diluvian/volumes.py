@@ -228,24 +228,29 @@ class ImageStackVolume(Volume):
         tile_height = int(tile_source_parameters['tile_height'])
         return ImageStackVolume(bounds, resolution, tile_width, tile_height, format_url, stack_info['broken_slices'])
 
-    def __init__(self, bounds, resolution, tile_width, tile_height, tile_format_url, missing_z=None):
+    def __init__(self, bounds, resolution, tile_width, tile_height, tile_format_url,
+                 missing_z=None, image_leaf_size=None, label_leaf_size=None):
         self.resolution = resolution
         self.tile_width = tile_width
         self.tile_height = tile_height
         self.tile_format_url = tile_format_url
         if missing_z is None:
             missing_z = []
+        if image_leaf_size is None:
+            image_leaf_size = [tile_width, tile_height, 10]
+        if label_leaf_size is None:
+            label_leaf_size = list(CONFIG.model.block_size)
         self.missing_z = frozenset(missing_z)
         self.zoom_level = min(CONFIG.volume.downsample[0], CONFIG.volume.downsample[1])
         scale = np.exp2(np.array([self.zoom_level, self.zoom_level, 0])).astype('uint64')
 
         data_size = (np.zeros(3), np.divide(bounds, scale).astype('uint64'))
-        self.image_data = OctreeMatrix([512, 512, 10],
+        self.image_data = OctreeMatrix(image_leaf_size,
                                        data_size,
                                        'uint8',
                                        populator=self.image_populator)
 
-        self.label_data = OctreeMatrix([64, 64, 24], data_size, 'uint64')
+        self.label_data = OctreeMatrix(label_leaf_size, data_size, 'uint64')
         self.label_data[:] = 1
 
     def image_populator(self, bounds):
