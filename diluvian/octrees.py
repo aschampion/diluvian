@@ -1,10 +1,32 @@
 # -*- coding: utf-8 -*-
+"""Simple octree data structures for block sparse 3D arrays."""
 
 
 import numpy as np
 
 
-class OctreeMatrix(object):
+class OctreeVolume(object):
+    """Octree-backed block sparse 3D array.
+
+    This is a trivial implementation of an octree with NumPy ndarray leaves for
+    block sparse volume access. This allows oblivious in-memory access of
+    dense regions spanning out-of-memory volumes by providing read leaves
+    via a populator. For writing, the octree supports uniform value terminal
+    nodes at every level, so that only non-uniform data must be written to
+    leaf level.
+
+    Parameters
+    ----------
+    leaf_size : tuple of int or ndarray
+        Size of tree leaves in voxels.
+    bounds : tuple of tuple of int or ndarray
+        The lower and upper coordinate bounds of the volume, in voxels.
+    dtype : numpy.data-type
+    populator : function, optional
+        A function taking a tuple of ndarray bounds for the coordinates of
+        the subvolume to populate and returning the data for that subvolume.
+    """
+
     def __init__(self, leaf_size, bounds, dtype, populator=None):
         self.leaf_size = np.asarray(leaf_size).astype('uint64')
         self.bounds = (bounds[0].astype('uint64'), bounds[1].astype('uint64'))

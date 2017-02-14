@@ -10,7 +10,7 @@ import numpy as np
 from tqdm import tqdm
 
 from .config import CONFIG
-from .octrees import OctreeMatrix
+from .octrees import OctreeVolume
 from .util import get_color_shader, pad_dims, WrappedViewer
 
 
@@ -30,8 +30,8 @@ class DenseRegion(object):
         self.move_bounds = self.vox_to_pos(self.bounds) - 1
         self.move_check_thickness = CONFIG.model.move_check_thickness
         if mask is None:
-            if isinstance(self.image, OctreeMatrix):
-                self.mask = OctreeMatrix(self.image.leaf_size, self.bounds, 'float32')
+            if isinstance(self.image, OctreeVolume):
+                self.mask = OctreeVolume(self.image.leaf_size, self.bounds, 'float32')
             else:
                 self.mask = np.empty(self.bounds, dtype='float32')
             self.mask[:] = np.NAN

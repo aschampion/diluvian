@@ -14,7 +14,7 @@ import requests
 from keras.utils.data_utils import get_file
 
 from .config import CONFIG
-from .octrees import OctreeMatrix
+from .octrees import OctreeVolume
 from .regions import DenseRegion
 from .util import pad_dims
 
@@ -165,8 +165,8 @@ class Volume(object):
                 mask_target[label_mask] = CONFIG.model.v_true
                 return mask_target
 
-            image_tree = OctreeMatrix([64, 64, 24], self.volume_shape_orig, 'float32', populator=image_populator)
-            target_tree = OctreeMatrix([64, 64, 24], self.volume_shape_orig, 'float32', populator=label_populator)
+            image_tree = OctreeVolume([64, 64, 24], self.volume_shape_orig, 'float32', populator=image_populator)
+            target_tree = OctreeVolume([64, 64, 24], self.volume_shape_orig, 'float32', populator=label_populator)
 
             f_a = 0.0
 
@@ -245,12 +245,12 @@ class ImageStackVolume(Volume):
         scale = np.exp2(np.array([self.zoom_level, self.zoom_level, 0])).astype('uint64')
 
         data_size = (np.zeros(3), np.divide(bounds, scale).astype('uint64'))
-        self.image_data = OctreeMatrix(image_leaf_size,
+        self.image_data = OctreeVolume(image_leaf_size,
                                        data_size,
                                        'uint8',
                                        populator=self.image_populator)
 
-        self.label_data = OctreeMatrix(label_leaf_size, data_size, 'uint64')
+        self.label_data = OctreeVolume(label_leaf_size, data_size, 'uint64')
         self.label_data[:] = 1
 
     def image_populator(self, bounds):

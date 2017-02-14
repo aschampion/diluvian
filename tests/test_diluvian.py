@@ -18,7 +18,7 @@ from diluvian.config import CONFIG
 
 def test_octree_bounds():
     clip_bounds = (np.zeros(3), np.array([11, 6, 5]))
-    ot = octrees.OctreeMatrix([5, 5, 5], clip_bounds, 'uint8')
+    ot = octrees.OctreeVolume([5, 5, 5], clip_bounds, 'uint8')
     ot[clip_bounds[0][0]:clip_bounds[1][0],
        clip_bounds[0][1]:clip_bounds[1][1],
        clip_bounds[0][2]:clip_bounds[1][2]] = 6
