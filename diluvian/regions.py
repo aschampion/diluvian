@@ -17,9 +17,9 @@ from .util import get_color_shader, pad_dims, WrappedViewer
 class DenseRegion(object):
     @staticmethod
     def from_subvolume(subvolume):
-        return DenseRegion(subvolume['image'],
-                           target=subvolume['mask_target'],
-                           seed_vox=subvolume['seed'])
+        return DenseRegion(subvolume.image,
+                           target=mask_to_output_target(subvolume.label_mask),
+                           seed_vox=subvolume.seed)
 
     def __init__(self, image, target=None, seed_vox=None, mask=None):
         self.MOVE_DELTA = (CONFIG.model.block_size - 1) / 4
@@ -44,7 +44,8 @@ class DenseRegion(object):
             seed_pos = np.floor_divide(self.move_bounds, 2) + 1
         else:
             seed_pos = self.vox_to_pos(seed_vox)
-            assert self.pos_in_bounds(seed_pos), 'Seed position must be in region bounds.'
+            assert self.pos_in_bounds(seed_pos), \
+                'Seed position (%s) must be in region bounds (%s).' % (seed_vox, self.bounds)
         self.seed_pos = seed_pos
         self.queue.put((None, seed_pos))
         seed_vox = self.pos_to_vox(seed_pos)
@@ -348,3 +349,9 @@ class DenseRegion(object):
                        name='Mask Output',
                        shader=get_color_shader(1))
         return viewer
+
+
+def mask_to_output_target(mask):
+    target = np.full_like(mask, CONFIG.model.v_false, dtype='float32')
+    target[mask] = CONFIG.model.v_true
+    return target

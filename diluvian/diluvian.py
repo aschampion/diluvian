@@ -22,7 +22,7 @@ import keras.optimizers
 from .config import CONFIG
 from .third_party.multi_gpu import make_parallel
 from .util import extend_keras_history, get_color_shader, roundrobin, write_keras_history_to_csv
-from .volumes import simple_training_generator, moving_training_generator
+from .volumes import static_training_generator, moving_training_generator
 
 
 def make_flood_fill_network():
@@ -115,7 +115,10 @@ def fill_region_from_model(model_file, volumes=None, bias=True, move_batch_size=
     if volumes is None:
         raise ValueError('Volumes must be provided.')
 
-    regions = roundrobin(*[v.region_generator(CONFIG.model.training_fov * 4 - 3) for _, v in volumes.iteritems()])
+    regions = roundrobin(*[
+            v.downsample(CONFIG.volume.resolution)
+             .region_generator(CONFIG.model.training_fov * 4 - 3)
+            for _, v in volumes.iteritems()])
 
     model = load_model(model_file)
 
@@ -163,25 +166,29 @@ def train_network(model_file=None, volumes=None,
     f_a_bins = CONFIG.training.fill_factor_bins
 
     num_volumes = len(volumes)
-    validation_data = {k: simple_training_generator(
-            v.SubvolumeGenerator(v,
-                                 CONFIG.model.block_size,
-                                 CONFIG.volume.downsample,
-                                 partition=(CONFIG.training.partitions, CONFIG.training.validation_partition)),
+
+    training_volumes = {
+            k: v.partition(CONFIG.training.partitions, CONFIG.training.training_partition)
+                .downsample(CONFIG.volume.resolution)
+            for k, v in volumes.iteritems()}
+    validation_volumes = {
+            k: v.partition(CONFIG.training.partitions, CONFIG.training.validation_partition)
+                .downsample(CONFIG.volume.resolution)
+            for k, v in volumes.iteritems()}
+
+    validation_data = {k: static_training_generator(
+            v.subvolume_generator(size=CONFIG.model.block_size),
             CONFIG.training.batch_size,
             CONFIG.training.validation_size,
-            f_a_bins=f_a_bins) for k, v in volumes.iteritems()}
+            f_a_bins=f_a_bins) for k, v in validation_volumes.iteritems()}
     validation_data = roundrobin(*validation_data.values())
 
     # Pre-train
-    training_data = {k: simple_training_generator(
-            v.SubvolumeGenerator(v,
-                                 CONFIG.model.block_size,
-                                 CONFIG.volume.downsample,
-                                 partition=(CONFIG.training.partitions, CONFIG.training.training_partition)),
+    training_data = {k: static_training_generator(
+            v.subvolume_generator(size=CONFIG.model.block_size),
             CONFIG.training.batch_size,
             CONFIG.training.training_size,
-            f_a_bins=f_a_bins) for k, v in volumes.iteritems()}
+            f_a_bins=f_a_bins) for k, v in training_volumes.iteritems()}
     training_data = roundrobin(*training_data.values())
     history = ffn.fit_generator(
             training_data,
@@ -201,14 +208,11 @@ def train_network(model_file=None, volumes=None,
         callbacks.append(TensorBoard())
 
     training_data = {k: moving_training_generator(
-            v.SubvolumeGenerator(v,
-                                 CONFIG.model.training_fov,
-                                 CONFIG.volume.downsample,
-                                 partition=(CONFIG.training.partitions, CONFIG.training.training_partition)),
+            v.subvolume_generator(size=CONFIG.model.training_fov),
             CONFIG.training.batch_size,
             CONFIG.training.training_size,
             kludges[k],
-            f_a_bins=f_a_bins) for k, v in volumes.iteritems()}
+            f_a_bins=f_a_bins) for k, v in training_volumes.iteritems()}
     training_data = roundrobin(*training_data.values())
     moving_history = ffn.fit_generator(
             training_data,
@@ -227,8 +231,8 @@ def train_network(model_file=None, volumes=None,
     if viewer:
         # for _ in itertools.islice(training_data, 12):
         #     continue
-        dupe_data = volumes[list(volumes.keys())[0]].simple_training_generator(
-                CONFIG.model.block_size,
+        dupe_data = static_training_generator(
+                volumes[list(volumes.keys())[0]].subvolume_generator(size=CONFIG.model.block_size),
                 CONFIG.training.batch_size,
                 CONFIG.training.training_size)
         viz_ex = itertools.islice(dupe_data, 1)

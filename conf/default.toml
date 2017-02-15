@@ -1,5 +1,4 @@
 [volume]
-downsample = [2, 2, 0]
 resolution = [16, 16, 40]
 
 [model]

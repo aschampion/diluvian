@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+"""Volumes of raw image and labeled object data."""
 
 
 import itertools
@@ -15,16 +16,72 @@ from keras.utils.data_utils import get_file
 
 from .config import CONFIG
 from .octrees import OctreeVolume
-from .regions import DenseRegion
+from .regions import DenseRegion, mask_to_output_target
 from .util import pad_dims
+
+
+class SubvolumeBounds(object):
+    """Sufficient parameters to extract a subvolume from a volume."""
+    __slots__ = ('start', 'stop', 'label_id',)
+
+    def __init__(self, start, stop, label_id=None):
+        self.start = start
+        self.stop = stop
+        self.label_id = label_id
+
+
+class Subvolume(object):
+    """A subvolume of image data and a ground truth object mask."""
+    __slots__ = ('image', 'label_mask', 'seed', 'label_id',)
+
+    def __init__(self, image, label_mask, seed, label_id):
+        self.image = image
+        self.label_mask = label_mask
+        self.seed = seed
+        self.label_id = label_id
+
+    def f_a(self):
+        """Calculate the mask filling fraction of this subvolume.
+
+        Returns
+        -------
+        float
+            Fraction of the subvolume voxels in the object mask.
+        """
+        return np.count_nonzero(self.label_mask) / float(self.label_mask.size)
+
+
+class SubvolumeGenerator(object):
+    """Combines a volume and a subvolume bounds generator into a generator.
+
+    Parameters
+    ----------
+    volume : Volume
+    bounds_generator : SubvolumeBoundsGenerator
+    """
+    def __init__(self, volume, bounds_generator):
+        self.volume = volume
+        self.bounds_generator = bounds_generator
+
+    @property
+    def shape(self):
+        return self.bounds_generator.shape
+
+    def __iter__(self):
+        return self
+
+    def reset(self):
+        self.bounds_generator.reset()
+
+    def next(self):
+        while True:
+            return self.volume.get_subvolume(next(self.bounds_generator))
 
 
 class Volume(object):
     def __init__(self, image_data, label_data, resolution):
         self.image_data = image_data
         self.label_data = label_data
-        self.image_data.flags.writeable = False
-        self.label_data.flags.writeable = False
         self.resolution = resolution
 
     def xyz_coord_to_local(self, a):
@@ -37,29 +94,74 @@ class Volume(object):
     def shape(self):
         return tuple(self.xyz_coord_to_local(np.array(self.image_data.shape)))
 
+    def _get_downsample_from_resolution(self, resolution):
+        resolution = np.asarray(resolution)
+        downsample = np.log2(np.true_divide(resolution, self.resolution))
+        if np.any(downsample < 0):
+            raise ValueError('Requested resolution ({}) is higher than volume resolution ({}). '
+                             'Upsampling is not support.'.format(resolution, self.resolution))
+        if not np.all(np.equal(np.mod(downsample, 1), 0)):
+            raise ValueError('Requested resolution ({}) is not a power-of-2 downsample of '
+                             'volume resolution ({}). '
+                             'This is currently unsupported.'.format(resolution, self.resolution))
+        return downsample.astype('uint64')
+
+    def downsample(self, resolution):
+        downsample = self._get_downsample_from_resolution(resolution)
+        if np.all(np.equal(downsample, 0)):
+            return self
+        return DownsampledVolume(self, downsample)
+
+    def partition(self, *args):
+        return PartitionedVolume(self, *args)
+
+    def sparse_wrapper(self, *args):
+        return SparseWrappedVolume(self, *args)
+
     def region_generator(self, subvolume_size):
-        subvolumes = self.SubvolumeGenerator(self, subvolume_size, CONFIG.volume.downsample)
+        subvolumes = self.subvolume_generator(size=subvolume_size)
         subvolumes = itertools.ifilter(has_uniform_seed_margin, subvolumes)
         return itertools.imap(DenseRegion.from_subvolume, subvolumes)
 
-    class SubvolumeGenerator(object):
-        def __init__(self, volume, size_zoom, downsample, partition=None):
-            if partition is None:
-                partition = (np.array((1, 1, 1)), np.array((0, 0, 0)))
+    def subvolume_generator(self, bounds_generator=None, size=None):
+        if bounds_generator is None:
+            if size is None:
+                raise ValueError('Size must be provided if no bounds generator is provided.')
+            bounds_generator = self.SubvolumeBoundsGenerator(self, size)
+        return SubvolumeGenerator(self, bounds_generator)
+
+    def get_subvolume(self, bounds):
+        image_subvol = self.image_data[
+                bounds.start[0]:bounds.stop[0],
+                bounds.start[1]:bounds.stop[1],
+                bounds.start[2]:bounds.stop[2]]
+        label_subvol = self.label_data[
+                bounds.start[0]:bounds.stop[0],
+                bounds.start[1]:bounds.stop[1],
+                bounds.start[2]:bounds.stop[2]]
+
+        image_subvol = self.xyz_mat_to_local(image_subvol.astype('float32')) / 256.0
+        label_subvol = self.xyz_mat_to_local(label_subvol)
+        subvol_ctr = np.array(label_subvol.shape, dtype='uint64') / 2
+        label_id = bounds.label_id
+        if label_id is None:
+            label_id = label_subvol[tuple(subvol_ctr)]
+        label_mask = label_subvol == label_id
+
+        return Subvolume(image_subvol, label_mask, subvol_ctr, label_id)
+
+    class SubvolumeBoundsGenerator(object):
+        def __init__(self, volume, size):
             self.volume = volume
-            self.partition = partition
-            self.zoom = np.exp2(downsample).astype('uint64')
-            self.size_zoom = size_zoom
-            self.size_orig = np.multiply(self.size_zoom, self.zoom).astype('uint64')
-            self.margin = np.floor_divide(self.size_orig, 2)
-            self.partition_size = np.floor_divide(np.array(self.volume.shape), self.partition[0])
-            self.ctr_min = (np.multiply(self.partition_size, self.partition[1]) + self.margin).astype('uint64')
-            self.ctr_max = (np.multiply(self.partition_size, self.partition[1] + 1) - self.margin - 1).astype('uint64')
+            self.size = size
+            self.margin = np.floor_divide(self.size, 2).astype('uint64')
+            self.ctr_min = self.margin
+            self.ctr_max = (np.array(self.volume.shape) - self.margin - 1).astype('uint64')
             self.random = np.random.RandomState(0)
 
         @property
         def shape(self):
-            return self.size_zoom
+            return self.size
 
         def __iter__(self):
             return self
@@ -74,114 +176,188 @@ class Volume(object):
                 # seed region uniformity filtering, see has_uniform_seed_margin.
                 ctr = np.array([self.random.randint(self.ctr_min[n], self.ctr_max[n])
                                 for n in range(3)]).astype('uint64')
-                seed_min = ctr - np.floor_divide(self.zoom, 2).astype('uint64')
-                seed_max = ctr + np.floor_divide(self.zoom, 2).astype('uint64') + np.mod(self.zoom, 2)
-                if np.unique(self.volume.label_data[seed_min[0]:seed_max[0],
-                                                    seed_min[1]:seed_max[1],
-                                                    seed_min[2]:seed_max[2]]).size == 1:
+                seed_min = self.volume.xyz_coord_to_local(ctr)
+                seed_max = self.volume.xyz_coord_to_local(ctr + 1)
+                label_ids = self.volume.label_data[
+                        seed_min[0]:seed_max[0],
+                        seed_min[1]:seed_max[1],
+                        seed_min[2]:seed_max[2]]
+                if (label_ids == label_ids[0]).all():
+                    label_id = label_ids[0]
                     break
-            subvol = (self.volume.xyz_coord_to_local(ctr - self.margin),
-                      self.volume.xyz_coord_to_local(ctr + self.margin + np.mod(self.size_orig, 2)))
-            image_subvol = self.volume.image_data[
-                    subvol[0][0]:subvol[1][0],
-                    subvol[0][1]:subvol[1][1],
-                    subvol[0][2]:subvol[1][2]]
-            label_subvol = self.volume.label_data[
-                    subvol[0][0]:subvol[1][0],
-                    subvol[0][1]:subvol[1][1],
-                    subvol[0][2]:subvol[1][2]]
+            return SubvolumeBounds(ctr - self.margin,
+                                   ctr + self.margin + np.mod(self.size, 2).astype('uint64'),
+                                   label_id=label_id)
 
-            image_subvol = self.volume.xyz_mat_to_local(image_subvol.astype('float32')) / 256.0
-            label_subvol = self.volume.xyz_mat_to_local(label_subvol)
-            subvol_ctr = np.array(label_subvol.shape, dtype='uint64') / 2
-            label_id = label_subvol[tuple(subvol_ctr)]
-            label_mask = label_subvol == label_id
 
-            if np.any(self.zoom > 1):
-                image_subvol = image_subvol.reshape([self.size_zoom[0], self.zoom[0],
-                                                     self.size_zoom[1], self.zoom[1],
-                                                     self.size_zoom[2], self.zoom[2]]).mean(5).mean(3).mean(1)
-                # Downsample body mask by considering blocks where the majority
-                # of voxels are in the body to be in the body. Alternatives are:
-                # - Conjunction (tends to introduce false splits)
-                # - Disjunction (tends to overdilate and merge)
-                # - Mode label (computationally expensive)
-                label_mask = label_mask.reshape([self.size_zoom[0], self.zoom[0],
-                                                 self.size_zoom[1], self.zoom[1],
-                                                 self.size_zoom[2], self.zoom[2]]).mean(5).mean(3).mean(1)
-                label_mask = label_mask > 0.5
+class NdarrayVolume(Volume):
+    """A NumPy ndarray-backed volume.
 
-            assert image_subvol.shape == tuple(self.size_zoom), 'Image wrong size: {}'.format(image_subvol.shape)
-            assert label_mask.shape == tuple(self.size_zoom), 'Labels wrong size: {}'.format(label_mask.shape)
+    Since all volumes assume image and label data are ndarray-like, this class
+    exists mostly as a bookkeeping convenience to make actual ndarray volumes
+    explicit.
+    """
+    def __init__(self, *args):
+        super(NdarrayVolume, self).__init__(*args)
+        self.image_data.flags.writeable = False
+        self.label_data.flags.writeable = False
 
-            f_a = np.count_nonzero(label_mask) / float(label_mask.size)
-            mask_target = np.full_like(label_mask, CONFIG.model.v_false, dtype='float32')
-            mask_target[label_mask] = CONFIG.model.v_true
 
-            return {'image': image_subvol,
-                    'mask_target': mask_target,
-                    'f_a': f_a,
-                    'seed': np.divide(subvol_ctr, self.zoom), }
+class VolumeView(Volume):
+    def __init__(self, parent, image_data, label_data, resolution):
+        super(VolumeView, self).__init__(image_data, label_data, resolution)
+        self.parent = parent
 
-    class SparseSubvolumeGenerator(SubvolumeGenerator):
-        def __init__(self, volume, downsample, partition=None):
-            super(HDF5Volume.SparseSubvolumeGenerator, self).__init__(volume,
-                                                                      CONFIG.model.block_size,
-                                                                      downsample,
-                                                                      partition)
-            self.volume_shape_orig = (np.zeros((3,), dtype='uint64'),
-                                      np.divide(np.array(self.volume.shape), self.zoom))
+    def xyz_coord_to_local(self, a):
+        return self.parent.xyz_coord_to_local(a)
 
-        def next(self):
-            ctr = np.array([self.random.randint(self.ctr_min[n], self.ctr_max[n]) for n in range(3)]).astype('uint64')
-            label_id = self.volume.label_data[tuple(self.volume.xyz_coord_to_local(ctr))]
+    def xyz_mat_to_local(self, m):
+        return self.parent.xyz_mat_to_local(m)
 
-            def image_populator(bounds):
-                size = bounds[1] - bounds[0]
-                subvol = (self.volume.xyz_coord_to_local(np.multiply(bounds[0], self.zoom)),
-                          self.volume.xyz_coord_to_local(np.multiply(bounds[1], self.zoom)))
-                image_subvol = self.volume.image_data[
-                        subvol[0][0]:subvol[1][0],
-                        subvol[0][1]:subvol[1][1],
-                        subvol[0][2]:subvol[1][2]]
+    @property
+    def shape(self):
+        return self.parent.shape
 
-                image_subvol = self.volume.xyz_mat_to_local(image_subvol.astype('float32')) / 256.0
+    def get_subvolume(self, bounds):
+        return self.parent.get_subvolume(bounds)
 
-                if np.any(self.zoom > 1):
-                    image_subvol = image_subvol.reshape([size[0], self.zoom[0],
-                                                         size[1], self.zoom[1],
-                                                         size[2], self.zoom[2]]).mean(5).mean(3).mean(1)
-                return image_subvol
 
-            def label_populator(bounds):
-                size = bounds[1] - bounds[0]
-                subvol = (self.volume.xyz_coord_to_local(np.multiply(bounds[0], self.zoom)),
-                          self.volume.xyz_coord_to_local(np.multiply(bounds[1], self.zoom)))
-                label_subvol = self.volume.label_data[
-                        subvol[0][0]:subvol[1][0],
-                        subvol[0][1]:subvol[1][1],
-                        subvol[0][2]:subvol[1][2]]
+class PartitionedVolume(VolumeView):
+    """Wrap an existing volume for partitioned access.
 
-                label_subvol = self.volume.xyz_mat_to_local(label_subvol)
-                label_mask = label_subvol == label_id
+    Subvolume accesses to this volume will be offset and clipped to a partition
+    of the wrapped volume.
 
-                if np.any(self.zoom > 1):
-                    label_mask = label_mask.reshape([size[0], self.zoom[0],
-                                                     size[1], self.zoom[1],
-                                                     size[2], self.zoom[2]]).all(5).all(3).all(1)
-                mask_target = np.full_like(label_mask, CONFIG.model.v_false, dtype='float32')
-                mask_target[label_mask] = CONFIG.model.v_true
-                return mask_target
+    Parameters
+    ----------
+    parent : Volume
+        The volume to wrap.
+    partitioning : iterable of int
+        Number of partitions along each axis. Only one axis should be greater
+        than 1.
+    partition_index : iterable of int
+        Index of the partition which this volume will represent.
+    """
+    def __init__(self, parent, partitioning, partition_index):
+        super(PartitionedVolume, self).__init__(
+                parent,
+                parent.image_data,
+                parent.label_data,
+                parent.resolution)
+        self.partitioning = np.asarray(partitioning)
+        self.partition_index = np.asarray(partition_index)
+        partition_size = np.floor_divide(np.array(self.parent.shape), self.partitioning)
+        self.bounds = ((np.multiply(partition_size, self.partition_index)).astype('uint64'),
+                       (np.multiply(partition_size, self.partition_index + 1)).astype('uint64'))
 
-            image_tree = OctreeVolume([64, 64, 24], self.volume_shape_orig, 'float32', populator=image_populator)
-            target_tree = OctreeVolume([64, 64, 24], self.volume_shape_orig, 'float32', populator=label_populator)
+    def xyz_coord_to_local(self, a):
+        return self.parent.xyz_coord_to_local(a) + self.bounds[0]
 
-            f_a = 0.0
+    @property
+    def shape(self):
+        return tuple(self.bounds[1] - self.bounds[0])
 
-            return {'image': image_tree, 'mask_target': target_tree, 'f_a': f_a, 'seed': np.divide(ctr, self.zoom)}
+
+class DownsampledVolume(VolumeView):
+    """Wrap an existing volume for downsampled access.
+
+    Subvolume accesses to this volume will be downsampled, but continue to use
+    the wrapped volume and its data at the original resolution.
+
+    Parameters
+    ----------
+    parent : Volume
+        The volume to wrap.
+    downsample : iterable of int
+        Integral zoom levels to downsample the wrapped volume.
+    """
+    def __init__(self, parent, downsample):
+        self.zoom = np.exp2(downsample).astype('uint64')
+        super(DownsampledVolume, self).__init__(
+                parent,
+                parent.image_data,
+                parent.label_data,
+                np.multiply(parent.resolution, self.zoom))
+
+    def xyz_coord_to_local(self, a):
+        return np.multiply(self.parent.xyz_coord_to_local(a), self.zoom)
+
+    @property
+    def shape(self):
+        return tuple(np.floor_divide(np.array(self.parent.shape), self.zoom))
+
+    def get_subvolume(self, bounds):
+        subvol_size = bounds.stop - bounds.start
+        parent_bounds = SubvolumeBounds(self.xyz_coord_to_local(bounds.start),
+                                        self.xyz_coord_to_local(bounds.stop))
+        subvol = self.parent.get_subvolume(parent_bounds)
+        subvol.image = subvol.image.reshape(
+                [subvol_size[0], self.zoom[0],
+                 subvol_size[1], self.zoom[1],
+                 subvol_size[2], self.zoom[2]]).mean(5).mean(3).mean(1)
+        # Downsample body mask by considering blocks where the majority
+        # of voxels are in the body to be in the body. Alternatives are:
+        # - Conjunction (tends to introduce false splits)
+        # - Disjunction (tends to overdilate and merge)
+        # - Mode label (computationally expensive)
+        subvol.label_mask = subvol.label_mask.reshape(
+                [subvol_size[0], self.zoom[0],
+                 subvol_size[1], self.zoom[1],
+                 subvol_size[2], self.zoom[2]]).mean(5).mean(3).mean(1) > 0.5
+
+        subvol.seed = np.divide(subvol.seed, self.zoom)
+
+        return subvol
+
+
+class SparseWrappedVolume(VolumeView):
+    """Wrap a existing volume for memory cached block sparse access."""
+    def __init__(self, parent, image_leaf_size=None, label_leaf_size=None):
+        if image_leaf_size is None:
+            image_leaf_size = list(CONFIG.model.block_size)
+        if label_leaf_size is None:
+            label_leaf_size = list(CONFIG.model.block_size)
+
+        image_data = OctreeVolume(image_leaf_size,
+                                  (np.zeros(3), parent.image_data.shape),
+                                  parent.image_data.dtype,
+                                  populator=self.image_populator)
+        label_data = OctreeVolume(label_leaf_size,
+                                  (np.zeros(3), parent.label_data.shape),
+                                  parent.label_data.dtype,
+                                  populator=self.label_populator)
+
+        super(SparseWrappedVolume, self).__init__(
+                parent,
+                image_data,
+                label_data,
+                parent.resolution)
+
+    def image_populator(self, bounds):
+        return self.parent.image_data[
+                bounds[0][0]:bounds[1][0],
+                bounds[0][1]:bounds[1][1],
+                bounds[0][2]:bounds[1][2]]
+
+    def label_populator(self, bounds):
+        return self.parent.label_data[
+                bounds[0][0]:bounds[1][0],
+                bounds[0][1]:bounds[1][1],
+                bounds[0][2]:bounds[1][2]]
 
 
 class HDF5Volume(Volume):
+    """A volume backed by data views to HDF5 file arrays.
+
+    Parameters
+    ----------
+    orig_file : str
+        Filename of the HDF5 file to load.
+    image_dataaset : str
+        Full dataset path including groups to the raw image data array.
+    label_dataset : str
+        Full dataset path including groups to the object label data array.
+    """
     @staticmethod
     def from_toml(filename):
         volumes = {}
@@ -213,12 +389,34 @@ class HDF5Volume(Volume):
         return np.transpose(m)
 
     def to_memory_volume(self):
-        return Volume(self.xyz_mat_to_local(self.image_data[:, :, :]),
-                      self.xyz_mat_to_local(self.label_data[:, :, :]),
-                      self.xyz_coord_to_local(self.resolution))
+        return NdarrayVolume(
+                self.xyz_mat_to_local(self.image_data[:, :, :]),
+                self.xyz_mat_to_local(self.label_data[:, :, :]),
+                self.xyz_coord_to_local(self.resolution))
 
 
 class ImageStackVolume(Volume):
+    """A volume for block sparse access to image pyramids over HTTP.
+
+    Parameters
+    ----------
+    bounds : iterable of int
+        Size of the stack at zoom level 0 in pixels.
+    resolution : iterable of float
+        Resolution of the stack at zoom level 0 in nm.
+    tile_width, tile_height : int
+        Size of tiles in pixels
+    format_url : str
+        Format string for building tile URLs from tile parameters.
+    zoom_level : int, optional
+        Zoom level to use for this volume.
+    missing_z : iterable of int, optional
+        Voxel z-indices where data is not available.
+    image_leaf_size : tuple of int or ndarray, optional
+        Size of image octree leaves in voxels. Defaults to 10 stacked tiles.
+    label_leaf_size : tuple of int or ndarray, optional
+        Size of label octree leaves in voxels. Defaults to FFN model FOV.
+    """
     @staticmethod
     def from_catmaid_stack(stack_info, tile_source_parameters):
         # See https://catmaid.readthedocs.io/en/stable/tile_sources.html
@@ -234,22 +432,26 @@ class ImageStackVolume(Volume):
         resolution = np.array(stack_info['resolution'])
         tile_width = int(tile_source_parameters['tile_width'])
         tile_height = int(tile_source_parameters['tile_height'])
-        return ImageStackVolume(bounds, resolution, tile_width, tile_height, format_url, stack_info['broken_slices'])
+        return ImageStackVolume(bounds, resolution, tile_width, tile_height, format_url,
+                                missing_z=stack_info['broken_slices'])
 
-    def __init__(self, bounds, resolution, tile_width, tile_height, tile_format_url,
-                 missing_z=None, image_leaf_size=None, label_leaf_size=None):
-        self.resolution = resolution
+    def __init__(self, bounds, orig_resolution, tile_width, tile_height, tile_format_url,
+                 zoom_level=0, missing_z=None, image_leaf_size=None, label_leaf_size=None):
+        self.orig_bounds = bounds
+        self.orig_resolution = orig_resolution
         self.tile_width = tile_width
         self.tile_height = tile_height
         self.tile_format_url = tile_format_url
+
+        self.zoom_level = int(zoom_level)
         if missing_z is None:
             missing_z = []
+        self.missing_z = frozenset(missing_z)
         if image_leaf_size is None:
             image_leaf_size = [tile_width, tile_height, 10]
         if label_leaf_size is None:
             label_leaf_size = list(CONFIG.model.block_size)
-        self.missing_z = frozenset(missing_z)
-        self.zoom_level = min(CONFIG.volume.downsample[0], CONFIG.volume.downsample[1])
+
         scale = np.exp2(np.array([self.zoom_level, self.zoom_level, 0])).astype('uint64')
 
         data_size = (np.zeros(3), np.divide(bounds, scale).astype('uint64'))
@@ -260,6 +462,28 @@ class ImageStackVolume(Volume):
 
         self.label_data = OctreeVolume(label_leaf_size, data_size, 'uint64')
         self.label_data[:] = 1
+
+    @property
+    def resolution(self):
+        return self.orig_resolution * np.exp2([self.zoom_level, self.zoom_level, 0])
+
+    def downsample(self, resolution):
+        downsample = self._get_downsample_from_resolution(resolution)
+        zoom_level = np.min(downsample[0:2])
+        if zoom_level > 0:
+            return ImageStackVolume(
+                    self.orig_bounds,
+                    self.orig_resolution,
+                    self.tile_width,
+                    self.tile_height,
+                    self.tile_format_url,
+                    zoom_level=self.zoom_level + zoom_level,
+                    missing_z=self.missing_z,
+                    image_leaf_size=self.image_data.leaf_size,
+                    label_leaf_size=self.label_data.leaf_size).downsample(resolution)
+        if np.all(np.equal(downsample, 0)):
+            return self
+        return DownsampledVolume(self, downsample)
 
     def image_populator(self, bounds):
         image_subvol = np.zeros(tuple(bounds[1] - bounds[0]), dtype='uint8')
@@ -294,33 +518,22 @@ class ImageStackVolume(Volume):
 
         return image_subvol
 
-    class SubvolumeGenerator(Volume.SubvolumeGenerator):
-        def __init__(self, volume, size_zoom, downsample, partition=None):
-            adjusted_downsample = downsample.copy()
-            if volume.zoom_level is not None:
-                adjusted_downsample[0:2] -= volume.zoom_level
-            super(ImageStackVolume.SubvolumeGenerator, self).__init__(volume, size_zoom, adjusted_downsample, partition)
 
-    class SparseSubvolumeGenerator(Volume.SubvolumeGenerator):
-        def __init__(self, volume, downsample, partition=None):
-            adjusted_downsample = downsample.copy()
-            if volume.zoom_level is not None:
-                adjusted_downsample[0:2] -= volume.zoom_level
-            super(ImageStackVolume.SparseSubvolumeGenerator, self).__init__(volume,
-                                                                            CONFIG.model.block_size,
-                                                                            adjusted_downsample,
-                                                                            partition)
-            self.volume_shape_orig = (np.zeros(3, dtype='uint64'), np.array(self.volume.image_data.shape))
+def static_training_generator(subvolumes, batch_size, training_size, f_a_bins=None):
+    """Generate Keras non-moving training tuples from a subvolume generator.
 
-        def next(self):
-            ctr = np.array([self.random.randint(self.ctr_min[n], self.ctr_max[n]) for n in range(3)]).astype('uint64')
-
-            f_a = 0.0
-
-            return {'image': self.volume.image_data, 'mask_target': self.volume.label_data, 'f_a': f_a, 'seed': ctr}
-
-
-def simple_training_generator(subvolumes, batch_size, training_size, f_a_bins=None):
+    Parameters
+    ----------
+    subvolumes : generator of Subvolume
+    batch_size : int
+    training_size : int
+        Total size in samples of a training epoch, after which generators will
+        be reset.
+    f_a_bins : sequence of float, optional
+        Bin boundaries for filling fractions. If provided, sample loss will be
+        weighted to increase loss contribution from less-frequent f_a bins.
+        Otherwise all samples are weighted equally.
+    """
     mask_input = np.full(np.append(subvolumes.shape, (1,)), CONFIG.model.v_false, dtype='float32')
     mask_input[tuple(np.array(mask_input.shape) / 2)] = CONFIG.model.v_true
     mask_input = np.tile(mask_input, (batch_size, 1, 1, 1, 1))
@@ -341,9 +554,9 @@ def simple_training_generator(subvolumes, batch_size, training_size, f_a_bins=No
         for batch_ind in range(0, batch_size):
             subvolume = subvolumes.next()
 
-            batch_image_input[batch_ind] = pad_dims(subvolume['image'])
-            batch_mask_target[batch_ind] = pad_dims(subvolume['mask_target'])
-            f_as[batch_ind] = subvolume['f_a']
+            f_as[batch_ind] = subvolume.f_a()
+            batch_image_input[batch_ind] = pad_dims(subvolume.image)
+            batch_mask_target[batch_ind] = pad_dims(mask_to_output_target(subvolume.label_mask))
 
         batch_image_input = np.concatenate(batch_image_input)
         batch_mask_target = np.concatenate(batch_mask_target)
@@ -367,6 +580,28 @@ def simple_training_generator(subvolumes, batch_size, training_size, f_a_bins=No
 
 def moving_training_generator(subvolumes, batch_size, training_size, callback_kludge,
                               f_a_bins=None):
+    """Generate Keras moving FOV training tuples from a subvolume generator.
+
+    Unlike ``static_training_generator``, this generator expects a subvolume
+    generator that will provide subvolumes larger than the network FOV, and
+    will allow the output of training at one batch to generate moves within
+    these subvolumes to produce training data for the subsequent batch.
+
+    Parameters
+    ----------
+    subvolumes : generator of Subvolume
+    batch_size : int
+    training_size : int
+        Total size in samples of a training epoch, after which generators will
+        be reset.
+    callback_kludge : dict
+        A kludge object to allow this generator to provide inputs and receive
+        outputs from the network. See ``diluvian.PredictionCopy``.
+    f_a_bins : sequence of float, optional
+        Bin boundaries for filling fractions. If provided, sample loss will be
+        weighted to increase loss contribution from less-frequent f_a bins.
+        Otherwise all samples are weighted equally.
+    """
     regions = [None] * batch_size
     region_pos = [None] * batch_size
     move_counts = [0] * batch_size
@@ -412,11 +647,11 @@ def moving_training_generator(subvolumes, batch_size, training_size, callback_kl
 
             block_data = region.get_next_block()
 
+            f_as[r] = subvolume.f_a()
             batch_image_input[r] = pad_dims(block_data['image'])
             batch_mask_input[r] = pad_dims(block_data['mask'])
             batch_mask_target[r] = pad_dims(block_data['target'])
             region_pos[r] = block_data['position']
-            f_as[r] = subvolume['f_a']
 
         batch_image_input = np.concatenate(batch_image_input)
         batch_mask_input = np.concatenate(batch_mask_input)
@@ -457,10 +692,10 @@ def has_uniform_seed_margin(subvolume, seed_margin=20.0):
     """
     margin = np.ceil(np.reciprocal(np.array(CONFIG.volume.resolution), dtype='float64') * seed_margin).astype('uint64')
 
-    mask_target = subvolume['mask_target']
-    ctr = subvolume['seed']
+    mask_target = subvolume.label_mask
+    ctr = subvolume.seed
     seed_fov = (ctr - margin, ctr + margin + 1)
     seed_region = mask_target[seed_fov[0][0]:seed_fov[1][0],
                               seed_fov[0][1]:seed_fov[1][1],
                               seed_fov[0][2]:seed_fov[1][2]]
-    return np.unique(seed_region).size == 1
+    return np.all(seed_region)

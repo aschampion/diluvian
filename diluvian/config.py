@@ -27,7 +27,6 @@ class BaseConfig:
 
 class VolumeConfig(BaseConfig):
     def __init__(self, settings):
-        self.downsample = np.array(settings.get('downsample', [0, 0, 0]))
         self.resolution = np.array(settings.get('resolution', [1, 1, 1]))
 
 

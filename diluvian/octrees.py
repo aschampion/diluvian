@@ -29,7 +29,8 @@ class OctreeVolume(object):
 
     def __init__(self, leaf_size, bounds, dtype, populator=None):
         self.leaf_size = np.asarray(leaf_size).astype('uint64')
-        self.bounds = (bounds[0].astype('uint64'), bounds[1].astype('uint64'))
+        self.bounds = (np.asarray(bounds[0]).astype('uint64'),
+                       np.asarray(bounds[1]).astype('uint64'))
         self.dtype = np.dtype(dtype)
         self.populator = populator
         ceil_bounds = self.leaf_size*np.exp2(np.ceil(np.log2((self.bounds[1] - self.bounds[0]) /
@@ -42,10 +43,10 @@ class OctreeVolume(object):
 
     def get_checked_np_key(self, key):
         # Special exception for [:] for uniform assignment.
-        if len(key) == 1 and isinstance(key, slice) and key.start is None and key.stop is None:
+        if isinstance(key, slice) and key.start is None and key.stop is None:
             return self.bounds
 
-        if len(key) != 3:
+        if not hasattr(key, '__len__') or len(key) != 3:
             raise IndexError('Octrees may only be indexed in 3 dimensions')
 
         # Convert keys to two numpy arrays for ease.

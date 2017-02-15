@@ -13,6 +13,7 @@ import numpy as np
 
 from diluvian import octrees
 from diluvian import regions
+from diluvian import volumes
 from diluvian.config import CONFIG
 
 
@@ -61,3 +62,32 @@ def test_region_moves():
     moves = region.get_moves(mock_mask)
     for move in moves:
         np.testing.assert_allclose(expected_moves[tuple(move['move'])], move['v'])
+
+
+def test_volume_transforms():
+    mock_image = np.arange(64 * 64 * 64, dtype='uint8').reshape((64, 64, 64))
+    mock_label = np.zeros((64, 64, 64), dtype='uint64')
+
+    v = volumes.Volume(mock_image, mock_label, (1, 1, 1))
+    pv = v.partition([1, 1, 2], [0, 0, 1])
+    dpv = pv.downsample((4, 4, 1))
+
+    np.testing.assert_array_equal(dpv.xyz_coord_to_local(np.array([2, 2, 2])), np.array([8, 8, 34]))
+
+    svb = volumes.SubvolumeBounds(np.array((0, 0, 32), dtype='uint64'),
+                                  np.array((4, 4, 33), dtype='uint64'))
+    sv = v.get_subvolume(svb)
+
+    dpsvb = volumes.SubvolumeBounds(np.array((0, 0, 0), dtype='uint64'),
+                                    np.array((1, 1, 1), dtype='uint64'))
+    dpsv = dpv.get_subvolume(dpsvb)
+
+    np.testing.assert_array_equal(dpsv.image, sv.image.reshape((1, 4, 1, 4, 1, 1)).mean(5).mean(3).mean(1))
+
+
+def test_volume_identity_downsample_returns_self():
+    resolution = (27, 185, 90)
+    v = volumes.Volume(np.zeros((1, 1, 1)), np.zeros((1, 1, 1)), resolution)
+    dv = v.downsample(resolution)
+
+    assert v == dv
