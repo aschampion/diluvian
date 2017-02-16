@@ -193,7 +193,7 @@ def train_network(model_file=None, volumes=None,
     history = ffn.fit_generator(
             training_data,
             samples_per_epoch=CONFIG.training.training_size * num_volumes,
-            nb_epoch=CONFIG.training.simple_train_epochs,
+            nb_epoch=CONFIG.training.static_train_epochs,
             validation_data=validation_data,
             nb_val_samples=CONFIG.training.validation_size * num_volumes)
 
@@ -218,7 +218,7 @@ def train_network(model_file=None, volumes=None,
             training_data,
             samples_per_epoch=CONFIG.training.training_size * num_volumes,
             nb_epoch=CONFIG.training.total_epochs,
-            initial_epoch=CONFIG.training.simple_train_epochs,
+            initial_epoch=CONFIG.training.static_train_epochs,
             max_q_size=num_volumes,
             nb_worker=1,
             callbacks=callbacks,

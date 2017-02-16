@@ -72,7 +72,7 @@ def _make_main_parser():
 
     check_config_parser = commandparsers.add_parser('check-config', parents=[common_parser],
                                                     help='Check a configuration value.')
-    check_config_parser.add_argument('config_property',
+    check_config_parser.add_argument('config_property', default=None, nargs='?',
                                      help='Name of the property to show, e.g., `training.batch_size`.')
 
     return parser
@@ -116,10 +116,11 @@ def main():
                                multi_gpu_model_kludge=args.multi_gpu_model_kludge)
 
     elif args.command == 'check-config':
-        properties = args.config_property.split('.')
         prop = CONFIG
-        for p in properties:
-            prop = getattr(prop, p)
+        if args.config_property is not None:
+            properties = args.config_property.split('.')
+            for p in properties:
+                prop = getattr(prop, p)
         print prop
 
 
