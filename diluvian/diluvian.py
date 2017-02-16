@@ -82,7 +82,7 @@ def add_convolution_module(model):
 def compile_network(model):
     optimizer_klass = getattr(keras.optimizers, CONFIG.optimizer.klass)
     optimizer_kwargs = inspect.getargspec(optimizer_klass.__init__)[0]
-    optimizer_kwargs = {k: v for k, v in CONFIG.optimizer.kwargs.iteritems() if k in optimizer_kwargs}
+    optimizer_kwargs = {k: v for k, v in CONFIG.optimizer.__dict__.iteritems() if k in optimizer_kwargs}
     optimizer = optimizer_klass(**optimizer_kwargs)
     model.compile(loss='binary_crossentropy',
                   optimizer=optimizer)

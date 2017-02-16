@@ -16,7 +16,7 @@ convolution_filters = 32
 output_activation = "sigmoid"
 
 [optimizer]
-class = "SGD"
+klass = "SGD"
 lr = 0.001
 momentum = 0.5
 nesterov = true
@@ -26,7 +26,7 @@ gpu_batch_size = 32
 num_gpus = 1
 training_size = 256
 validation_size = 32
-simple_train_epochs = 1
+static_train_epochs = 1
 total_epochs = 2
 # fill_factor_bins = [0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.075,
 #                     0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]

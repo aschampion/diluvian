@@ -12,7 +12,12 @@ import numpy as np
 import pytoml as toml
 
 
-class BaseConfig:
+class BaseConfig(object):
+    """Base class for configuration objects.
+
+    String representation yields TOML that should parse back to a dictionary
+    that will initialize the same configuration object.
+    """
     def __str__(self):
         sanitized = {}
         for k, v in self.__dict__.iteritems():
@@ -26,11 +31,37 @@ class BaseConfig:
 
 
 class VolumeConfig(BaseConfig):
+    """Configuration for the use of volumes.
+
+    Attributes
+    ----------
+    resolution : sequence or ndarray of float
+        Resolution to which volumes will be downsampled before processing.
+    """
     def __init__(self, settings):
         self.resolution = np.array(settings.get('resolution', [1, 1, 1]))
 
 
 class ModelConfig(BaseConfig):
+    """Configuration for non-network aspects of the flood filling model.
+
+    Attributes
+    ----------
+    block_size : sequence or ndarray of int
+        Field of view size in voxels for each flood filling move.
+    v_true, v_false : float
+        Soft target values for in-object and out-of-object mask voxels,
+        respectively.
+    t_move : float
+        Threshold mask probability in the move check plane to queue a move
+        to that position.
+    move_check_thickness : int
+        Thickness of move check plane in voxels. Setting this greater than 1
+        is useful to make moves more robust even if the move grid aligns with
+        missing sections or image artifacts.
+    training_fov : sequence or ndarray of int, optional
+        Size of the subvolumes used during moving training.
+    """
     def __init__(self, settings):
         self.block_size = np.array(settings.get('block_size', [33, 33, 17]))
         self.v_true = float(settings.get('v_true', 0.95))
@@ -41,6 +72,25 @@ class ModelConfig(BaseConfig):
 
 
 class NetworkConfig(BaseConfig):
+    """Configuration for the flood filling network architecture.
+
+    Attributes
+    ----------
+    factory : str
+        Module and function name for a factory method for creating the flood
+        filling network. This allows a custom architecture to be provided
+        without needing to modify diluvian.
+    num_modules : int
+        Number of convolution modules to use, each module consisting of a skip
+        link in parallel with two convolution layers.
+    convolution_dim : sequence or ndarray of int
+        Size of the convolution for each layer.
+    convolution_filters : int
+        Number of convolution filters for each layer.
+    output_activation : str
+        Name of the Keras activation function to use for the final network
+        output.
+    """
     def __init__(self, settings):
         self.factory = str(settings.get('factory'))
         self.num_modules = int(settings.get('num_modules', 8))
@@ -50,19 +100,64 @@ class NetworkConfig(BaseConfig):
 
 
 class OptimizerConfig(BaseConfig):
+    """Configuration for the network optimizer.
+
+    Any settings dict entries passed to this initializer will be added as
+    configuration attributes and passed to the optimizer initializer as keyword
+    arguments.
+
+    Attributes
+    ----------
+    klass : str
+        Class name of the Keras optimizer to use.
+    """
     def __init__(self, settings):
-        self.klass = str(settings.get('class', 'SGD'))
-        self.kwargs = {k: v for k, v in settings.iteritems() if k != 'class'}
+        for k, v in settings.iteritems():
+            if k != 'klass':
+                setattr(self, k, v)
+        self.klass = str(settings.get('klass', 'SGD'))
 
 
 class TrainingConfig(BaseConfig):
+    """Configuration for model training.
+
+    Attributes
+    ----------
+    num_gpus : int
+        Number of GPUs to use for data-parallelism.
+    gpu_batch_size : int
+        Per-GPU batch size. The effective batch size will be this times
+        ``num_gpus``.
+    training_size : int
+        Number of samples to use for training **from each volume**.
+    validation_size : int
+        Number of samples to use for validation **from each volume**.
+    static_train_epochs : int
+        Number of epochs at the beginning of training where the model will not
+        be allowed to move the FOV.
+    total_epochs : int
+        Maximum number of training epochs.
+    fill_factor_bins : sequence of float
+        Bin boundaries for filling fractions. If provided, sample loss will be
+        weighted to increase loss contribution from less-frequent bins.
+        Otherwise all samples are weighted equally.
+    partitions : sequence or ndarray of int
+        Number of volume partitions along each axis. Only one axis should be
+        greater than 1.
+    training_partition, validation_partition : sequence or ndarray of int
+        Index of the partitions to use for training and validation,
+        respectively.
+    patience : int
+        Number of epochs after the last minimal validation loss to terminate
+        training.
+    """
     def __init__(self, settings):
         self.num_gpus = int(settings.get('num_gpus', 1))
         self.gpu_batch_size = int(settings.get('gpu_batch_size', 8))
         self.batch_size = self.num_gpus * self.gpu_batch_size
         self.training_size = int(settings.get('training_size', 256))
         self.validation_size = int(settings.get('validation_size', 256))
-        self.simple_train_epochs = int(settings.get('simple_train_epochs', 10))
+        self.static_train_epochs = int(settings.get('static_train_epochs', 10))
         self.total_epochs = int(settings.get('total_epochs', 100))
         self.fill_factor_bins = settings.get('fill_factor_bins', None)
         if self.fill_factor_bins is not None:
@@ -73,8 +168,19 @@ class TrainingConfig(BaseConfig):
         self.patience = int(np.array(settings.get('patience', 10)))
 
 
-class Config(BaseConfig):
+class Config(object):
+    """A complete collection of configuration objects."""
     def from_toml(self, *filenames):
+        """Reinitializes this Config from a list of TOML configuration files.
+
+        Existing settings are discarded. When multiple files are provided,
+        configuration is overridden by later files in the list.
+
+        Parameters
+        ----------
+        filenames : interable of str
+            Filenames of TOML configuration files to load.
+        """
         settings = []
         for filename in filenames:
             with open(filename, 'rb') as fin:
@@ -99,6 +205,17 @@ class Config(BaseConfig):
         self.network = NetworkConfig(settings.get('network', {}))
         self.optimizer = OptimizerConfig(settings.get('optimizer', {}))
         self.training = TrainingConfig(settings.get('training', {}))
+
+    def __str__(self):
+        sanitized = {}
+        for n, c in self.__dict__.iteritems():
+            sanitized[n] = {}
+            for k, v in c.__dict__.iteritems():
+                if isinstance(v, np.ndarray):
+                    sanitized[n][k] = v.tolist()
+                else:
+                    sanitized[n][k] = v
+        return toml.dumps(sanitized)
 
 
 CONFIG = Config()
