@@ -1,5 +1,5 @@
-Welcome to diluvian's documentation!
-======================================
+diluvian - flood filling networks
+=================================
 
 Contents:
 
@@ -12,6 +12,7 @@ Contents:
    contributing
    authors
    history
+
 
 Indices and tables
 ==================

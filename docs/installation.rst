@@ -4,6 +4,17 @@
 Installation
 ============
 
+Diluvian requires CUDA. For help installing CUDA, follow the
+`TensorFlow installation <https://www.tensorflow.org/install/>`_ instructions
+for GPU support.
+Note that you do not actually need to install TensorFlow itself, as diluvian
+will install the version of ``tensorflow-gpu`` it requires during setup.
+
+You should install diluvian
+`in a virtualenv <http://docs.python-guide.org/en/latest/dev/virtualenvs/>`_
+or similar isolated environment. All other documentation here assumes a
+a virtualenv has been created and is active.
+
 
 Stable release
 --------------
@@ -12,9 +23,9 @@ To install diluvian, run this command in your terminal:
 
 .. code-block:: console
 
-    $ pip install diluvian
+    pip install diluvian
 
-This is the preferred method to install diluvian, as it will always install the most recent stable release. 
+This is the preferred method to install diluvian, as it will always install the most recent stable release.
 
 If you don't have `pip`_ installed, this `Python installation guide`_ can guide
 you through the process.
@@ -32,19 +43,19 @@ You can either clone the public repository:
 
 .. code-block:: console
 
-    $ git clone git://github.com/aschampion/diluvian
+    git clone git://github.com/aschampion/diluvian
 
 Or download the `tarball`_:
 
 .. code-block:: console
 
-    $ curl  -OL https://github.com/aschampion/diluvian/tarball/master
+    curl  -OL https://github.com/aschampion/diluvian/tarball/master
 
 Once you have a copy of the source, you can install it with:
 
 .. code-block:: console
 
-    $ python setup.py install
+    python setup.py install
 
 
 .. _Github repo: https://github.com/aschampion/diluvian

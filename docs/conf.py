@@ -42,6 +42,7 @@ import diluvian
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
 extensions = ['sphinx.ext.autodoc',
               'sphinx.ext.autosummary',
+              'sphinx.ext.mathjax',
               'sphinx.ext.viewcode',
               'sphinxarg.ext',
               'numpydoc',]
@@ -262,7 +263,7 @@ texinfo_documents = [
      u'diluvian Documentation',
      u'Andrew S. Champion',
      'diluvian',
-     'One line description of project.',
+     'Flood filling networks for segmenting electron microscopy of neural tissue.',
      'Miscellaneous'),
 ]
 
