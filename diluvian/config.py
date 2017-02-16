@@ -170,23 +170,6 @@ class TrainingConfig(BaseConfig):
 
 class Config(object):
     """A complete collection of configuration objects."""
-    def from_toml(self, *filenames):
-        """Reinitializes this Config from a list of TOML configuration files.
-
-        Existing settings are discarded. When multiple files are provided,
-        configuration is overridden by later files in the list.
-
-        Parameters
-        ----------
-        filenames : interable of str
-            Filenames of TOML configuration files to load.
-        """
-        settings = []
-        for filename in filenames:
-            with open(filename, 'rb') as fin:
-                settings.append(toml.load(fin))
-
-        return self.__init__(settings)
 
     def __init__(self, settings_collection=None):
         if settings_collection is not None:
@@ -216,6 +199,28 @@ class Config(object):
                 else:
                     sanitized[n][k] = v
         return toml.dumps(sanitized)
+
+    def from_toml(self, *filenames):
+        """Reinitializes this Config from a list of TOML configuration files.
+
+        Existing settings are discarded. When multiple files are provided,
+        configuration is overridden by later files in the list.
+
+        Parameters
+        ----------
+        filenames : interable of str
+            Filenames of TOML configuration files to load.
+        """
+        settings = []
+        for filename in filenames:
+            with open(filename, 'rb') as fin:
+                settings.append(toml.load(fin))
+
+        return self.__init__(settings)
+
+    def to_toml(self, filename):
+        with open(filename, 'wb') as tomlfile:
+            tomlfile.write(str(self))
 
 
 CONFIG = Config()

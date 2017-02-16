@@ -163,6 +163,8 @@ def train_network(model_file=None, volumes=None,
     if volumes is None:
         raise ValueError('Volumes must be provided.')
 
+    CONFIG.to_toml(model_output_filebase + '.toml')
+
     f_a_bins = CONFIG.training.fill_factor_bins
 
     num_volumes = len(volumes)
