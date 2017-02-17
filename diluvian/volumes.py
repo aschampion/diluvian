@@ -2,7 +2,6 @@
 """Volumes of raw image and labeled object data."""
 
 
-import itertools
 import logging
 
 import h5py
@@ -22,16 +21,18 @@ from .util import pad_dims
 
 class SubvolumeBounds(object):
     """Sufficient parameters to extract a subvolume from a volume."""
-    __slots__ = ('start', 'stop', 'label_id',)
+    __slots__ = ('start', 'stop', 'seed', 'label_id',)
 
-    def __init__(self, start, stop, label_id=None):
+    def __init__(self, start=None, stop=None, seed=None, label_id=None):
+        assert (start is not None and stop is not None) or seed is not None, "Bounds or seed must be provided"
         self.start = start
         self.stop = stop
+        self.seed = seed
         self.label_id = label_id
 
 
 class Subvolume(object):
-    """A subvolume of image data and a ground truth object mask."""
+    """A subvolume of image data and an optional ground truth object mask."""
     __slots__ = ('image', 'label_mask', 'seed', 'label_id',)
 
     def __init__(self, image, label_mask, seed, label_id):
@@ -49,6 +50,34 @@ class Subvolume(object):
             Fraction of the subvolume voxels in the object mask.
         """
         return np.count_nonzero(self.label_mask) / float(self.label_mask.size)
+
+    def has_uniform_seed_margin(self, seed_margin=20.0):
+        """Test if a subvolume has a margin of uniform label around its seed.
+
+        Parameters
+        ----------
+        seed_margin : float, optional
+            The minimum acceptable margin of uniform target label around the seed
+            voxel (in nm, default 20.0).
+
+        Returns
+        -------
+        bool
+            True if the rectangular margin around the seed position is uniform.
+        """
+        margin = np.ceil(np.reciprocal(np.array(CONFIG.volume.resolution),
+                                       dtype='float64') * seed_margin).astype('uint64')
+
+        mask_target = self.label_mask
+        # If data is unlabeled, can not test so always succeed.
+        if mask_target is None:
+            return True
+        ctr = self.seed
+        seed_fov = (ctr - margin, ctr + margin + 1)
+        seed_region = mask_target[seed_fov[0][0]:seed_fov[1][0],
+                                  seed_fov[0][1]:seed_fov[1][1],
+                                  seed_fov[0][2]:seed_fov[1][2]]
+        return np.all(seed_region)
 
 
 class SubvolumeGenerator(object):
@@ -118,11 +147,6 @@ class Volume(object):
     def sparse_wrapper(self, *args):
         return SparseWrappedVolume(self, *args)
 
-    def region_generator(self, subvolume_size):
-        subvolumes = self.subvolume_generator(size=subvolume_size)
-        subvolumes = itertools.ifilter(has_uniform_seed_margin, subvolumes)
-        return itertools.imap(DenseRegion.from_subvolume, subvolumes)
-
     def subvolume_generator(self, bounds_generator=None, size=None):
         if bounds_generator is None:
             if size is None:
@@ -131,6 +155,9 @@ class Volume(object):
         return SubvolumeGenerator(self, bounds_generator)
 
     def get_subvolume(self, bounds):
+        if bounds.start is None or bounds.stop is None:
+            raise ValueError('This volume does not support sparse subvolume access.')
+
         image_subvol = self.image_data[
                 bounds.start[0]:bounds.stop[0],
                 bounds.start[1]:bounds.stop[1],
@@ -140,15 +167,22 @@ class Volume(object):
                 bounds.start[1]:bounds.stop[1],
                 bounds.start[2]:bounds.stop[2]]
 
-        image_subvol = self.xyz_mat_to_local(image_subvol.astype('float32')) / 256.0
+        image_subvol = self.xyz_mat_to_local(image_subvol)
+        if np.issubdtype(image_subvol.dtype, np.integer):
+            image_subvol = image_subvol.astype('float32') / 256.0
+
         label_subvol = self.xyz_mat_to_local(label_subvol)
-        subvol_ctr = np.array(label_subvol.shape, dtype='uint64') / 2
+
+        seed = bounds.seed
+        if seed is None:
+            seed = np.array(label_subvol.shape, dtype='uint64') / 2
+
         label_id = bounds.label_id
         if label_id is None:
-            label_id = label_subvol[tuple(subvol_ctr)]
+            label_id = label_subvol[tuple(seed)]
         label_mask = label_subvol == label_id
 
-        return Subvolume(image_subvol, label_mask, subvol_ctr, label_id)
+        return Subvolume(image_subvol, label_mask, seed, label_id)
 
     class SubvolumeBoundsGenerator(object):
         def __init__(self, volume, size):
@@ -176,6 +210,9 @@ class Volume(object):
                 # seed region uniformity filtering, see has_uniform_seed_margin.
                 ctr = np.array([self.random.randint(self.ctr_min[n], self.ctr_max[n])
                                 for n in range(3)]).astype('uint64')
+                if self.volume.label_data is None:
+                    label_id = None
+                    break
                 seed_min = self.volume.xyz_coord_to_local(ctr)
                 seed_max = self.volume.xyz_coord_to_local(ctr + 1)
                 label_ids = self.volume.label_data[
@@ -436,7 +473,7 @@ class ImageStackVolume(Volume):
                                 missing_z=stack_info['broken_slices'])
 
     def __init__(self, bounds, orig_resolution, tile_width, tile_height, tile_format_url,
-                 zoom_level=0, missing_z=None, image_leaf_size=None, label_leaf_size=None):
+                 zoom_level=0, missing_z=None, image_leaf_size=None):
         self.orig_bounds = bounds
         self.orig_resolution = orig_resolution
         self.tile_width = tile_width
@@ -449,19 +486,16 @@ class ImageStackVolume(Volume):
         self.missing_z = frozenset(missing_z)
         if image_leaf_size is None:
             image_leaf_size = [tile_width, tile_height, 10]
-        if label_leaf_size is None:
-            label_leaf_size = list(CONFIG.model.block_size)
 
         scale = np.exp2(np.array([self.zoom_level, self.zoom_level, 0])).astype('uint64')
 
         data_size = (np.zeros(3), np.divide(bounds, scale).astype('uint64'))
         self.image_data = OctreeVolume(image_leaf_size,
                                        data_size,
-                                       'uint8',
+                                       'float32',
                                        populator=self.image_populator)
 
-        self.label_data = OctreeVolume(label_leaf_size, data_size, 'uint64')
-        self.label_data[:] = 1
+        self.label_data = None
 
     @property
     def resolution(self):
@@ -479,16 +513,45 @@ class ImageStackVolume(Volume):
                     self.tile_format_url,
                     zoom_level=self.zoom_level + zoom_level,
                     missing_z=self.missing_z,
-                    image_leaf_size=self.image_data.leaf_size,
-                    label_leaf_size=self.label_data.leaf_size).downsample(resolution)
+                    image_leaf_size=self.image_data.leaf_size).downsample(resolution)
         if np.all(np.equal(downsample, 0)):
             return self
         return DownsampledVolume(self, downsample)
 
+    def subvolume_generator(self, sparse_margin=None, **kwargs):
+        if sparse_margin is not None:
+            if kwargs:
+                raise ValueError('sparse_margin can not be combined with other arguments.')
+            bounds_generator = self.SparseSubvolumeBoundsGenerator(self, sparse_margin)
+            return SubvolumeGenerator(self, bounds_generator)
+        return super(ImageStackVolume, self).subvolume_generator(**kwargs)
+
+    def get_subvolume(self, bounds):
+        if bounds.start is None or bounds.stop is None:
+            image_subvol = self.image_data
+            label_subvol = self.label_data
+        else:
+            image_subvol = self.image_data[
+                    bounds.start[0]:bounds.stop[0],
+                    bounds.start[1]:bounds.stop[1],
+                    bounds.start[2]:bounds.stop[2]]
+            label_subvol = None
+
+        if np.issubdtype(image_subvol.dtype, np.integer):
+            raise ValueError('Sparse volume access does not support image data coercion.')
+
+        seed = bounds.seed
+        if seed is None:
+            seed = np.array(image_subvol.shape, dtype='uint64') / 2
+
+        return Subvolume(image_subvol, label_subvol, seed, bounds.label_id)
+
     def image_populator(self, bounds):
-        image_subvol = np.zeros(tuple(bounds[1] - bounds[0]), dtype='uint8')
-        col_range = map(int, (math.floor(bounds[0][0]/self.tile_width), math.ceil(bounds[1][0]/self.tile_width)))
-        row_range = map(int, (math.floor(bounds[0][1]/self.tile_height), math.ceil(bounds[1][1]/self.tile_height)))
+        image_subvol = np.zeros(tuple(bounds[1] - bounds[0]), dtype='float32')
+        col_range = map(int, (math.floor(bounds[0][0]/self.tile_width),
+                              math.ceil(bounds[1][0]/self.tile_width)))
+        row_range = map(int, (math.floor(bounds[0][1]/self.tile_height),
+                              math.ceil(bounds[1][1]/self.tile_height)))
         tile_size = np.array([self.tile_width, self.tile_height, 1]).astype('int64')
         for z in xrange(bounds[0][2], bounds[1][2]):
             if z in self.missing_z:
@@ -498,10 +561,10 @@ class ImageStackVolume(Volume):
                 for c in xrange(*col_range):
                     url = self.tile_format_url.format(zoom_level=self.zoom_level, z=z, row=r, col=c)
                     try:
-                        im = np.transpose(np.array(Image.open(requests.get(url, stream=True).raw)))
+                        im = np.transpose(np.array(Image.open(requests.get(url, stream=True).raw))) / 256.0
                     except IOError:
                         logging.debug('Failed to load tile: %s', url)
-                        im = np.full((self.tile_width, self.tile_height), 0, dtype='uint8')
+                        im = np.full((self.tile_width, self.tile_height), 0, dtype='float32')
                     tile_coord = np.array([c, r, z]).astype('int64')
                     tile_loc = np.multiply(tile_coord, tile_size)
 
@@ -517,6 +580,29 @@ class ImageStackVolume(Volume):
                                                     tile_sub[0][1]:tile_sub[1][1]]
 
         return image_subvol
+
+    class SparseSubvolumeBoundsGenerator(object):
+        def __init__(self, volume, margin):
+            self.volume = volume
+            self.margin = np.asarray(margin).astype('uint64')
+            self.ctr_min = self.margin
+            self.ctr_max = (np.array(self.volume.shape) - self.margin - 1).astype('uint64')
+            self.random = np.random.RandomState(0)
+
+        @property
+        def shape(self):
+            return self.size
+
+        def __iter__(self):
+            return self
+
+        def reset(self):
+            self.random.seed(0)
+
+        def next(self):
+            ctr = np.array([self.random.randint(self.ctr_min[n], self.ctr_max[n])
+                            for n in range(3)]).astype('uint64')
+            return SubvolumeBounds(seed=ctr)
 
 
 def static_training_generator(subvolumes, batch_size, training_size, f_a_bins=None):
@@ -674,28 +760,3 @@ def moving_training_generator(subvolumes, batch_size, training_size, callback_kl
             yield (inputs,
                    [batch_mask_target],
                    sample_weights)
-
-
-def has_uniform_seed_margin(subvolume, seed_margin=20.0):
-    """Test if a subvolume has a margin of uniform label around its seed.
-
-    Parameters
-    ----------
-    seed_margin : float, optional
-        The minimum acceptable margin of uniform target label around the seed
-        voxel (in nm, default 20.0).
-
-    Returns
-    -------
-    bool
-        True if the rectangular margin around the seed position is uniform.
-    """
-    margin = np.ceil(np.reciprocal(np.array(CONFIG.volume.resolution), dtype='float64') * seed_margin).astype('uint64')
-
-    mask_target = subvolume.label_mask
-    ctr = subvolume.seed
-    seed_fov = (ctr - margin, ctr + margin + 1)
-    seed_region = mask_target[seed_fov[0][0]:seed_fov[1][0],
-                              seed_fov[0][1]:seed_fov[1][1],
-                              seed_fov[0][2]:seed_fov[1][2]]
-    return np.all(seed_region)

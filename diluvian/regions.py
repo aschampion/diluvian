@@ -17,9 +17,18 @@ from .util import get_color_shader, pad_dims, WrappedViewer
 class DenseRegion(object):
     @staticmethod
     def from_subvolume(subvolume):
+        if subvolume.label_mask is not None and np.issubdtype(subvolume.label_mask.dtype, np.bool):
+            target = mask_to_output_target(subvolume.label_mask)
+        else:
+            target = subvolume.label_mask
         return DenseRegion(subvolume.image,
-                           target=mask_to_output_target(subvolume.label_mask),
+                           target=target,
                            seed_vox=subvolume.seed)
+
+    @staticmethod
+    def from_subvolume_generator(subvolumes):
+        subvolumes = itertools.ifilter(lambda s: s.has_uniform_seed_margin, subvolumes)
+        return itertools.imap(DenseRegion.from_subvolume, subvolumes)
 
     def __init__(self, image, target=None, seed_vox=None, mask=None):
         self.MOVE_DELTA = (CONFIG.model.block_size - 1) / 4
@@ -31,7 +40,7 @@ class DenseRegion(object):
         self.move_check_thickness = CONFIG.model.move_check_thickness
         if mask is None:
             if isinstance(self.image, OctreeVolume):
-                self.mask = OctreeVolume(self.image.leaf_size, self.bounds, 'float32')
+                self.mask = OctreeVolume(self.image.leaf_size, (np.zeros(3), self.bounds), 'float32')
             else:
                 self.mask = np.empty(self.bounds, dtype='float32')
             self.mask[:] = np.NAN
@@ -331,9 +340,10 @@ class DenseRegion(object):
                                    voxel_coordinates=self.pos_to_vox(self.seed_pos))
             viewer.add(np.transpose(self.image),
                        name='Image')
-            viewer.add(np.transpose(self.target),
-                       name='Mask Target',
-                       shader=get_color_shader(0))
+            if self.target is not None:
+                viewer.add(np.transpose(self.target),
+                           name='Mask Target',
+                           shader=get_color_shader(0))
             viewer.add(np.transpose(self.mask),
                        name='Mask Output',
                        shader=get_color_shader(1))
@@ -342,9 +352,10 @@ class DenseRegion(object):
                                    voxel_coordinates=np.flipud(self.pos_to_vox(self.seed_pos)))
             viewer.add(self.image,
                        name='Image')
-            viewer.add(self.target,
-                       name='Mask Target',
-                       shader=get_color_shader(0))
+            if self.target is not None:
+                viewer.add(self.target,
+                           name='Mask Target',
+                           shader=get_color_shader(0))
             viewer.add(self.mask,
                        name='Mask Output',
                        shader=get_color_shader(1))

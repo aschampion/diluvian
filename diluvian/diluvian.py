@@ -23,6 +23,7 @@ from .config import CONFIG
 from .third_party.multi_gpu import make_parallel
 from .util import extend_keras_history, get_color_shader, roundrobin, write_keras_history_to_csv
 from .volumes import static_training_generator, moving_training_generator
+from .regions import DenseRegion
 
 
 def make_flood_fill_network():
@@ -111,13 +112,18 @@ class PredictionCopy(Callback):
 
 
 def fill_region_from_model(model_file, volumes=None, bias=True, move_batch_size=1,
-                           max_moves=None, multi_gpu_model_kludge=None):
+                           max_moves=None, multi_gpu_model_kludge=None, sparse=False):
     if volumes is None:
         raise ValueError('Volumes must be provided.')
 
+    if sparse:
+        gen_kwargs = {'sparse_margin': CONFIG.model.training_fov * 4 - 3}
+    else:
+        gen_kwargs = {'size': CONFIG.model.training_fov * 4 - 3}
     regions = roundrobin(*[
-            v.downsample(CONFIG.volume.resolution)
-             .region_generator(CONFIG.model.training_fov * 4 - 3)
+            DenseRegion.from_subvolume_generator(
+                v.downsample(CONFIG.volume.resolution)
+                 .subvolume_generator(**gen_kwargs))
             for _, v in volumes.iteritems()])
 
     model = load_model(model_file)
