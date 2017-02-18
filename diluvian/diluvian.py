@@ -26,48 +26,46 @@ from .volumes import SubvolumeBounds, static_training_generator, moving_training
 from .regions import DenseRegion
 
 
-def make_flood_fill_network():
-    image_input = Input(shape=tuple(CONFIG.model.fov_shape) + (1,), dtype='float32', name='image_input')
-    mask_input = Input(shape=tuple(CONFIG.model.fov_shape) + (1,), dtype='float32', name='mask_input')
+def make_flood_fill_network(fov_shape, network_config):
+    image_input = Input(shape=tuple(fov_shape) + (1,), dtype='float32', name='image_input')
+    mask_input = Input(shape=tuple(fov_shape) + (1,), dtype='float32', name='mask_input')
     ffn = merge([image_input, mask_input], mode='concat')
 
     # Convolve and activate before beginning the skip connection modules,
     # as discussed in the Appendix of He et al 2016.
-    ffn = Convolution3D(CONFIG.network.convolution_filters,
-                        CONFIG.network.convolution_dim[0],
-                        CONFIG.network.convolution_dim[1],
-                        CONFIG.network.convolution_dim[2],
+    ffn = Convolution3D(network_config.convolution_filters,
+                        network_config.convolution_dim[0],
+                        network_config.convolution_dim[1],
+                        network_config.convolution_dim[2],
                         activation='relu',
                         border_mode='same')(ffn)
 
-    for _ in range(0, CONFIG.network.num_modules):
-        ffn = add_convolution_module(ffn)
+    for _ in range(0, network_config.num_modules):
+        ffn = add_convolution_module(ffn, network_config)
 
     mask_output = Convolution3D(1,
-                                CONFIG.network.convolution_dim[0],
-                                CONFIG.network.convolution_dim[1],
-                                CONFIG.network.convolution_dim[2],
+                                network_config.convolution_dim[0],
+                                network_config.convolution_dim[1],
+                                network_config.convolution_dim[2],
                                 border_mode='same',
                                 name='mask_output',
-                                activation=CONFIG.network.output_activation)(ffn)
+                                activation=network_config.output_activation)(ffn)
     ffn = Model(input=[image_input, mask_input], output=[mask_output])
-    if CONFIG.training.num_gpus > 1:
-        ffn = make_parallel(ffn, CONFIG.training.num_gpus)
 
     return ffn
 
 
-def add_convolution_module(model):
-    model2 = Convolution3D(CONFIG.network.convolution_filters,
-                           CONFIG.network.convolution_dim[0],
-                           CONFIG.network.convolution_dim[1],
-                           CONFIG.network.convolution_dim[2],
+def add_convolution_module(model, network_config):
+    model2 = Convolution3D(network_config.convolution_filters,
+                           network_config.convolution_dim[0],
+                           network_config.convolution_dim[1],
+                           network_config.convolution_dim[2],
                            activation='relu',
                            border_mode='same')(model)
-    model2 = Convolution3D(CONFIG.network.convolution_filters,
-                           CONFIG.network.convolution_dim[0],
-                           CONFIG.network.convolution_dim[1],
-                           CONFIG.network.convolution_dim[2],
+    model2 = Convolution3D(network_config.convolution_filters,
+                           network_config.convolution_dim[0],
+                           network_config.convolution_dim[1],
+                           network_config.convolution_dim[2],
                            border_mode='same')(model2)
     model = merge([model, model2], mode='sum')
     # Note that the activation here differs from He et al 2016, as that
@@ -181,13 +179,15 @@ def train_network(model_file=None, volumes=None,
         factory_mod_name, factory_func_name = CONFIG.network.factory.rsplit('.', 1)
         factory_mod = importlib.import_module(factory_mod_name)
         factory = getattr(factory_mod, factory_func_name)
-        ffn = factory()
+        ffn = factory(CONFIG.model.fov_shape, CONFIG.network)
     else:
         ffn = load_model(model_file)
 
     # Multi-GPU models are saved as a single-GPU model prior to compilation,
     # so if loading from such a model file it will need to be recompiled.
     if not hasattr(ffn, 'optimizer'):
+        if CONFIG.training.num_gpus > 1:
+            ffn = make_parallel(ffn, CONFIG.training.num_gpus)
         compile_network(ffn)
 
     if model_output_filebase is None:
