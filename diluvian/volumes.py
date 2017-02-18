@@ -155,7 +155,7 @@ class Volume(object):
         downsample = np.log2(np.true_divide(resolution, self.resolution))
         if np.any(downsample < 0):
             raise ValueError('Requested resolution ({}) is higher than volume resolution ({}). '
-                             'Upsampling is not support.'.format(resolution, self.resolution))
+                             'Upsampling is not supported.'.format(resolution, self.resolution))
         if not np.all(np.equal(np.mod(downsample, 1), 0)):
             raise ValueError('Requested resolution ({}) is not a power-of-2 downsample of '
                              'volume resolution ({}). '
