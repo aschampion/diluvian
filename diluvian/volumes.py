@@ -174,8 +174,8 @@ class Volume(object):
     def sparse_wrapper(self, *args):
         return SparseWrappedVolume(self, *args)
 
-    def subvolume_bounds_generator(self, size=None):
-        return self.SubvolumeBoundsGenerator(self, size)
+    def subvolume_bounds_generator(self, shape=None):
+        return self.SubvolumeBoundsGenerator(self, shape)
 
     def subvolume_generator(self, bounds_generator=None, **kwargs):
         if bounds_generator is None:
@@ -215,17 +215,13 @@ class Volume(object):
         return Subvolume(image_subvol, label_mask, seed, label_id)
 
     class SubvolumeBoundsGenerator(object):
-        def __init__(self, volume, size):
+        def __init__(self, volume, shape):
             self.volume = volume
-            self.size = size
-            self.margin = np.floor_divide(self.size, 2).astype('uint64')
+            self.shape = shape
+            self.margin = np.floor_divide(self.shape, 2).astype('uint64')
             self.ctr_min = self.margin
             self.ctr_max = (np.array(self.volume.shape) - self.margin - 1).astype('uint64')
             self.random = np.random.RandomState(0)
-
-        @property
-        def shape(self):
-            return self.size
 
         def __iter__(self):
             return self
@@ -253,7 +249,7 @@ class Volume(object):
                     label_id = label_ids.item(0)
                     break
             return SubvolumeBounds(ctr - self.margin,
-                                   ctr + self.margin + np.mod(self.size, 2).astype('uint64'),
+                                   ctr + self.margin + np.mod(self.shape, 2).astype('uint64'),
                                    label_id=label_id)
 
 
@@ -313,9 +309,9 @@ class PartitionedVolume(VolumeView):
                 parent.resolution)
         self.partitioning = np.asarray(partitioning)
         self.partition_index = np.asarray(partition_index)
-        partition_size = np.floor_divide(np.array(self.parent.shape), self.partitioning)
-        self.bounds = ((np.multiply(partition_size, self.partition_index)).astype('uint64'),
-                       (np.multiply(partition_size, self.partition_index + 1)).astype('uint64'))
+        partition_shape = np.floor_divide(np.array(self.parent.shape), self.partitioning)
+        self.bounds = ((np.multiply(partition_shape, self.partition_index)).astype('uint64'),
+                       (np.multiply(partition_shape, self.partition_index + 1)).astype('uint64'))
 
     def xyz_coord_to_local(self, a):
         return self.parent.xyz_coord_to_local(a) + self.bounds[0]
@@ -354,23 +350,23 @@ class DownsampledVolume(VolumeView):
         return tuple(np.floor_divide(np.array(self.parent.shape), self.zoom))
 
     def get_subvolume(self, bounds):
-        subvol_size = bounds.stop - bounds.start
+        subvol_shape = bounds.stop - bounds.start
         parent_bounds = SubvolumeBounds(self.xyz_coord_to_local(bounds.start),
                                         self.xyz_coord_to_local(bounds.stop))
         subvol = self.parent.get_subvolume(parent_bounds)
         subvol.image = subvol.image.reshape(
-                [subvol_size[0], self.zoom[0],
-                 subvol_size[1], self.zoom[1],
-                 subvol_size[2], self.zoom[2]]).mean(5).mean(3).mean(1)
+                [subvol_shape[0], self.zoom[0],
+                 subvol_shape[1], self.zoom[1],
+                 subvol_shape[2], self.zoom[2]]).mean(5).mean(3).mean(1)
         # Downsample body mask by considering blocks where the majority
         # of voxels are in the body to be in the body. Alternatives are:
         # - Conjunction (tends to introduce false splits)
         # - Disjunction (tends to overdilate and merge)
         # - Mode label (computationally expensive)
         subvol.label_mask = subvol.label_mask.reshape(
-                [subvol_size[0], self.zoom[0],
-                 subvol_size[1], self.zoom[1],
-                 subvol_size[2], self.zoom[2]]).mean(5).mean(3).mean(1) > 0.5
+                [subvol_shape[0], self.zoom[0],
+                 subvol_shape[1], self.zoom[1],
+                 subvol_shape[2], self.zoom[2]]).mean(5).mean(3).mean(1) > 0.5
 
         subvol.seed = np.divide(subvol.seed, self.zoom)
 
@@ -379,17 +375,17 @@ class DownsampledVolume(VolumeView):
 
 class SparseWrappedVolume(VolumeView):
     """Wrap a existing volume for memory cached block sparse access."""
-    def __init__(self, parent, image_leaf_size=None, label_leaf_size=None):
-        if image_leaf_size is None:
-            image_leaf_size = list(CONFIG.model.block_size)
-        if label_leaf_size is None:
-            label_leaf_size = list(CONFIG.model.block_size)
+    def __init__(self, parent, image_leaf_shape=None, label_leaf_shape=None):
+        if image_leaf_shape is None:
+            image_leaf_shape = list(CONFIG.model.fov_shape)
+        if label_leaf_shape is None:
+            label_leaf_shape = list(CONFIG.model.fov_shape)
 
-        image_data = OctreeVolume(image_leaf_size,
+        image_data = OctreeVolume(image_leaf_shape,
                                   (np.zeros(3), parent.image_data.shape),
                                   parent.image_data.dtype,
                                   populator=self.image_populator)
-        label_data = OctreeVolume(label_leaf_size,
+        label_data = OctreeVolume(label_leaf_shape,
                                   (np.zeros(3), parent.label_data.shape),
                                   parent.label_data.dtype,
                                   populator=self.label_populator)
@@ -468,7 +464,7 @@ class ImageStackVolume(Volume):
     Parameters
     ----------
     bounds : iterable of int
-        Size of the stack at zoom level 0 in pixels.
+        Shape of the stack at zoom level 0 in pixels.
     resolution : iterable of float
         Resolution of the stack at zoom level 0 in nm.
     tile_width, tile_height : int
@@ -479,10 +475,10 @@ class ImageStackVolume(Volume):
         Zoom level to use for this volume.
     missing_z : iterable of int, optional
         Voxel z-indices where data is not available.
-    image_leaf_size : tuple of int or ndarray, optional
-        Size of image octree leaves in voxels. Defaults to 10 stacked tiles.
-    label_leaf_size : tuple of int or ndarray, optional
-        Size of label octree leaves in voxels. Defaults to FFN model FOV.
+    image_leaf_shape : tuple of int or ndarray, optional
+        Shape of image octree leaves in voxels. Defaults to 10 stacked tiles.
+    label_leaf_shape : tuple of int or ndarray, optional
+        Shape of label octree leaves in voxels. Defaults to FFN model FOV.
     """
     @staticmethod
     def from_catmaid_stack(stack_info, tile_source_parameters):
@@ -503,7 +499,7 @@ class ImageStackVolume(Volume):
                                 missing_z=stack_info['broken_slices'])
 
     def __init__(self, bounds, orig_resolution, tile_width, tile_height, tile_format_url,
-                 zoom_level=0, missing_z=None, image_leaf_size=None):
+                 zoom_level=0, missing_z=None, image_leaf_shape=None):
         self.orig_bounds = bounds
         self.orig_resolution = orig_resolution
         self.tile_width = tile_width
@@ -514,14 +510,14 @@ class ImageStackVolume(Volume):
         if missing_z is None:
             missing_z = []
         self.missing_z = frozenset(missing_z)
-        if image_leaf_size is None:
-            image_leaf_size = [tile_width, tile_height, 10]
+        if image_leaf_shape is None:
+            image_leaf_shape = [tile_width, tile_height, 10]
 
         scale = np.exp2(np.array([self.zoom_level, self.zoom_level, 0])).astype('uint64')
 
-        data_size = (np.zeros(3), np.divide(bounds, scale).astype('uint64'))
-        self.image_data = OctreeVolume(image_leaf_size,
-                                       data_size,
+        data_shape = (np.zeros(3), np.divide(bounds, scale).astype('uint64'))
+        self.image_data = OctreeVolume(image_leaf_shape,
+                                       data_shape,
                                        'float32',
                                        populator=self.image_populator)
 
@@ -543,7 +539,7 @@ class ImageStackVolume(Volume):
                     self.tile_format_url,
                     zoom_level=self.zoom_level + zoom_level,
                     missing_z=self.missing_z,
-                    image_leaf_size=self.image_data.leaf_size).downsample(resolution)
+                    image_leaf_shape=self.image_data.leaf_shape).downsample(resolution)
         if np.all(np.equal(downsample, 0)):
             return self
         return DownsampledVolume(self, downsample)
@@ -620,7 +616,7 @@ class ImageStackVolume(Volume):
 
         @property
         def shape(self):
-            return self.size
+            return self.volume.shape
 
         def __iter__(self):
             return self

@@ -27,8 +27,8 @@ from .regions import DenseRegion
 
 
 def make_flood_fill_network():
-    image_input = Input(shape=tuple(CONFIG.model.block_size) + (1,), dtype='float32', name='image_input')
-    mask_input = Input(shape=tuple(CONFIG.model.block_size) + (1,), dtype='float32', name='mask_input')
+    image_input = Input(shape=tuple(CONFIG.model.fov_shape) + (1,), dtype='float32', name='image_input')
+    mask_input = Input(shape=tuple(CONFIG.model.fov_shape) + (1,), dtype='float32', name='mask_input')
     ffn = merge([image_input, mask_input], mode='concat')
 
     # Convolve and activate before beginning the skip connection modules,
@@ -122,9 +122,9 @@ def generate_subvolume_bounds(filename, volumes, num_bounds, sparse=False):
         raise ValueError('CSV filename must contain "{volume}" for volume name replacement.')
 
     if sparse:
-        gen_kwargs = {'sparse_margin': CONFIG.model.training_fov * 4 - 3}
+        gen_kwargs = {'sparse_margin': CONFIG.model.training_subv_shape * 4 - 3}
     else:
-        gen_kwargs = {'size': CONFIG.model.training_fov * 4 - 3}
+        gen_kwargs = {'shape': CONFIG.model.training_subv_shape * 4 - 3}
     for k, v in volumes.iteritems():
         bounds = v.downsample(CONFIG.volume.resolution)\
                   .subvolume_bounds_generator(**gen_kwargs)
@@ -144,9 +144,9 @@ def fill_region_from_model(model_file, volumes=None, bounds_input_file=None,
                   for k in volumes.iterkeys()}
     else:
         if sparse:
-            gen_kwargs = {k: {'sparse_margin': CONFIG.model.training_fov * 4 - 3} for k in volumes.iterkeys()}
+            gen_kwargs = {k: {'sparse_margin': CONFIG.model.training_subv_shape * 4 - 3} for k in volumes.iterkeys()}
         else:
-            gen_kwargs = {k: {'size': CONFIG.model.training_fov * 4 - 3} for k in volumes.iterkeys()}
+            gen_kwargs = {k: {'shape': CONFIG.model.training_subv_shape * 4 - 3} for k in volumes.iterkeys()}
     regions = roundrobin(*[
             DenseRegion.from_subvolume_generator(
                 v.downsample(CONFIG.volume.resolution)
@@ -212,7 +212,7 @@ def train_network(model_file=None, volumes=None,
             for k, v in volumes.iteritems()}
 
     validation_data = {k: static_training_generator(
-            v.subvolume_generator(size=CONFIG.model.block_size),
+            v.subvolume_generator(shape=CONFIG.model.fov_shape),
             CONFIG.training.batch_size,
             CONFIG.training.validation_size,
             f_a_bins=f_a_bins) for k, v in validation_volumes.iteritems()}
@@ -220,7 +220,7 @@ def train_network(model_file=None, volumes=None,
 
     # Pre-train
     training_data = {k: static_training_generator(
-            v.subvolume_generator(size=CONFIG.model.block_size),
+            v.subvolume_generator(shape=CONFIG.model.fov_shape),
             CONFIG.training.batch_size,
             CONFIG.training.training_size,
             f_a_bins=f_a_bins) for k, v in training_volumes.iteritems()}
@@ -243,7 +243,7 @@ def train_network(model_file=None, volumes=None,
         callbacks.append(TensorBoard())
 
     training_data = {k: moving_training_generator(
-            v.subvolume_generator(size=CONFIG.model.training_fov),
+            v.subvolume_generator(shape=CONFIG.model.training_subv_shape),
             CONFIG.training.batch_size,
             CONFIG.training.training_size,
             kludges[k],
@@ -267,7 +267,7 @@ def train_network(model_file=None, volumes=None,
         # for _ in itertools.islice(training_data, 12):
         #     continue
         dupe_data = static_training_generator(
-                volumes[list(volumes.keys())[0]].subvolume_generator(size=CONFIG.model.block_size),
+                volumes[list(volumes.keys())[0]].subvolume_generator(shape=CONFIG.model.fov_shape),
                 CONFIG.training.batch_size,
                 CONFIG.training.training_size)
         viz_ex = itertools.islice(dupe_data, 1)

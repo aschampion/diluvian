@@ -17,8 +17,8 @@ class OctreeVolume(object):
 
     Parameters
     ----------
-    leaf_size : tuple of int or ndarray
-        Size of tree leaves in voxels.
+    leaf_shape : tuple of int or ndarray
+        Shape of tree leaves in voxels.
     bounds : tuple of tuple of int or ndarray
         The lower and upper coordinate bounds of the volume, in voxels.
     dtype : numpy.data-type
@@ -27,14 +27,15 @@ class OctreeVolume(object):
         the subvolume to populate and returning the data for that subvolume.
     """
 
-    def __init__(self, leaf_size, bounds, dtype, populator=None):
-        self.leaf_size = np.asarray(leaf_size).astype('uint64')
+    def __init__(self, leaf_shape, bounds, dtype, populator=None):
+        self.leaf_shape = np.asarray(leaf_shape).astype('uint64')
         self.bounds = (np.asarray(bounds[0]).astype('uint64'),
                        np.asarray(bounds[1]).astype('uint64'))
         self.dtype = np.dtype(dtype)
         self.populator = populator
-        ceil_bounds = self.leaf_size*np.exp2(np.ceil(np.log2((self.bounds[1] - self.bounds[0]) /
-                                                             self.leaf_size.astype('float64')))).astype('uint64').max()
+        ceil_bounds = self.leaf_shape * \
+            np.exp2(np.ceil(np.log2((self.bounds[1] - self.bounds[0]) /
+                                    self.leaf_shape.astype('float64')))).astype('uint64').max()
         self.root_node = BranchNode(self, (self.bounds[0], self.bounds[0] + ceil_bounds), clip_bound=self.bounds[1])
 
     @property
@@ -80,7 +81,7 @@ class OctreeVolume(object):
         self.root_node[npkey] = value
 
     def fullness(self):
-        potential_leaves = np.prod(np.ceil(np.true_divide(self.bounds[1] - self.bounds[0], self.leaf_size)))
+        potential_leaves = np.prod(np.ceil(np.true_divide(self.bounds[1] - self.bounds[0], self.leaf_shape)))
         return self.root_node.count_leaves() / float(potential_leaves)
 
     def get_volume(self):
@@ -198,8 +199,8 @@ class BranchNode(Node):
             raise ValueError('Attempt to retrieve unpopulated region without octree populator')
 
         child_bounds, child_clip_bound = self.get_child_bounds(i, j, k)
-        child_size = child_bounds[1] - child_bounds[0]
-        if np.any(np.less_equal(child_size, volume.leaf_size)):
+        child_shape = child_bounds[1] - child_bounds[0]
+        if np.any(np.less_equal(child_shape, volume.leaf_shape)):
             populator_bounds = [child_bounds[0].copy(), child_bounds[1].copy()]
             if child_clip_bound is not None:
                 populator_bounds[1] = np.minimum(populator_bounds[1], child_clip_bound)
@@ -264,8 +265,8 @@ class UniformBranchNode(UniformNode):
                     # or populated and thus can be omitted.
                     if child_clip_bound is not None and np.any(np.greater_equal(child_bounds[0], child_clip_bound)):
                         continue
-                    child_size = child_bounds[1] - child_bounds[0]
-                    if np.any(np.less_equal(child_size, volume.leaf_size)):
+                    child_shape = child_bounds[1] - child_bounds[0]
+                    if np.any(np.less_equal(child_shape, volume.leaf_shape)):
                         child = UniformLeafNode(replacement, child_bounds, self.dtype, self.value)
                     else:
                         child = UniformBranchNode(replacement, child_bounds, self.dtype, self.value,

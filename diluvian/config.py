@@ -47,8 +47,8 @@ class ModelConfig(BaseConfig):
 
     Attributes
     ----------
-    block_size : sequence or ndarray of int
-        Field of view size in voxels for each flood filling move.
+    fov_shape : sequence or ndarray of int
+        Field of view shape in voxels for each flood filling move.
     v_true, v_false : float
         Soft target values for in-object and out-of-object mask voxels,
         respectively.
@@ -59,16 +59,17 @@ class ModelConfig(BaseConfig):
         Thickness of move check plane in voxels. Setting this greater than 1
         is useful to make moves more robust even if the move grid aligns with
         missing sections or image artifacts.
-    training_fov : sequence or ndarray of int, optional
-        Size of the subvolumes used during moving training.
+    training_subv_shape : sequence or ndarray of int, optional
+        Shape of the subvolumes used during moving training.
     """
     def __init__(self, settings):
-        self.block_size = np.array(settings.get('block_size', [33, 33, 17]))
+        self.fov_shape = np.array(settings.get('fov_shape', [33, 33, 17]))
         self.v_true = float(settings.get('v_true', 0.95))
         self.v_false = float(settings.get('v_false', 0.05))
         self.t_move = float(settings.get('t_move', 0.9))
         self.move_check_thickness = int(settings.get('move_check_thickness', 1))
-        self.training_fov = np.array(settings.get('training_fov', self.block_size + ((self.block_size - 1) / 2)))
+        self.training_subv_shape = np.array(settings.get('training_subv_shape',
+                                                         self.fov_shape + ((self.fov_shape - 1) / 2)))
 
 
 class NetworkConfig(BaseConfig):
@@ -84,7 +85,7 @@ class NetworkConfig(BaseConfig):
         Number of convolution modules to use, each module consisting of a skip
         link in parallel with two convolution layers.
     convolution_dim : sequence or ndarray of int
-        Size of the convolution for each layer.
+        Shape of the convolution for each layer.
     convolution_filters : int
         Number of convolution filters for each layer.
     output_activation : str
