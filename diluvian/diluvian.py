@@ -103,6 +103,12 @@ def plot_history(history):
 
 
 class PredictionCopy(Callback):
+    """Keras batch end callback to run prediction on input from a kludge.
+
+    Used to predict masks for FOV moving. Surprisingly this is faster than
+    using a custom Keras training function to copy model predictions at the
+    same time as gradient updates.
+    """
     def __init__(self, kludge):
         self.kludge = kludge
 
