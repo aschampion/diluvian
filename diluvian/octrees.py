@@ -28,14 +28,14 @@ class OctreeVolume(object):
     """
 
     def __init__(self, leaf_shape, bounds, dtype, populator=None):
-        self.leaf_shape = np.asarray(leaf_shape).astype('uint64')
-        self.bounds = (np.asarray(bounds[0]).astype('uint64'),
-                       np.asarray(bounds[1]).astype('uint64'))
+        self.leaf_shape = np.asarray(leaf_shape).astype(np.int64)
+        self.bounds = (np.asarray(bounds[0], dtype=np.int64),
+                       np.asarray(bounds[1], dtype=np.int64))
         self.dtype = np.dtype(dtype)
         self.populator = populator
         ceil_bounds = self.leaf_shape * \
             np.exp2(np.ceil(np.log2((self.bounds[1] - self.bounds[0]) /
-                                    self.leaf_shape.astype('float64')))).astype('uint64').max()
+                                    self.leaf_shape.astype('float64')))).astype(np.int64).max()
         self.root_node = BranchNode(self, (self.bounds[0], self.bounds[0] + ceil_bounds), clip_bound=self.bounds[1])
 
     @property
@@ -51,7 +51,7 @@ class OctreeVolume(object):
             raise IndexError('Octrees may only be indexed in 3 dimensions')
 
         # Convert keys to two numpy arrays for ease.
-        npkey = (np.zeros(3, dtype='uint64'), np.zeros(3, dtype='uint64'))
+        npkey = (np.zeros(3, dtype=np.int64), np.zeros(3, dtype=np.int64))
         for i, k in enumerate(key):
             if isinstance(k, slice):
                 if k.step is not None:

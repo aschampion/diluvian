@@ -41,7 +41,7 @@ class SubvolumeBounds(object):
                     if not v:
                         row[k] = None
                     elif v[0] == '[':
-                        row[k] = np.fromstring(v[1:-1], sep=' ', dtype='uint64')
+                        row[k] = np.fromstring(v[1:-1], sep=' ', dtype=np.int64)
                     else:
                         row[k] = int(v)
                 bounds.append(cls(**row))
@@ -93,7 +93,7 @@ class Subvolume(object):
             True if the rectangular margin around the seed position is uniform.
         """
         margin = np.ceil(np.reciprocal(np.array(CONFIG.volume.resolution),
-                                       dtype='float64') * seed_margin).astype('uint64')
+                                       dtype='float64') * seed_margin).astype(np.int64)
 
         mask_target = self.label_mask
         # If data is unlabeled, can not test so always succeed.
@@ -160,7 +160,7 @@ class Volume(object):
             raise ValueError('Requested resolution ({}) is not a power-of-2 downsample of '
                              'volume resolution ({}). '
                              'This is currently unsupported.'.format(resolution, self.resolution))
-        return downsample.astype('uint64')
+        return downsample.astype(np.int64)
 
     def downsample(self, resolution):
         downsample = self._get_downsample_from_resolution(resolution)
@@ -205,7 +205,7 @@ class Volume(object):
 
         seed = bounds.seed
         if seed is None:
-            seed = np.array(label_subvol.shape, dtype='uint64') / 2
+            seed = np.array(label_subvol.shape, dtype=np.int64) / 2
 
         label_id = bounds.label_id
         if label_id is None:
@@ -218,9 +218,9 @@ class Volume(object):
         def __init__(self, volume, shape):
             self.volume = volume
             self.shape = shape
-            self.margin = np.floor_divide(self.shape, 2).astype('uint64')
+            self.margin = np.floor_divide(self.shape, 2).astype(np.int64)
             self.ctr_min = self.margin
-            self.ctr_max = (np.array(self.volume.shape) - self.margin - 1).astype('uint64')
+            self.ctr_max = (np.array(self.volume.shape) - self.margin - 1).astype(np.int64)
             self.random = np.random.RandomState(0)
 
         def __iter__(self):
@@ -235,7 +235,7 @@ class Volume(object):
                 # of a uniform label after downsampling. For more stringent
                 # seed region uniformity filtering, see has_uniform_seed_margin.
                 ctr = np.array([self.random.randint(self.ctr_min[n], self.ctr_max[n])
-                                for n in range(3)]).astype('uint64')
+                                for n in range(3)]).astype(np.int64)
                 if self.volume.label_data is None:
                     label_id = None
                     break
@@ -249,7 +249,7 @@ class Volume(object):
                     label_id = label_ids.item(0)
                     break
             return SubvolumeBounds(ctr - self.margin,
-                                   ctr + self.margin + np.mod(self.shape, 2).astype('uint64'),
+                                   ctr + self.margin + np.mod(self.shape, 2).astype(np.int64),
                                    label_id=label_id)
 
 
@@ -310,8 +310,8 @@ class PartitionedVolume(VolumeView):
         self.partitioning = np.asarray(partitioning)
         self.partition_index = np.asarray(partition_index)
         partition_shape = np.floor_divide(np.array(self.parent.shape), self.partitioning)
-        self.bounds = ((np.multiply(partition_shape, self.partition_index)).astype('uint64'),
-                       (np.multiply(partition_shape, self.partition_index + 1)).astype('uint64'))
+        self.bounds = ((np.multiply(partition_shape, self.partition_index)).astype(np.int64),
+                       (np.multiply(partition_shape, self.partition_index + 1)).astype(np.int64))
 
     def xyz_coord_to_local(self, a):
         return self.parent.xyz_coord_to_local(a) + self.bounds[0]
@@ -335,7 +335,7 @@ class DownsampledVolume(VolumeView):
         Integral zoom levels to downsample the wrapped volume.
     """
     def __init__(self, parent, downsample):
-        self.zoom = np.exp2(downsample).astype('uint64')
+        self.zoom = np.exp2(downsample).astype(np.int64)
         super(DownsampledVolume, self).__init__(
                 parent,
                 parent.image_data,
@@ -491,7 +491,7 @@ class ImageStackVolume(Volume):
                '{{zoom_level}}/{{z}}/{{row}}/{{col}}.{file_extension}',
             9: '{source_base_url}{{z}}/{{row}}_{{col}}_{{zoom_level}}.{file_extension}',
         }[tile_source_parameters['tile_source_type']].format(**tile_source_parameters)
-        bounds = np.array(stack_info['bounds'], dtype='uint64')
+        bounds = np.array(stack_info['bounds'], dtype=np.int64)
         resolution = np.array(stack_info['resolution'])
         tile_width = int(tile_source_parameters['tile_width'])
         tile_height = int(tile_source_parameters['tile_height'])
@@ -513,9 +513,9 @@ class ImageStackVolume(Volume):
         if image_leaf_shape is None:
             image_leaf_shape = [tile_width, tile_height, 10]
 
-        scale = np.exp2(np.array([self.zoom_level, self.zoom_level, 0])).astype('uint64')
+        scale = np.exp2(np.array([self.zoom_level, self.zoom_level, 0])).astype(np.int64)
 
-        data_shape = (np.zeros(3), np.divide(bounds, scale).astype('uint64'))
+        data_shape = (np.zeros(3), np.divide(bounds, scale).astype(np.int64))
         self.image_data = OctreeVolume(image_leaf_shape,
                                        data_shape,
                                        'float32',
@@ -567,7 +567,7 @@ class ImageStackVolume(Volume):
 
         seed = bounds.seed
         if seed is None:
-            seed = np.array(image_subvol.shape, dtype='uint64') / 2
+            seed = np.array(image_subvol.shape, dtype=np.int64) / 2
 
         return Subvolume(image_subvol, label_subvol, seed, bounds.label_id)
 
@@ -593,11 +593,11 @@ class ImageStackVolume(Volume):
                     tile_coord = np.array([c, r, z]).astype('int64')
                     tile_loc = np.multiply(tile_coord, tile_size)
 
-                    subvol = (np.maximum(np.zeros(3), tile_loc - bounds[0]).astype('uint64'),
+                    subvol = (np.maximum(np.zeros(3), tile_loc - bounds[0]).astype(np.int64),
                               np.minimum(np.array(image_subvol.shape),
-                                         tile_loc + tile_size - bounds[0]).astype('uint64'))
-                    tile_sub = (np.maximum(np.zeros(3), bounds[0] - tile_loc).astype('uint64'),
-                                np.minimum(tile_size, bounds[1] - tile_loc).astype('uint64'))
+                                         tile_loc + tile_size - bounds[0]).astype(np.int64))
+                    tile_sub = (np.maximum(np.zeros(3), bounds[0] - tile_loc).astype(np.int64),
+                                np.minimum(tile_size, bounds[1] - tile_loc).astype(np.int64))
 
                     image_subvol[subvol[0][0]:subvol[1][0],
                                  subvol[0][1]:subvol[1][1],
@@ -609,9 +609,9 @@ class ImageStackVolume(Volume):
     class SparseSubvolumeBoundsGenerator(object):
         def __init__(self, volume, margin):
             self.volume = volume
-            self.margin = np.asarray(margin).astype('uint64')
+            self.margin = np.asarray(margin).astype(np.int64)
             self.ctr_min = self.margin
-            self.ctr_max = (np.array(self.volume.shape) - self.margin - 1).astype('uint64')
+            self.ctr_max = (np.array(self.volume.shape) - self.margin - 1).astype(np.int64)
             self.random = np.random.RandomState(0)
 
         @property
@@ -626,7 +626,7 @@ class ImageStackVolume(Volume):
 
         def next(self):
             ctr = np.array([self.random.randint(self.ctr_min[n], self.ctr_max[n])
-                            for n in range(3)]).astype('uint64')
+                            for n in range(3)]).astype(np.int64)
             return SubvolumeBounds(seed=ctr)
 
 
@@ -650,7 +650,7 @@ def static_training_generator(subvolumes, batch_size, training_size, f_a_bins=No
     mask_input = np.tile(mask_input, (batch_size, 1, 1, 1, 1))
 
     if f_a_bins is not None:
-        f_a_counts = np.zeros_like(f_a_bins, dtype='uint64')
+        f_a_counts = np.zeros_like(f_a_bins, dtype=np.int64)
     f_as = np.zeros(batch_size)
 
     sample_num = 0
@@ -681,7 +681,7 @@ def static_training_generator(subvolumes, batch_size, training_size, f_a_bins=No
         else:
             f_a_inds = np.digitize(f_as, f_a_bins) - 1
             inds, counts = np.unique(f_a_inds, return_counts=True)
-            f_a_counts[inds] += counts.astype('uint64')
+            f_a_counts[inds] += counts.astype(np.int64)
             sample_weights = np.reciprocal(f_a_counts[f_a_inds], dtype='float64')
             yield ({'image_input': batch_image_input,
                     'mask_input': mask_input},
@@ -720,7 +720,7 @@ def moving_training_generator(subvolumes, batch_size, training_size, callback_kl
     batch_image_input = [None] * batch_size
 
     if f_a_bins is not None:
-        f_a_counts = np.zeros_like(f_a_bins, dtype='uint64')
+        f_a_counts = np.zeros_like(f_a_bins, dtype=np.int64)
     f_as = np.zeros(batch_size)
 
     sample_num = 0
@@ -780,7 +780,7 @@ def moving_training_generator(subvolumes, batch_size, training_size, callback_kl
         else:
             f_a_inds = np.digitize(f_as, f_a_bins) - 1
             inds, counts = np.unique(f_a_inds, return_counts=True)
-            f_a_counts[inds] += counts.astype('uint64')
+            f_a_counts[inds] += counts.astype(np.int64)
             sample_weights = np.reciprocal(f_a_counts[f_a_inds], dtype='float64')
             yield (inputs,
                    [batch_mask_target],
