@@ -59,6 +59,10 @@ def _make_main_parser():
 
     fill_parser = commandparsers.add_parser('fill', parents=[common_parser],
                                             help='Use a trained network to fill random regions in a volume.')
+    fill_parser.add_argument(
+            '-bi', '--bounds-input-file', dest='bounds_input_file', default=None,
+            help='Filename for bounds CSV input. Should contain "{volume}", which will be substituted with '
+                 'the volume name for each respective volume\'s bounds.')
     fill_parser.add_argument('--no-bias', action='store_false', dest='bias', default=True,
                              help='Overwrite prediction mask at the end of each field of view inference '
                                   'rather than using the anti-merge bias update.')
@@ -74,6 +78,17 @@ def _make_main_parser():
                                                     help='Check a configuration value.')
     check_config_parser.add_argument('config_property', default=None, nargs='?',
                                      help='Name of the property to show, e.g., `training.batch_size`.')
+
+    gen_subv_bounds_parser = commandparsers.add_parser(
+            'gen-subv-bounds', parents=[common_parser],
+            help='Generate subvolume bounds.')
+    gen_subv_bounds_parser.add_argument(
+            'bounds_output_file', default=None,
+            help='Filename for the CSV output. Should contain "{volume}", which will be substituted with '
+                 'the volume name for each respective volume\'s bounds.')
+    gen_subv_bounds_parser.add_argument(
+            'num_bounds', default=None, type=int,
+            help='Number of bounds to generate.')
 
     return parser
 
@@ -110,6 +125,7 @@ def main():
         volumes = load_volumes(args.volume_file, args.in_memory)
         fill_region_from_model(args.model_file,
                                volumes=volumes,
+                               bounds_input_file=args.bounds_input_file,
                                bias=args.bias,
                                move_batch_size=args.move_batch_size,
                                max_moves=args.max_moves,
@@ -122,6 +138,13 @@ def main():
             for p in properties:
                 prop = getattr(prop, p)
         print prop
+
+    elif args.command == 'gen-subv-bounds':
+        # Late import to prevent loading large modules for short CLI commands.
+        from .diluvian import generate_subvolume_bounds
+
+        volumes = load_volumes(args.volume_file, args.in_memory)
+        generate_subvolume_bounds(args.bounds_output_file, volumes, args.num_bounds)
 
 
 def load_volumes(volume_file, in_memory):

@@ -2,6 +2,7 @@
 """Volumes of raw image and labeled object data."""
 
 
+import csv
 import logging
 
 import h5py
@@ -29,6 +30,32 @@ class SubvolumeBounds(object):
         self.stop = stop
         self.seed = seed
         self.label_id = label_id
+
+    @classmethod
+    def iterable_from_csv(cls, filename):
+        bounds = []
+        with open(filename, 'r') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                for k, v in row.iteritems():
+                    if not v:
+                        row[k] = None
+                    elif v[0] == '[':
+                        row[k] = np.fromstring(v[1:-1], sep=' ', dtype='uint64')
+                    else:
+                        row[k] = int(v)
+                bounds.append(cls(**row))
+
+        return bounds
+
+    @classmethod
+    def iterable_to_csv(cls, bounds, filename):
+        with open(filename, 'w') as csvfile:
+            fieldnames = cls.__slots__
+            writer = csv.writer(csvfile)
+            writer.writerow(fieldnames)
+            for bound in bounds:
+                writer.writerow([getattr(bound, f) for f in fieldnames])
 
 
 class Subvolume(object):
@@ -147,11 +174,14 @@ class Volume(object):
     def sparse_wrapper(self, *args):
         return SparseWrappedVolume(self, *args)
 
-    def subvolume_generator(self, bounds_generator=None, size=None):
+    def subvolume_bounds_generator(self, size=None):
+        return self.SubvolumeBoundsGenerator(self, size)
+
+    def subvolume_generator(self, bounds_generator=None, **kwargs):
         if bounds_generator is None:
-            if size is None:
-                raise ValueError('Size must be provided if no bounds generator is provided.')
-            bounds_generator = self.SubvolumeBoundsGenerator(self, size)
+            if not kwargs:
+                raise ValueError('Bounds generator arguments must be provided if no bounds generator is provided.')
+            bounds_generator = self.subvolume_bounds_generator(**kwargs)
         return SubvolumeGenerator(self, bounds_generator)
 
     def get_subvolume(self, bounds):
@@ -219,8 +249,8 @@ class Volume(object):
                         seed_min[0]:seed_max[0],
                         seed_min[1]:seed_max[1],
                         seed_min[2]:seed_max[2]]
-                if (label_ids == label_ids[0]).all():
-                    label_id = label_ids[0]
+                if (label_ids == label_ids.item(0)).all():
+                    label_id = label_ids.item(0)
                     break
             return SubvolumeBounds(ctr - self.margin,
                                    ctr + self.margin + np.mod(self.size, 2).astype('uint64'),
@@ -518,13 +548,12 @@ class ImageStackVolume(Volume):
             return self
         return DownsampledVolume(self, downsample)
 
-    def subvolume_generator(self, sparse_margin=None, **kwargs):
+    def subvolume_bounds_generator(self, sparse_margin=None, **kwargs):
         if sparse_margin is not None:
             if kwargs:
                 raise ValueError('sparse_margin can not be combined with other arguments.')
-            bounds_generator = self.SparseSubvolumeBoundsGenerator(self, sparse_margin)
-            return SubvolumeGenerator(self, bounds_generator)
-        return super(ImageStackVolume, self).subvolume_generator(**kwargs)
+            return self.SparseSubvolumeBoundsGenerator(self, sparse_margin)
+        return super(ImageStackVolume, self).subvolume_bounds_generator(**kwargs)
 
     def get_subvolume(self, bounds):
         if bounds.start is None or bounds.stop is None:

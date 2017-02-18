@@ -22,7 +22,7 @@ import keras.optimizers
 from .config import CONFIG
 from .third_party.multi_gpu import make_parallel
 from .util import extend_keras_history, get_color_shader, roundrobin, write_keras_history_to_csv
-from .volumes import static_training_generator, moving_training_generator
+from .volumes import SubvolumeBounds, static_training_generator, moving_training_generator
 from .regions import DenseRegion
 
 
@@ -111,20 +111,41 @@ class PredictionCopy(Callback):
             self.kludge['outputs'] = self.model.predict(self.kludge['inputs'])
 
 
-def fill_region_from_model(model_file, volumes=None, bias=True, move_batch_size=1,
-                           max_moves=None, multi_gpu_model_kludge=None, sparse=False):
-    if volumes is None:
-        raise ValueError('Volumes must be provided.')
+def generate_subvolume_bounds(filename, volumes, num_bounds, sparse=False):
+    if '{volume}' not in filename:
+        raise ValueError('CSV filename must contain "{volume}" for volume name replacement.')
 
     if sparse:
         gen_kwargs = {'sparse_margin': CONFIG.model.training_fov * 4 - 3}
     else:
         gen_kwargs = {'size': CONFIG.model.training_fov * 4 - 3}
+    for k, v in volumes.iteritems():
+        bounds = v.downsample(CONFIG.volume.resolution)\
+                  .subvolume_bounds_generator(**gen_kwargs)
+        bounds = itertools.islice(bounds, num_bounds)
+        SubvolumeBounds.iterable_to_csv(bounds, filename.format(volume=k))
+
+
+def fill_region_from_model(model_file, volumes=None, bounds_input_file=None,
+                           bias=True, move_batch_size=1,
+                           max_moves=None, multi_gpu_model_kludge=None, sparse=False):
+    if volumes is None:
+        raise ValueError('Volumes must be provided.')
+
+    if bounds_input_file is not None:
+        gen_kwargs = {k: {
+                  'bounds_generator': iter(SubvolumeBounds.iterable_from_csv(bounds_input_file.format(volume=k)))}
+                  for k in volumes.iterkeys()}
+    else:
+        if sparse:
+            gen_kwargs = {k: {'sparse_margin': CONFIG.model.training_fov * 4 - 3} for k in volumes.iterkeys()}
+        else:
+            gen_kwargs = {k: {'size': CONFIG.model.training_fov * 4 - 3} for k in volumes.iterkeys()}
     regions = roundrobin(*[
             DenseRegion.from_subvolume_generator(
                 v.downsample(CONFIG.volume.resolution)
-                 .subvolume_generator(**gen_kwargs))
-            for _, v in volumes.iteritems()])
+                 .subvolume_generator(**gen_kwargs[k]))
+            for k, v in volumes.iteritems()])
 
     model = load_model(model_file)
 
