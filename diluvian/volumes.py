@@ -586,7 +586,12 @@ class ImageStackVolume(Volume):
                 for c in xrange(*col_range):
                     url = self.tile_format_url.format(zoom_level=self.zoom_level, z=z, row=r, col=c)
                     try:
-                        im = np.transpose(np.array(Image.open(requests.get(url, stream=True).raw))) / 256.0
+                        im = np.array(Image.open(requests.get(url, stream=True).raw))
+                        # If the image is multichannel, throw our hands up and
+                        # just use the first channel.
+                        if im.ndim > 2:
+                            im = im[:, :, 0].squeeze()
+                        im = np.transpose(im) / 256.0
                     except IOError:
                         logging.debug('Failed to load tile: %s', url)
                         im = np.full((self.tile_width, self.tile_height), 0, dtype='float32')
