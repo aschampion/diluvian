@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 
+import csv
 import importlib
 import inspect
 import itertools
@@ -170,6 +171,66 @@ def fill_region_from_model(model_file, volumes=None, bounds_input_file=None,
             # Must assign the animation to a variable so that it is not GCed.
             ani = region_copy.fill_animation(model, 'export.mp4', verbose=True) # noqa
             s = raw_input("Press Enter when animation is complete...")
+        elif s == 's':
+            body = region.to_body()
+            component, bounds = body.get_largest_component()
+            print 'Skeleton is within {}, {}'.format(np.array_str(bounds[0]), np.array_str(bounds[1]))
+            skel = skeletonize_component(component)
+            swc = skeleton_to_swc(skel, bounds[0], CONFIG.volume.resolution)
+            with open('{}.swc'.format('_'.join(map(str, tuple(body.seed)))), 'w') as swcfile:
+                writer = csv.writer(swcfile, delimiter=' ', quoting=csv.QUOTE_NONE)
+                writer.writerows(swc)
+
+
+def skeletonize_component(component):
+    import skeletopyze
+
+    params = skeletopyze.Parameters()
+
+    print 'Skeletonizing...'
+    skel = skeletopyze.get_skeleton_graph(component.astype(np.int32), params)
+
+    return skel
+
+
+def skeleton_to_swc(skeleton, offset, resolution):
+    import networkx as nx
+
+    g = nx.Graph()
+    g.add_nodes_from(skeleton.nodes())
+    g.add_edges_from((e.u, e.v) for e in skeleton.edges())
+
+    # Find a directed tree for mapping to a skeleton.
+    if nx.number_of_nodes(g) > 1:
+        # This discards cyclic edges in the graph.
+        t = nx.bfs_tree(nx.minimum_spanning_tree(g), g.nodes()[0])
+    else:
+        t = nx.DiGraph()
+        t.add_nodes_from(g)
+    # Copy node attributes
+    for n in t.nodes_iter():
+        loc = skeleton.locations(n)
+        # skeletopyze is z, y, x (as it should be).
+        loc = np.array([loc[2], loc[1], loc[0]])
+        loc = np.multiply(loc + offset, resolution)
+        t.node[n].update({'x': loc[0],
+                          'y': loc[1],
+                          'z': loc[2],
+                          'radius': skeleton.diameters(n) / 2.0})
+
+    # Set parent node ID
+    for n, nbrs in t.adjacency_iter():
+        for nbr in nbrs:
+            t.node[nbr]['parent_id'] = n
+            if 'radius' not in t.node[nbr]:
+                t.node[nbr]['radius'] = -1
+
+    return [[
+        node_id,
+        0,
+        n['x'], n['y'], n['z'],
+        n['radius'],
+        n.get('parent_id', -1)] for node_id, n in t.nodes(data=True)]
 
 
 def train_network(model_file=None, volumes=None,

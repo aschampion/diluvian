@@ -15,6 +15,10 @@ You should install diluvian
 or similar isolated environment. All other documentation here assumes a
 a virtualenv has been created and is active.
 
+To use skeletonization you must install the
+`skeletopyze <https://github.com/funkey/skeletopyze>`_ library into the
+virtualenv manually. See its documentation for requirements and instructions.
+
 
 Stable release
 --------------

@@ -90,6 +90,14 @@ class OctreeVolume(object):
         for leaf in self.root_node.iter_leaves():
             yield leaf
 
+    def get_leaf_bounds(self):
+        bounds = [np.array(self.bounds[1]), np.array(self.bounds[0])]
+        for leaf in self.iter_leaves():
+            bounds[0] = np.minimum(bounds[0], leaf.bounds[0])
+            bounds[1] = np.maximum(bounds[1], leaf.bounds[1])
+
+        return bounds
+
     def map_copy(self, dtype, leaf_map, uniform_map):
         """Create a copy of this octree by mapping node data.
 

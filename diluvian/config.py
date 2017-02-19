@@ -55,6 +55,9 @@ class ModelConfig(BaseConfig):
     t_move : float
         Threshold mask probability in the move check plane to queue a move
         to that position.
+    t_final : float, optional
+        Threshold mask probability to produce the final segmentation. Defaults
+        to ``t_move``.
     move_check_thickness : int
         Thickness of move check plane in voxels. Setting this greater than 1
         is useful to make moves more robust even if the move grid aligns with
@@ -67,6 +70,7 @@ class ModelConfig(BaseConfig):
         self.v_true = float(settings.get('v_true', 0.95))
         self.v_false = float(settings.get('v_false', 0.05))
         self.t_move = float(settings.get('t_move', 0.9))
+        self.t_final = float(settings.get('t_final', self.t_move))
         self.move_check_thickness = int(settings.get('move_check_thickness', 1))
         self.training_subv_shape = np.array(settings.get('training_subv_shape',
                                                          self.fov_shape + ((self.fov_shape - 1) / 2)))
