@@ -80,6 +80,42 @@ class OctreeVolume(object):
 
         self.root_node[npkey] = value
 
+    def iter_leaves(self):
+        """Iterator over all non-uniform leaf nodes.
+
+        Yields
+        ------
+        LeafNode
+        """
+        for leaf in self.root_node.iter_leaves():
+            yield leaf
+
+    def map_copy(self, dtype, leaf_map, uniform_map):
+        """Create a copy of this octree by mapping node data.
+
+        Note that because leaves and uniform nodes can have separate mapping,
+        the ranges of this tree and the copied tree may not be bijective.
+
+        Populators are not copied.
+
+        Parameters
+        ----------
+        dtype : numpy.data-type
+            Data type for the constructed copy
+        leaf_map : function
+            Function mapping leaf node data for the constructed copy.
+        uniform_map : function
+            Function mapping uniform node values.
+
+        Returns
+        -------
+        OctreeVolume
+            Copied octree with the same structure as this octree.
+        """
+        copy = OctreeVolume(self.leaf_shape, self.bounds, dtype)
+        copy.root_node = self.root_node.map_copy(copy, leaf_map, uniform_map)
+        return copy
+
     def fullness(self):
         potential_leaves = np.prod(np.ceil(np.true_divide(self.bounds[1] - self.bounds[0], self.leaf_shape)))
         return self.root_node.count_leaves() / float(potential_leaves)
@@ -128,6 +164,28 @@ class BranchNode(Node):
 
     def count_leaves(self):
         return sum(c.count_leaves() for s in self.children for r in s for c in r if c is not None)
+
+    def iter_leaves(self):
+        for i in range(2):
+            for j in range(2):
+                for k in range(2):
+                    child = self.children[i][j][k]
+                    if child is None or isinstance(child, UniformNode):
+                        continue
+                    for leaf in child.iter_leaves():
+                        yield leaf
+
+    def map_copy(self, copy_parent, leaf_map, uniform_map):
+        copy = BranchNode(copy_parent, self.bounds, clip_bound=self.clip_bound)
+        for i in range(2):
+            for j in range(2):
+                for k in range(2):
+                    child = self.children[i][j][k]
+                    if child is None:
+                        copy.children[i][j][k] = None
+                    else:
+                        copy.children[i][j][k] = child.map_copy(copy, leaf_map, uniform_map)
+        return copy
 
     def get_children_mask(self, key):
         p = (np.less(key[0], self.midpoint),
@@ -230,6 +288,13 @@ class LeafNode(Node):
     def count_leaves(self):
         return 1
 
+    def iter_leaves(self):
+        yield self
+
+    def map_copy(self, copy_parent, leaf_map, uniform_map):
+        copy = LeafNode(copy_parent, self.bounds, leaf_map(self.data))
+        return copy
+
     def __getitem__(self, key):
         ind = (key[0] - self.bounds[0], key[1] - self.bounds[0])
         return self.data[ind[0][0]:ind[1][0],
@@ -251,6 +316,11 @@ class UniformNode(Node):
 
     def __getitem__(self, key):
         return np.full(tuple(key[1] - key[0]), self.value, dtype=self.dtype)
+
+    def map_copy(self, copy_parent, leaf_map, uniform_map):
+        copy = type(self)(copy_parent, self.bounds, copy_parent.get_volume().dtype,
+                          uniform_map(self.value), clip_bound=self.clip_bound)
+        return copy
 
 
 class UniformBranchNode(UniformNode):

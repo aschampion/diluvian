@@ -45,6 +45,30 @@ def test_octree_bounds():
     np.testing.assert_almost_equal(ot.fullness(), 1.0, err_msg='Octree fullness should be relative to clip bounds.')
 
 
+def test_octree_map_copy():
+    clip_bounds = (np.zeros(3), np.array([11, 6, 5]))
+    ot = octrees.OctreeVolume([5, 5, 5], clip_bounds, 'uint8')
+    ot[clip_bounds[0][0]:clip_bounds[1][0],
+       clip_bounds[0][1]:clip_bounds[1][1],
+       clip_bounds[0][2]:clip_bounds[1][2]] = 6
+
+    ot[8, 5, 4] = 5
+
+    def leaf_map(a):
+        return a * -1
+
+    def uniform_map(v):
+        return v * 1.5
+
+    cot = ot.map_copy(np.float32, leaf_map, uniform_map)
+    for orig, copy in zip(ot.iter_leaves(), cot.iter_leaves()):
+        np.testing.assert_almost_equal(copy.bounds[0], orig.bounds[0], err_msg='Copy leaves should have same boundss.')
+        np.testing.assert_almost_equal(copy.bounds[1], orig.bounds[1], err_msg='Copy leaves should have same boundss.')
+        np.testing.assert_almost_equal(copy.data, leaf_map(orig.data), err_msg='Copy leaves should be mapped.')
+    expected_mat = np.array([[[9.], [-6.]], [[9.], [-5.]]], dtype=np.float32)
+    assert np.array_equal(cot[7:9, 4:6, 4], expected_mat), 'Copy should have same uniformity.'
+
+
 def test_region_moves():
     mock_image = np.zeros(tuple(CONFIG.model.training_subv_shape), dtype='float32')
     region = regions.DenseRegion(mock_image)
