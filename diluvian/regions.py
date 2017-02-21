@@ -2,17 +2,16 @@
 
 
 import itertools
-import logging
 import Queue
 
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy import ndimage
 from tqdm import tqdm
 
 from .config import CONFIG
 from .octrees import OctreeVolume
+from .postprocessing import Body
 from .util import get_color_shader, pad_dims, WrappedViewer
 
 
@@ -373,34 +372,6 @@ class DenseRegion(object):
                        name='Mask Output',
                        shader=get_color_shader(1))
         return viewer
-
-
-class Body(object):
-    def __init__(self, mask, seed):
-        self.mask = mask
-        self.seed = seed
-
-    def get_largest_component(self, closing_shape=None):
-        if isinstance(self.mask, OctreeVolume):
-            # If this is a sparse volume, materialize it to memory.
-            bounds = self.mask.get_leaf_bounds()
-            mask = self.mask[map(slice, bounds[0], bounds[1])]
-        else:
-            bounds = (np.zeros(3), np.array(self.mask.shape))
-            mask = self.mask
-
-        if closing_shape is not None:
-            mask = ndimage.grey_closing(mask, size=closing_shape, mode='nearest')
-
-        label_im, num_labels = ndimage.label(mask)
-        label_sizes = ndimage.sum(mask, label_im, range(num_labels + 1))
-        label_im[(label_sizes < label_sizes.max())[label_im]] = 0
-        label_im = np.minimum(label_im, 1)
-
-        if label_im[tuple(self.seed - bounds[0])] == 0:
-            logging.warning('Seed voxel (%s) is not in connected component.', np.array_str(self.seed))
-
-        return label_im, bounds
 
 
 def mask_to_output_target(mask):
