@@ -122,9 +122,12 @@ def skeletonize_component(component):
     import skeletopyze
 
     params = skeletopyze.Parameters()
+    res = skeletopyze.point_f3()
+    for i in range(3):
+        res[i] = CONFIG.volume.resolution[2 - i]
 
     print 'Skeletonizing...'
-    skel = skeletopyze.get_skeleton_graph(component.astype(np.int32), params)
+    skel = skeletopyze.get_skeleton_graph(component.astype(np.int32), params, res)
 
     return skel
 
