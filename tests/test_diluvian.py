@@ -96,7 +96,7 @@ def test_volume_transforms():
     pv = v.partition([1, 1, 2], [0, 0, 1])
     dpv = pv.downsample((4, 4, 1))
 
-    np.testing.assert_array_equal(dpv.xyz_coord_to_local(np.array([2, 2, 2])), np.array([8, 8, 34]))
+    np.testing.assert_array_equal(dpv.world_coord_to_local(np.array([2, 2, 2])), np.array([8, 8, 34]))
 
     svb = volumes.SubvolumeBounds(np.array((0, 0, 32), dtype=np.int64),
                                   np.array((4, 4, 33), dtype=np.int64))

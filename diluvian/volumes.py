@@ -140,15 +140,15 @@ class Volume(object):
         self.label_data = label_data
         self.resolution = resolution
 
-    def xyz_coord_to_local(self, a):
+    def world_coord_to_local(self, a):
         return a
 
-    def xyz_mat_to_local(self, m):
+    def world_mat_to_local(self, m):
         return m
 
     @property
     def shape(self):
-        return tuple(self.xyz_coord_to_local(np.array(self.image_data.shape)))
+        return tuple(self.world_coord_to_local(np.array(self.image_data.shape)))
 
     def _get_downsample_from_resolution(self, resolution):
         resolution = np.asarray(resolution)
@@ -197,11 +197,11 @@ class Volume(object):
                 bounds.start[1]:bounds.stop[1],
                 bounds.start[2]:bounds.stop[2]]
 
-        image_subvol = self.xyz_mat_to_local(image_subvol)
+        image_subvol = self.world_mat_to_local(image_subvol)
         if np.issubdtype(image_subvol.dtype, np.integer):
             image_subvol = image_subvol.astype('float32') / 256.0
 
-        label_subvol = self.xyz_mat_to_local(label_subvol)
+        label_subvol = self.world_mat_to_local(label_subvol)
 
         seed = bounds.seed
         if seed is None:
@@ -239,8 +239,8 @@ class Volume(object):
                 if self.volume.label_data is None:
                     label_id = None
                     break
-                seed_min = self.volume.xyz_coord_to_local(ctr)
-                seed_max = self.volume.xyz_coord_to_local(ctr + 1)
+                seed_min = self.volume.world_coord_to_local(ctr)
+                seed_max = self.volume.world_coord_to_local(ctr + 1)
                 label_ids = self.volume.label_data[
                         seed_min[0]:seed_max[0],
                         seed_min[1]:seed_max[1],
@@ -271,11 +271,11 @@ class VolumeView(Volume):
         super(VolumeView, self).__init__(image_data, label_data, resolution)
         self.parent = parent
 
-    def xyz_coord_to_local(self, a):
-        return self.parent.xyz_coord_to_local(a)
+    def world_coord_to_local(self, a):
+        return self.parent.world_coord_to_local(a)
 
-    def xyz_mat_to_local(self, m):
-        return self.parent.xyz_mat_to_local(m)
+    def world_mat_to_local(self, m):
+        return self.parent.world_mat_to_local(m)
 
     @property
     def shape(self):
@@ -313,8 +313,8 @@ class PartitionedVolume(VolumeView):
         self.bounds = ((np.multiply(partition_shape, self.partition_index)).astype(np.int64),
                        (np.multiply(partition_shape, self.partition_index + 1)).astype(np.int64))
 
-    def xyz_coord_to_local(self, a):
-        return self.parent.xyz_coord_to_local(a) + self.bounds[0]
+    def world_coord_to_local(self, a):
+        return self.parent.world_coord_to_local(a) + self.bounds[0]
 
     @property
     def shape(self):
@@ -342,8 +342,8 @@ class DownsampledVolume(VolumeView):
                 parent.label_data,
                 np.multiply(parent.resolution, self.zoom))
 
-    def xyz_coord_to_local(self, a):
-        return np.multiply(self.parent.xyz_coord_to_local(a), self.zoom)
+    def world_coord_to_local(self, a):
+        return np.multiply(self.parent.world_coord_to_local(a), self.zoom)
 
     @property
     def shape(self):
@@ -351,8 +351,8 @@ class DownsampledVolume(VolumeView):
 
     def get_subvolume(self, bounds):
         subvol_shape = bounds.stop - bounds.start
-        parent_bounds = SubvolumeBounds(self.xyz_coord_to_local(bounds.start),
-                                        self.xyz_coord_to_local(bounds.stop))
+        parent_bounds = SubvolumeBounds(self.world_coord_to_local(bounds.start),
+                                        self.world_coord_to_local(bounds.stop))
         subvol = self.parent.get_subvolume(parent_bounds)
         subvol.image = subvol.image.reshape(
                 [subvol_shape[0], self.zoom[0],
@@ -445,17 +445,17 @@ class HDF5Volume(Volume):
         else:
             self.resolution = np.ones(3)
 
-    def xyz_coord_to_local(self, a):
+    def world_coord_to_local(self, a):
         return np.flipud(a)
 
-    def xyz_mat_to_local(self, m):
+    def world_mat_to_local(self, m):
         return np.transpose(m)
 
     def to_memory_volume(self):
         return NdarrayVolume(
-                self.xyz_mat_to_local(self.image_data[:, :, :]),
-                self.xyz_mat_to_local(self.label_data[:, :, :]),
-                self.xyz_coord_to_local(self.resolution))
+                self.world_mat_to_local(self.image_data[:, :, :]),
+                self.world_mat_to_local(self.label_data[:, :, :]),
+                self.world_coord_to_local(self.resolution))
 
 
 class ImageStackVolume(Volume):
