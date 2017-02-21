@@ -335,19 +335,19 @@ class DownsampledVolume(VolumeView):
         Integral zoom levels to downsample the wrapped volume.
     """
     def __init__(self, parent, downsample):
-        self.zoom = np.exp2(downsample).astype(np.int64)
+        self.scale = np.exp2(downsample).astype(np.int64)
         super(DownsampledVolume, self).__init__(
                 parent,
                 parent.image_data,
                 parent.label_data,
-                np.multiply(parent.resolution, self.zoom))
+                np.multiply(parent.resolution, self.scale))
 
     def world_coord_to_local(self, a):
-        return np.multiply(self.parent.world_coord_to_local(a), self.zoom)
+        return np.multiply(self.parent.world_coord_to_local(a), self.scale)
 
     @property
     def shape(self):
-        return tuple(np.floor_divide(np.array(self.parent.shape), self.zoom))
+        return tuple(np.floor_divide(np.array(self.parent.shape), self.scale))
 
     def get_subvolume(self, bounds):
         subvol_shape = bounds.stop - bounds.start
@@ -355,20 +355,20 @@ class DownsampledVolume(VolumeView):
                                         self.world_coord_to_local(bounds.stop))
         subvol = self.parent.get_subvolume(parent_bounds)
         subvol.image = subvol.image.reshape(
-                [subvol_shape[0], self.zoom[0],
-                 subvol_shape[1], self.zoom[1],
-                 subvol_shape[2], self.zoom[2]]).mean(5).mean(3).mean(1)
+                [subvol_shape[0], self.scale[0],
+                 subvol_shape[1], self.scale[1],
+                 subvol_shape[2], self.scale[2]]).mean(5).mean(3).mean(1)
         # Downsample body mask by considering blocks where the majority
         # of voxels are in the body to be in the body. Alternatives are:
         # - Conjunction (tends to introduce false splits)
         # - Disjunction (tends to overdilate and merge)
         # - Mode label (computationally expensive)
         subvol.label_mask = subvol.label_mask.reshape(
-                [subvol_shape[0], self.zoom[0],
-                 subvol_shape[1], self.zoom[1],
-                 subvol_shape[2], self.zoom[2]]).mean(5).mean(3).mean(1) > 0.5
+                [subvol_shape[0], self.scale[0],
+                 subvol_shape[1], self.scale[1],
+                 subvol_shape[2], self.scale[2]]).mean(5).mean(3).mean(1) > 0.5
 
-        subvol.seed = np.divide(subvol.seed, self.zoom)
+        subvol.seed = np.divide(subvol.seed, self.scale)
 
         return subvol
 
