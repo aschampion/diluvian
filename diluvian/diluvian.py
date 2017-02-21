@@ -173,7 +173,7 @@ def fill_region_from_model(model_file, volumes=None, bounds_input_file=None,
             s = raw_input("Press Enter when animation is complete...")
         elif s == 's':
             body = region.to_body()
-            component, bounds = body.get_largest_component()
+            component, bounds = body.get_largest_component(closing_shape=CONFIG.postprocessing.closing_shape)
             print 'Skeleton is within {}, {}'.format(np.array_str(bounds[0]), np.array_str(bounds[1]))
             skel = skeletonize_component(component)
             swc = skeleton_to_swc(skel, bounds[0], CONFIG.volume.resolution)

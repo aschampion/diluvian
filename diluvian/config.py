@@ -173,6 +173,18 @@ class TrainingConfig(BaseConfig):
         self.patience = int(np.array(settings.get('patience', 10)))
 
 
+class PostprocessingConfig(BaseConfig):
+    """Configuration for segmentation processing after flood filling.
+
+    Attributes
+    ----------
+    closing_shape : sequence or ndarray of int
+        Shape of the structuring element for morphological closing, in voxels.
+    """
+    def __init__(self, settings):
+        self.closing_shape = settings.get('closing_shape', None)
+
+
 class Config(object):
     """A complete collection of configuration objects."""
 
@@ -193,6 +205,7 @@ class Config(object):
         self.network = NetworkConfig(settings.get('network', {}))
         self.optimizer = OptimizerConfig(settings.get('optimizer', {}))
         self.training = TrainingConfig(settings.get('training', {}))
+        self.postprocessing = PostprocessingConfig(settings.get('postprocessing', {}))
 
     def __str__(self):
         sanitized = {}

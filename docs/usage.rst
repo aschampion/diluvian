@@ -39,6 +39,7 @@ configuration class:
 * :class:`Network<diluvian.config.NetworkConfig>`
 * :class:`Optimizer<diluvian.config.OptimizerConfig>`
 * :class:`Training<diluvian.config.TrainingConfig>`
+* :class:`Postprocessing<diluvian.config.PostprocessingConfig>`
 
 To run diluvian using a custom config, use the ``-c`` command line argument:
 

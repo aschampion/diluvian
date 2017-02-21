@@ -380,7 +380,7 @@ class Body(object):
         self.mask = mask
         self.seed = seed
 
-    def get_largest_component(self):
+    def get_largest_component(self, closing_shape=None):
         if isinstance(self.mask, OctreeVolume):
             # If this is a sparse volume, materialize it to memory.
             bounds = self.mask.get_leaf_bounds()
@@ -388,6 +388,9 @@ class Body(object):
         else:
             bounds = (np.zeros(3), np.array(self.mask.shape))
             mask = self.mask
+
+        if closing_shape is not None:
+            mask = ndimage.grey_closing(mask, size=closing_shape, mode='nearest')
 
         label_im, num_labels = ndimage.label(mask)
         label_sizes = ndimage.sum(mask, label_im, range(num_labels + 1))
