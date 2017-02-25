@@ -150,11 +150,20 @@ def train_network(model_file=None, volumes=None,
                 .downsample(CONFIG.volume.resolution)
             for k, v in volumes.iteritems()}
 
-    validation_data = {k: static_training_generator(
-            v.subvolume_generator(shape=CONFIG.model.fov_shape),
-            CONFIG.training.batch_size,
-            CONFIG.training.validation_size,
-            f_a_bins=f_a_bins) for k, v in validation_volumes.iteritems()}
+    if static_validation:
+        validation_data = {k: static_training_generator(
+                v.subvolume_generator(shape=CONFIG.model.fov_shape),
+                CONFIG.training.batch_size,
+                CONFIG.training.validation_size,
+                f_a_bins=f_a_bins) for k, v in validation_volumes.iteritems()}
+    else:
+        validation_kludges = {k: {'inputs': None, 'outputs': None} for k in volumes.iterkeys()}
+        validation_data = {k: moving_training_generator(
+                v.subvolume_generator(shape=CONFIG.model.training_subv_shape),
+                CONFIG.training.batch_size,
+                CONFIG.training.validation_size,
+                validation_kludges[k],
+                f_a_bins=f_a_bins) for k, v in validation_volumes.iteritems()}
     validation_data = roundrobin(*validation_data.values())
 
     # Pre-train
