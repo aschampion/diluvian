@@ -653,14 +653,17 @@ def static_training_generator(subvolumes, batch_size, training_size, f_a_bins=No
     mask_input = np.full(np.append(subvolumes.shape, (1,)), CONFIG.model.v_false, dtype='float32')
     mask_input[tuple(np.array(mask_input.shape) / 2)] = CONFIG.model.v_true
     mask_input = np.tile(mask_input, (batch_size, 1, 1, 1, 1))
+    f_a_init = False
 
     if f_a_bins is not None:
-        f_a_counts = np.zeros_like(f_a_bins, dtype=np.int64)
+        f_a_init = True
+        f_a_counts = np.ones_like(f_a_bins, dtype=np.int64)
     f_as = np.zeros(batch_size)
 
     sample_num = 0
     while True:
         if sample_num >= training_size:
+            f_a_init = False
             subvolumes.reset()
             sample_num = 0
 
@@ -686,8 +689,11 @@ def static_training_generator(subvolumes, batch_size, training_size, f_a_bins=No
         else:
             f_a_inds = np.digitize(f_as, f_a_bins) - 1
             inds, counts = np.unique(f_a_inds, return_counts=True)
-            f_a_counts[inds] += counts.astype(np.int64)
-            sample_weights = np.reciprocal(f_a_counts[f_a_inds], dtype='float64')
+            if f_a_init:
+                f_a_counts[inds] += counts.astype(np.int64)
+                sample_weights = np.ones(f_as.size, dtype='float64')
+            else:
+                sample_weights = np.reciprocal(f_a_counts[f_a_inds], dtype='float64') * float(f_as.size)
             yield ({'image_input': batch_image_input,
                     'mask_input': mask_input},
                    [batch_mask_target],
@@ -723,14 +729,17 @@ def moving_training_generator(subvolumes, batch_size, training_size, callback_kl
     move_counts = [0] * batch_size
     epoch_move_counts = []
     batch_image_input = [None] * batch_size
+    f_a_init = False
 
     if f_a_bins is not None:
-        f_a_counts = np.zeros_like(f_a_bins, dtype=np.int64)
+        f_a_init = True
+        f_a_counts = np.ones_like(f_a_bins, dtype=np.int64)
     f_as = np.zeros(batch_size)
 
     sample_num = 0
     while True:
         if sample_num >= training_size:
+            f_a_init = False
             subvolumes.reset()
             if len(epoch_move_counts):
                 logging.info(' Average moves: %s', sum(epoch_move_counts)/float(len(epoch_move_counts)))
@@ -785,8 +794,11 @@ def moving_training_generator(subvolumes, batch_size, training_size, callback_kl
         else:
             f_a_inds = np.digitize(f_as, f_a_bins) - 1
             inds, counts = np.unique(f_a_inds, return_counts=True)
-            f_a_counts[inds] += counts.astype(np.int64)
-            sample_weights = np.reciprocal(f_a_counts[f_a_inds], dtype='float64')
+            if f_a_init:
+                f_a_counts[inds] += counts.astype(np.int64)
+                sample_weights = np.ones(f_as.size, dtype='float64')
+            else:
+                sample_weights = np.reciprocal(f_a_counts[f_a_inds], dtype='float64') * float(f_as.size)
             yield (inputs,
                    [batch_mask_target],
                    sample_weights)
