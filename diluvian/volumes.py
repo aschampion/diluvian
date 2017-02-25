@@ -2,6 +2,7 @@
 """Volumes of raw image and labeled object data."""
 
 
+from collections import namedtuple
 import csv
 import logging
 
@@ -21,6 +22,9 @@ from .regions import (
         mask_to_output_target,
         )
 from .util import pad_dims
+
+
+DimOrder = namedtuple('DimOrder', ('X', 'Y', 'Z'))
 
 
 class SubvolumeBounds(object):
@@ -138,6 +142,8 @@ class SubvolumeGenerator(object):
 
 
 class Volume(object):
+    DIM = DimOrder(Z=0, Y=1, X=2)
+
     def __init__(self, image_data, label_data, resolution):
         self.image_data = image_data
         self.label_data = label_data
@@ -452,16 +458,12 @@ class HDF5Volume(Volume):
         h5file = h5py.File(filename, 'w')
         config = {'hdf5_file': filename}
         if image_data is not None:
-            # Store in ZYX.
-            image_data = np.transpose(image_data)
             dataset = h5file.create_dataset(image_dataset, data=image_data, dtype=image_data.dtype)
-            dataset.attrs['resolution'] = np.flipud(resolution)
+            dataset.attrs['resolution'] = resolution
             config['image_dataset'] = image_dataset
         if label_data is not None:
-            # Store in ZYX.
-            label_data = np.transpose(label_data)
             dataset = h5file.create_dataset(label_dataset, data=label_data, dtype=label_data.dtype)
-            dataset.attrs['resolution'] = np.flipud(resolution)
+            dataset.attrs['resolution'] = resolution
             config['label_dataset'] = label_dataset
 
         h5file.close()
@@ -498,16 +500,10 @@ class HDF5Volume(Volume):
         if self.resolution is None:
             self.resolution = np.ones(3)
 
-    def world_coord_to_local(self, a):
-        return np.flipud(a)
-
-    def world_mat_to_local(self, m):
-        return np.transpose(m)
-
     def to_memory_volume(self):
         return NdarrayVolume(
-                self.world_mat_to_local(self.image_data[:, :, :]),
-                self.world_mat_to_local(self.label_data[:, :, :]),
+                self.world_mat_to_local(self.image_data[:]),
+                self.world_mat_to_local(self.label_data[:]),
                 self.world_coord_to_local(self.resolution))
 
 
@@ -544,8 +540,8 @@ class ImageStackVolume(Volume):
                '{{zoom_level}}/{{z}}/{{row}}/{{col}}.{file_extension}',
             9: '{source_base_url}{{z}}/{{row}}_{{col}}_{{zoom_level}}.{file_extension}',
         }[tile_source_parameters['tile_source_type']].format(**tile_source_parameters)
-        bounds = np.array(stack_info['bounds'], dtype=np.int64)
-        resolution = np.array(stack_info['resolution'])
+        bounds = np.flipud(np.array(stack_info['bounds'], dtype=np.int64))
+        resolution = np.flipud(np.array(stack_info['resolution']))
         tile_width = int(tile_source_parameters['tile_width'])
         tile_height = int(tile_source_parameters['tile_height'])
         return ImageStackVolume(bounds, resolution, tile_width, tile_height, format_url,
@@ -564,9 +560,9 @@ class ImageStackVolume(Volume):
             missing_z = []
         self.missing_z = frozenset(missing_z)
         if image_leaf_shape is None:
-            image_leaf_shape = [tile_width, tile_height, 10]
+            image_leaf_shape = [10, tile_height, tile_width]
 
-        scale = np.exp2(np.array([self.zoom_level, self.zoom_level, 0])).astype(np.int64)
+        scale = np.exp2(np.array([0, self.zoom_level, self.zoom_level])).astype(np.int64)
 
         data_shape = (np.zeros(3), np.divide(bounds, scale).astype(np.int64))
         self.image_data = OctreeVolume(image_leaf_shape,
@@ -578,11 +574,11 @@ class ImageStackVolume(Volume):
 
     @property
     def resolution(self):
-        return self.orig_resolution * np.exp2([self.zoom_level, self.zoom_level, 0])
+        return self.orig_resolution * np.exp2([0, self.zoom_level, self.zoom_level])
 
     def downsample(self, resolution):
         downsample = self._get_downsample_from_resolution(resolution)
-        zoom_level = np.min(downsample[0:2])
+        zoom_level = np.min(downsample[[self.DIM.X, self.DIM.Y]])
         if zoom_level > 0:
             return ImageStackVolume(
                     self.orig_bounds,
@@ -626,14 +622,14 @@ class ImageStackVolume(Volume):
 
     def image_populator(self, bounds):
         image_subvol = np.zeros(tuple(bounds[1] - bounds[0]), dtype='float32')
-        col_range = map(int, (math.floor(bounds[0][0]/self.tile_width),
-                              math.ceil(bounds[1][0]/self.tile_width)))
-        row_range = map(int, (math.floor(bounds[0][1]/self.tile_height),
-                              math.ceil(bounds[1][1]/self.tile_height)))
-        tile_size = np.array([self.tile_width, self.tile_height, 1]).astype('int64')
-        for z in xrange(bounds[0][2], bounds[1][2]):
+        col_range = map(int, (math.floor(bounds[0][self.DIM.X]/self.tile_width),
+                              math.ceil(bounds[1][self.DIM.X]/self.tile_width)))
+        row_range = map(int, (math.floor(bounds[0][self.DIM.Y]/self.tile_height),
+                              math.ceil(bounds[1][self.DIM.Y]/self.tile_height)))
+        tile_size = np.array([1, self.tile_height, self.tile_width]).astype('int64')
+        for z in xrange(bounds[0][self.DIM.Z], bounds[1][self.DIM.Z]):
             if z in self.missing_z:
-                image_subvol[:, :, int(z - bounds[0][2])] = 0
+                image_subvol[int(z - bounds[0][self.DIM.Z]), :, :] = 0
                 continue
             for r in xrange(*row_range):
                 for c in xrange(*col_range):
@@ -644,11 +640,11 @@ class ImageStackVolume(Volume):
                         # just use the first channel.
                         if im.ndim > 2:
                             im = im[:, :, 0].squeeze()
-                        im = np.transpose(im) / 256.0
+                        im = im / 256.0
                     except IOError:
                         logging.debug('Failed to load tile: %s', url)
-                        im = np.full((self.tile_width, self.tile_height), 0, dtype='float32')
-                    tile_coord = np.array([c, r, z]).astype('int64')
+                        im = np.full((self.tile_height, self.tile_width), 0, dtype='float32')
+                    tile_coord = np.array([z, r, c]).astype('int64')
                     tile_loc = np.multiply(tile_coord, tile_size)
 
                     subvol = (np.maximum(np.zeros(3), tile_loc - bounds[0]).astype(np.int64),
@@ -657,10 +653,11 @@ class ImageStackVolume(Volume):
                     tile_sub = (np.maximum(np.zeros(3), bounds[0] - tile_loc).astype(np.int64),
                                 np.minimum(tile_size, bounds[1] - tile_loc).astype(np.int64))
 
-                    image_subvol[subvol[0][0]:subvol[1][0],
-                                 subvol[0][1]:subvol[1][1],
-                                 subvol[0][2]] = im[tile_sub[0][0]:tile_sub[1][0],
-                                                    tile_sub[0][1]:tile_sub[1][1]]
+                    image_subvol[subvol[0][self.DIM.Z],
+                                 subvol[0][self.DIM.Y]:subvol[1][self.DIM.Y],
+                                 subvol[0][self.DIM.X]:subvol[1][self.DIM.X]] = \
+                        im[tile_sub[0][self.DIM.Y]:tile_sub[1][self.DIM.Y],
+                           tile_sub[0][self.DIM.X]:tile_sub[1][self.DIM.X]]
 
         return image_subvol
 

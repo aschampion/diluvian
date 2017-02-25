@@ -71,8 +71,8 @@ class ModelConfig(BaseConfig):
         Shape of the subvolumes used during moving training.
     """
     def __init__(self, settings):
-        self.input_fov_shape = np.array(settings.get('input_fov_shape', [33, 33, 17]))
-        self.output_fov_shape = np.array(settings.get('output_fov_shape', [33, 33, 17]))
+        self.input_fov_shape = np.array(settings.get('input_fov_shape', [17, 33, 17]))
+        self.output_fov_shape = np.array(settings.get('output_fov_shape', [17, 33, 17]))
         self.output_fov_move_fraction = int(settings.get('output_fov_move_fraction', 4))
         self.v_true = float(settings.get('v_true', 0.95))
         self.v_false = float(settings.get('v_false', 0.05))
@@ -175,9 +175,9 @@ class TrainingConfig(BaseConfig):
         self.fill_factor_bins = settings.get('fill_factor_bins', None)
         if self.fill_factor_bins is not None:
             self.fill_factor_bins = np.array(self.fill_factor_bins)
-        self.partitions = np.array(settings.get('partitions', [0, 0, 0]))
+        self.partitions = np.array(settings.get('partitions', [2, 1, 1]))
         self.training_partition = np.array(settings.get('training_partition', [0, 0, 0]))
-        self.validation_partition = np.array(settings.get('validation_partition', [0, 0, 1]))
+        self.validation_partition = np.array(settings.get('validation_partition', [1, 0, 0]))
         self.patience = int(np.array(settings.get('patience', 10)))
 
 

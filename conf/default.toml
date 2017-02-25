@@ -1,9 +1,9 @@
 [volume]
-resolution = [16, 16, 40]
+resolution = [40, 16, 16]
 
 [model]
-input_fov_shape = [33, 33, 13]
-output_fov_shape = [33, 33, 13]
+input_fov_shape = [13, 33, 33]
+output_fov_shape = [13, 33, 33]
 output_fov_move_fraction = 4
 v_true = 0.95
 v_false = 0.05
@@ -33,9 +33,9 @@ static_train_epochs = 1
 total_epochs = 2
 # fill_factor_bins = [0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.075,
 #                     0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
-partitions = [1, 1, 2]
+partitions = [2, 1, 1]
 training_partition = [0, 0, 0]
-validation_partition = [0, 0, 1]
+validation_partition = [1, 0, 0]
 patience = 20
 
 [postprocessing]
