@@ -14,6 +14,7 @@ num_modules = 8
 convolution_dim = [3, 3, 3]
 convolution_filters = 32
 output_activation = "sigmoid"
+initialization = "glorot_uniform"
 
 [optimizer]
 klass = "SGD"

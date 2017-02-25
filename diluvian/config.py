@@ -101,6 +101,7 @@ class NetworkConfig(BaseConfig):
         self.num_modules = int(settings.get('num_modules', 8))
         self.convolution_dim = np.array(settings.get('convolution_dim', [3, 3, 3]))
         self.convolution_filters = int(settings.get('convolution_filters', 32))
+        self.initialization = str(settings.get('initialization', 'glorot_uniform'))
         self.output_activation = str(settings.get('output_activation', 'sigmoid'))
 
 

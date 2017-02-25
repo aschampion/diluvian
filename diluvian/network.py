@@ -21,6 +21,7 @@ def make_flood_fill_network(fov_shape, network_config):
                         network_config.convolution_dim[0],
                         network_config.convolution_dim[1],
                         network_config.convolution_dim[2],
+                        init=network_config.initialization,
                         activation='relu',
                         border_mode='same')(ffn)
 
@@ -31,6 +32,7 @@ def make_flood_fill_network(fov_shape, network_config):
                                 network_config.convolution_dim[0],
                                 network_config.convolution_dim[1],
                                 network_config.convolution_dim[2],
+                                init=network_config.initialization,
                                 border_mode='same',
                                 name='mask_output',
                                 activation=network_config.output_activation)(ffn)
@@ -44,12 +46,14 @@ def add_convolution_module(model, network_config):
                            network_config.convolution_dim[0],
                            network_config.convolution_dim[1],
                            network_config.convolution_dim[2],
+                           init=network_config.initialization,
                            activation='relu',
                            border_mode='same')(model)
     model2 = Convolution3D(network_config.convolution_filters,
                            network_config.convolution_dim[0],
                            network_config.convolution_dim[1],
                            network_config.convolution_dim[2],
+                           init=network_config.initialization,
                            border_mode='same')(model2)
     model = merge([model, model2], mode='sum')
     # Note that the activation here differs from He et al 2016, as that

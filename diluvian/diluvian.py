@@ -111,7 +111,7 @@ def fill_region_from_model(model_file, volumes=None, bounds_input_file=None,
             body.to_swc('{}.swc'.format('_'.join(map(str, tuple(body.seed)))))
 
 
-def train_network(model_file=None, volumes=None,
+def train_network(model_file=None, volumes=None, static_validation=True,
                   model_output_filebase=None, model_checkpoint_file=None,
                   tensorboard=False, viewer=False, metric_plot=False):
     if model_file is None:
