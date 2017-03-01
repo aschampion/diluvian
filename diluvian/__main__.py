@@ -164,14 +164,17 @@ def load_volumes(volume_file, in_memory):
     # Late import to prevent loading large modules for short CLI commands.
     from .volumes import HDF5Volume
 
+    print 'Loading volumes...'
     if volume_file:
         volumes = HDF5Volume.from_toml(volume_file)
     else:
         volumes = HDF5Volume.from_toml(os.path.join(os.path.dirname(__file__), '..', 'conf', 'cremi_datasets.toml'))
 
     if in_memory:
+        print 'Copying volumes to memory...'
         volumes = {k: v.to_memory_volume() for k, v in volumes.iteritems()}
 
+    print 'Done.'
     return volumes
 
 
