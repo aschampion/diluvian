@@ -16,7 +16,10 @@ from keras.utils.data_utils import get_file
 
 from .config import CONFIG
 from .octrees import OctreeVolume
-from .regions import DenseRegion, mask_to_output_target
+from .regions import (
+        DenseRegion,
+        mask_to_output_target,
+        )
 from .util import pad_dims
 
 

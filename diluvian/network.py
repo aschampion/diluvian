@@ -4,7 +4,11 @@
 
 import inspect
 
-from keras.layers import Convolution3D, Input, merge
+from keras.layers import (
+        Convolution3D,
+        Input,
+        merge,
+        )
 from keras.layers.core import Activation
 from keras.models import Model
 import keras.optimizers

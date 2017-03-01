@@ -12,7 +12,11 @@ from tqdm import tqdm
 from .config import CONFIG
 from .octrees import OctreeVolume
 from .postprocessing import Body
-from .util import get_color_shader, pad_dims, WrappedViewer
+from .util import (
+        get_color_shader,
+        pad_dims,
+        WrappedViewer,
+        )
 
 
 class DenseRegion(object):

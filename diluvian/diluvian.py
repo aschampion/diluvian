@@ -12,14 +12,28 @@ import matplotlib.pyplot as plt
 import neuroglancer
 import numpy as np
 
-from keras.callbacks import Callback, EarlyStopping, ModelCheckpoint, TensorBoard
+from keras.callbacks import (
+        Callback,
+        EarlyStopping,
+        ModelCheckpoint,
+        TensorBoard,
+        )
 from keras.models import load_model
 
 from .config import CONFIG
 from .network import compile_network
 from .third_party.multi_gpu import make_parallel
-from .util import extend_keras_history, get_color_shader, roundrobin, write_keras_history_to_csv
-from .volumes import SubvolumeBounds, static_training_generator, moving_training_generator
+from .util import (
+        extend_keras_history,
+        get_color_shader,
+        roundrobin,
+        write_keras_history_to_csv,
+        )
+from .volumes import (
+        SubvolumeBounds,
+        static_training_generator,
+        moving_training_generator,
+        )
 from .regions import DenseRegion
 
 
