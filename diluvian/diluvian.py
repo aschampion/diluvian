@@ -126,6 +126,7 @@ def fill_region_from_model(model_file, volumes=None, bounds_input_file=None,
 
 
 def train_network(model_file=None, volumes=None, static_validation=True,
+                  reset_generators_each_epoch=True,
                   model_output_filebase=None, model_checkpoint_file=None,
                   tensorboard=False, viewer=False, metric_plot=False):
     if model_file is None:
@@ -169,7 +170,8 @@ def train_network(model_file=None, volumes=None, static_validation=True,
                 v.subvolume_generator(shape=CONFIG.model.fov_shape),
                 CONFIG.training.batch_size,
                 CONFIG.training.validation_size,
-                f_a_bins=f_a_bins) for k, v in validation_volumes.iteritems()}
+                f_a_bins=f_a_bins,
+                reset_generators=True) for k, v in validation_volumes.iteritems()}
     else:
         validation_kludges = {k: {'inputs': None, 'outputs': None} for k in volumes.iterkeys()}
         validation_data = {k: moving_training_generator(
@@ -177,7 +179,8 @@ def train_network(model_file=None, volumes=None, static_validation=True,
                 CONFIG.training.batch_size,
                 CONFIG.training.validation_size,
                 validation_kludges[k],
-                f_a_bins=f_a_bins) for k, v in validation_volumes.iteritems()}
+                f_a_bins=f_a_bins,
+                reset_generators=True) for k, v in validation_volumes.iteritems()}
     validation_data = roundrobin(*validation_data.values())
 
     # Pre-train
@@ -185,7 +188,8 @@ def train_network(model_file=None, volumes=None, static_validation=True,
             v.subvolume_generator(shape=CONFIG.model.fov_shape),
             CONFIG.training.batch_size,
             CONFIG.training.training_size,
-            f_a_bins=f_a_bins) for k, v in training_volumes.iteritems()}
+            f_a_bins=f_a_bins,
+            reset_generators=reset_generators_each_epoch) for k, v in training_volumes.iteritems()}
     training_data = roundrobin(*training_data.values())
     history = ffn.fit_generator(
             training_data,
@@ -209,7 +213,8 @@ def train_network(model_file=None, volumes=None, static_validation=True,
             CONFIG.training.batch_size,
             CONFIG.training.training_size,
             kludges[k],
-            f_a_bins=f_a_bins) for k, v in training_volumes.iteritems()}
+            f_a_bins=f_a_bins,
+            reset_generators=reset_generators_each_epoch) for k, v in training_volumes.iteritems()}
     training_data = roundrobin(*training_data.values())
     moving_history = ffn.fit_generator(
             training_data,

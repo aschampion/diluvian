@@ -638,7 +638,8 @@ class ImageStackVolume(Volume):
             return SubvolumeBounds(seed=ctr)
 
 
-def static_training_generator(subvolumes, batch_size, training_size, f_a_bins=None):
+def static_training_generator(subvolumes, batch_size, training_size,
+                              f_a_bins=None, reset_generators=True):
     """Generate Keras non-moving training tuples from a subvolume generator.
 
     Parameters
@@ -647,11 +648,14 @@ def static_training_generator(subvolumes, batch_size, training_size, f_a_bins=No
     batch_size : int
     training_size : int
         Total size in samples of a training epoch, after which generators will
-        be reset.
+        be reset if ``reset_generators`` is true.
     f_a_bins : sequence of float, optional
         Bin boundaries for filling fractions. If provided, sample loss will be
         weighted to increase loss contribution from less-frequent f_a bins.
         Otherwise all samples are weighted equally.
+    reset_generators : bool
+        Whether to reset subvolume generators at the end of each epoch. If true
+        subvolumes will be sampled in the same order each epoch.
     """
     mask_input = np.full(np.append(subvolumes.shape, (1,)), CONFIG.model.v_false, dtype='float32')
     mask_input[tuple(np.array(mask_input.shape) / 2)] = CONFIG.model.v_true
@@ -667,7 +671,8 @@ def static_training_generator(subvolumes, batch_size, training_size, f_a_bins=No
     while True:
         if sample_num >= training_size:
             f_a_init = False
-            subvolumes.reset()
+            if reset_generators:
+                subvolumes.reset()
             sample_num = 0
 
         batch_image_input = [None] * batch_size
@@ -704,7 +709,7 @@ def static_training_generator(subvolumes, batch_size, training_size, f_a_bins=No
 
 
 def moving_training_generator(subvolumes, batch_size, training_size, callback_kludge,
-                              f_a_bins=None):
+                              f_a_bins=None, reset_generators=True):
     """Generate Keras moving FOV training tuples from a subvolume generator.
 
     Unlike ``static_training_generator``, this generator expects a subvolume
@@ -718,7 +723,7 @@ def moving_training_generator(subvolumes, batch_size, training_size, callback_kl
     batch_size : int
     training_size : int
         Total size in samples of a training epoch, after which generators will
-        be reset.
+        be reset if ``reset_generators`` is true.
     callback_kludge : dict
         A kludge object to allow this generator to provide inputs and receive
         outputs from the network. See ``diluvian.PredictionCopy``.
@@ -726,6 +731,9 @@ def moving_training_generator(subvolumes, batch_size, training_size, callback_kl
         Bin boundaries for filling fractions. If provided, sample loss will be
         weighted to increase loss contribution from less-frequent f_a bins.
         Otherwise all samples are weighted equally.
+    reset_generators : bool
+        Whether to reset subvolume generators at the end of each epoch. If true
+        subvolumes will be sampled in the same order each epoch.
     """
     regions = [None] * batch_size
     region_pos = [None] * batch_size
@@ -743,7 +751,8 @@ def moving_training_generator(subvolumes, batch_size, training_size, callback_kl
     while True:
         if sample_num >= training_size:
             f_a_init = False
-            subvolumes.reset()
+            if reset_generators:
+                subvolumes.reset()
             if len(epoch_move_counts):
                 logging.info(' Average moves: %s', sum(epoch_move_counts)/float(len(epoch_move_counts)))
             epoch_move_counts = []
