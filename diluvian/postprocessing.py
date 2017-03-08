@@ -17,7 +17,7 @@ class Body(object):
         self.mask = mask
         self.seed = seed
 
-    def get_largest_component(self, closing_shape=None):
+    def _get_bounded_mask(self, closing_shape=None):
         if isinstance(self.mask, OctreeVolume):
             # If this is a sparse volume, materialize it to memory.
             bounds = self.mask.get_leaf_bounds()
@@ -29,6 +29,11 @@ class Body(object):
         if closing_shape is not None:
             mask = ndimage.grey_closing(mask, size=closing_shape, mode='nearest')
 
+        return mask, bounds
+
+    def get_largest_component(self, closing_shape=None):
+        mask, bounds = self._get_bounded_mask(closing_shape)
+
         label_im, num_labels = ndimage.label(mask)
         label_sizes = ndimage.sum(mask, label_im, range(num_labels + 1))
         label_im[(label_sizes < label_sizes.max())[label_im]] = 0
@@ -36,6 +41,18 @@ class Body(object):
 
         if label_im[tuple(self.seed - bounds[0])] == 0:
             logging.warning('Seed voxel (%s) is not in connected component.', np.array_str(self.seed))
+
+        return label_im, bounds
+
+    def get_seeded_component(self, closing_shape=None):
+        mask, bounds = self._get_bounded_mask(closing_shape)
+
+        label_im, _ = ndimage.label(mask)
+        seed_label = label_im[tuple(self.seed - bounds[0])]
+        if seed_label == 0:
+            raise ValueError('Seed voxel (%s) is not in body.', np.array_str(self.seed))
+        label_im[label_im != seed_label] = 0
+        label_im = np.minimum(label_im, 1)
 
         return label_im, bounds
 
