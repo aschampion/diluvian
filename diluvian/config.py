@@ -49,6 +49,8 @@ class ModelConfig(BaseConfig):
     ----------
     fov_shape : sequence or ndarray of int
         Field of view shape in voxels for each flood filling move.
+    fov_move_fraction : int
+        Move size as a fraction of the field of view shape.
     v_true, v_false : float
         Soft target values for in-object and out-of-object mask voxels,
         respectively.
@@ -67,6 +69,7 @@ class ModelConfig(BaseConfig):
     """
     def __init__(self, settings):
         self.fov_shape = np.array(settings.get('fov_shape', [33, 33, 17]))
+        self.fov_move_fraction = int(settings.get('fov_move_fraction', 4))
         self.v_true = float(settings.get('v_true', 0.95))
         self.v_false = float(settings.get('v_false', 0.05))
         self.t_move = float(settings.get('t_move', 0.9))

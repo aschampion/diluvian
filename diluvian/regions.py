@@ -36,7 +36,7 @@ class DenseRegion(object):
         return itertools.imap(DenseRegion.from_subvolume, subvolumes)
 
     def __init__(self, image, target=None, seed_vox=None, mask=None):
-        self.MOVE_DELTA = (CONFIG.model.fov_shape - 1) / 4
+        self.MOVE_DELTA = (CONFIG.model.fov_shape - 1) / CONFIG.model.fov_move_fraction
         self.queue = Queue.PriorityQueue()
         self.visited = set()
         self.image = image
