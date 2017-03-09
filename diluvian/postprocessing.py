@@ -52,7 +52,7 @@ class Body(object):
         if seed_label == 0:
             raise ValueError('Seed voxel (%s) is not in body.', np.array_str(self.seed))
         label_im[label_im != seed_label] = 0
-        label_im = np.minimum(label_im, 1)
+        label_im[label_im == seed_label] = 1
 
         return label_im, bounds
 
