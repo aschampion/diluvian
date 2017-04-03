@@ -93,6 +93,7 @@ def test_sparse_label_volume():
 
     comp = slv.get_containing_component(np.array([0, 0, 0]))
     np.testing.assert_array_equal(slv.get_component_volume(comp)[:], big_comp)
+    assert slv.get_largest_component() == comp, 'Largest component is not correct.'
 
     small_comp = np.zeros((8, 8, 16), np.int32)
     small_comp[6:8, 4:6, 14:16] = 1

@@ -41,6 +41,15 @@ class Body(object):
 
         return label.get_component_volume(comp)
 
+    def get_sparse_largest_component(self):
+        assert isinstance(self.mask, OctreeVolume)
+
+        label = SparseLabelVolume(self.mask)
+        label.make_label_graph()
+        comp = label.get_largest_component(self.seed)
+
+        return label.get_component_volume(comp)
+
     def get_largest_component(self, closing_shape=None):
         mask, bounds = self._get_bounded_mask(closing_shape)
 

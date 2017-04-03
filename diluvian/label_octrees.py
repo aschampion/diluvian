@@ -88,6 +88,19 @@ class SparseLabelVolume(object):
         label_id = leaf_id + (leaf_label,)
         return nx.node_connected_component(self.label_graph, label_id)
 
+    def get_largest_component(self):
+        """Return the largest component in block label graph.
+
+        Note that this is the largest component by number of edges in the
+        block-sparse octree graph, not by the voxel size.
+
+        Returns
+        -------
+        set of tuple
+            Set of leaf-label identifiers.
+        """
+        return max(nx.connected_components(self.label_graph), key=len)
+
     def get_component_volume(self, component):
         def empty_uniform(*args):
             return 0
