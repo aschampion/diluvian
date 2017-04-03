@@ -9,6 +9,7 @@ import numpy as np
 from scipy import ndimage
 
 from .config import CONFIG
+from .label_octrees import SparseLabelVolume
 from .octrees import OctreeVolume
 
 
@@ -30,6 +31,15 @@ class Body(object):
             mask = ndimage.grey_closing(mask, size=closing_shape, mode='nearest')
 
         return mask, bounds
+
+    def get_sparse_seeded_component(self):
+        assert isinstance(self.mask, OctreeVolume)
+
+        label = SparseLabelVolume(self.mask)
+        label.make_label_graph()
+        comp = label.get_containing_component(self.seed)
+
+        return label.get_component_volume(comp)
 
     def get_largest_component(self, closing_shape=None):
         mask, bounds = self._get_bounded_mask(closing_shape)

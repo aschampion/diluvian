@@ -74,7 +74,7 @@ class DenseRegion(object):
         copy.move_based_on_new_mask = self.move_based_on_new_mask
 
     def to_body(self):
-        def threshold(a):
+        def threshold(a, *args):
             return a >= CONFIG.model.t_final
 
         if isinstance(self.mask, OctreeVolume):

@@ -11,6 +11,7 @@ Tests for `diluvian` module.
 
 import numpy as np
 
+from diluvian import label_octrees
 from diluvian import octrees
 from diluvian import regions
 from diluvian import volumes
@@ -54,10 +55,10 @@ def test_octree_map_copy():
 
     ot[8, 5, 4] = 5
 
-    def leaf_map(a):
+    def leaf_map(a, *args):
         return a * -1
 
-    def uniform_map(v):
+    def uniform_map(v, *args):
         return v * 1.5
 
     cot = ot.map_copy(np.float32, leaf_map, uniform_map)
@@ -67,6 +68,37 @@ def test_octree_map_copy():
         np.testing.assert_almost_equal(copy.data, leaf_map(orig.data), err_msg='Copy leaves should be mapped.')
     expected_mat = np.array([[[9.], [-6.]], [[9.], [-5.]]], dtype=np.float32)
     assert np.array_equal(cot[7:9, 4:6, 4], expected_mat), 'Copy should have same uniformity.'
+
+
+def test_sparse_label_volume():
+    mock_bin = octrees.OctreeVolume((8, 8, 8), (np.zeros(3), (8, 8, 16)), np.float32)
+    mock_bin[:] = 0
+
+    slv = label_octrees.SparseLabelVolume(mock_bin)
+
+    mock_lab = octrees.OctreeVolume((8, 8, 8), (np.zeros(3), (8, 8, 16)), np.int32)
+    mock_lab[:] = 0
+    mock_lab[0:8, 0:8, 0:8] = np.full((8, 8, 8), 1)
+    mock_lab[0:8, 0:1, 8:16] = np.full((8, 4, 8), 2)
+    mock_lab[0:8, 7:8, 8:16] = np.full((8, 4, 8), 3)
+    mock_lab[6:8, 4:6, 14:16] = np.full((2, 2, 2), 4)
+    slv.label_vol = mock_lab
+
+    slv.make_label_graph()
+
+    big_comp = np.zeros((8, 8, 16), np.int32)
+    big_comp[0:8, 0:8, 0:8] = 1
+    big_comp[0:8, 0:1, 8:16] = 1
+    big_comp[0:8, 7:8, 8:16] = 1
+
+    comp = slv.get_containing_component(np.array([0, 0, 0]))
+    np.testing.assert_array_equal(slv.get_component_volume(comp)[:], big_comp)
+
+    small_comp = np.zeros((8, 8, 16), np.int32)
+    small_comp[6:8, 4:6, 14:16] = 1
+
+    comp = slv.get_containing_component(np.array([7, 5, 15]))
+    np.testing.assert_array_equal(slv.get_component_volume(comp)[:], small_comp)
 
 
 def test_region_moves():

@@ -75,6 +75,9 @@ class OctreeVolume(object):
 
         return self.root_node[npkey]
 
+    def get_node_at(self, pos):
+        return self.root_node.get_node_at(pos)
+
     def __setitem__(self, key, value):
         npkey = self.get_checked_np_key(key)
 
@@ -146,6 +149,9 @@ class Node(object):
 
     def count_leaves(self):
         return 0
+
+    def get_node_at(self, *args):
+        return self
 
     def get_intersection(self, key):
         return (np.maximum(self.bounds[0], key[0]),
@@ -234,6 +240,10 @@ class BranchNode(Node):
 
         return chunk
 
+    def get_node_at(self, pos):
+        ind = np.greater_equal(pos, self.midpoint).astype(np.int32)
+        return self.children[ind[0]][ind[1]][ind[2]].get_node_at(pos)
+
     def __setitem__(self, key, value):
         if (not hasattr(value, '__len__') or len(value) == 1) and \
            np.array_equal(key[0], self.bounds[0]) and \
@@ -300,7 +310,7 @@ class LeafNode(Node):
         yield self
 
     def map_copy(self, copy_parent, leaf_map, uniform_map):
-        copy = LeafNode(copy_parent, self.bounds, leaf_map(self.data))
+        copy = LeafNode(copy_parent, self.bounds, leaf_map(self.data, self))
         return copy
 
     def __getitem__(self, key):
@@ -327,7 +337,7 @@ class UniformNode(Node):
 
     def map_copy(self, copy_parent, leaf_map, uniform_map):
         copy = type(self)(copy_parent, self.bounds, copy_parent.get_volume().dtype,
-                          uniform_map(self.value), clip_bound=self.clip_bound)
+                          uniform_map(self.value, self), clip_bound=self.clip_bound)
         return copy
 
 
