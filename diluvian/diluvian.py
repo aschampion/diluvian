@@ -133,7 +133,9 @@ def train_network(model_file=None, volumes=None, static_validation=True,
         factory_mod_name, factory_func_name = CONFIG.network.factory.rsplit('.', 1)
         factory_mod = importlib.import_module(factory_mod_name)
         factory = getattr(factory_mod, factory_func_name)
-        ffn = factory(CONFIG.model.fov_shape, CONFIG.network)
+        ffn = factory(CONFIG.model.input_fov_shape,
+                      CONFIG.model.output_fov_shape,
+                      CONFIG.network)
     else:
         ffn = load_model(model_file)
 
@@ -166,10 +168,11 @@ def train_network(model_file=None, volumes=None, static_validation=True,
             for k, v in volumes.iteritems()}
 
     if static_validation:
-        validation_data = {k: static_training_generator(
-                v.subvolume_generator(shape=CONFIG.model.fov_shape),
+        validation_data = {k: moving_training_generator(
+                v.subvolume_generator(shape=CONFIG.model.input_fov_shape),
                 CONFIG.training.batch_size,
                 CONFIG.training.validation_size,
+                {'outputs': None}, # Allows use of moving training gen like static.
                 f_a_bins=f_a_bins,
                 reset_generators=True) for k, v in validation_volumes.iteritems()}
     else:
@@ -184,10 +187,11 @@ def train_network(model_file=None, volumes=None, static_validation=True,
     validation_data = roundrobin(*validation_data.values())
 
     # Pre-train
-    training_data = {k: static_training_generator(
-            v.subvolume_generator(shape=CONFIG.model.fov_shape),
+    training_data = {k: moving_training_generator(
+            v.subvolume_generator(shape=CONFIG.model.input_fov_shape),
             CONFIG.training.batch_size,
             CONFIG.training.training_size,
+            {'outputs': None}, # Allows use of moving training gen like static.
             f_a_bins=f_a_bins,
             reset_generators=reset_generators_each_epoch) for k, v in training_volumes.iteritems()}
     training_data = roundrobin(*training_data.values())
@@ -234,7 +238,7 @@ def train_network(model_file=None, volumes=None, static_validation=True,
         # for _ in itertools.islice(training_data, 12):
         #     continue
         dupe_data = static_training_generator(
-                volumes[list(volumes.keys())[0]].subvolume_generator(shape=CONFIG.model.fov_shape),
+                volumes[list(volumes.keys())[0]].subvolume_generator(shape=CONFIG.model.input_fov_shape),
                 CONFIG.training.batch_size,
                 CONFIG.training.training_size)
         viz_ex = itertools.islice(dupe_data, 1)

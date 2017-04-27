@@ -47,10 +47,13 @@ class ModelConfig(BaseConfig):
 
     Attributes
     ----------
-    fov_shape : sequence or ndarray of int
-        Field of view shape in voxels for each flood filling move.
-    fov_move_fraction : int
-        Move size as a fraction of the field of view shape.
+    input_fov_shape : sequence or ndarray of int
+        Input field of view shape in voxels for each flood filling move.
+    output_fov_shape : sequence or ndarray of int
+        Output field of view shape in voxels for each flood filling move. Can
+        not be larger than ``input_fov_shape``.
+    output_fov_move_fraction : int
+        Move size as a fraction of the output field of view shape.
     v_true, v_false : float
         Soft target values for in-object and out-of-object mask voxels,
         respectively.
@@ -68,15 +71,16 @@ class ModelConfig(BaseConfig):
         Shape of the subvolumes used during moving training.
     """
     def __init__(self, settings):
-        self.fov_shape = np.array(settings.get('fov_shape', [33, 33, 17]))
-        self.fov_move_fraction = int(settings.get('fov_move_fraction', 4))
+        self.input_fov_shape = np.array(settings.get('input_fov_shape', [33, 33, 17]))
+        self.output_fov_shape = np.array(settings.get('output_fov_shape', [33, 33, 17]))
+        self.output_fov_move_fraction = int(settings.get('output_fov_move_fraction', 4))
         self.v_true = float(settings.get('v_true', 0.95))
         self.v_false = float(settings.get('v_false', 0.05))
         self.t_move = float(settings.get('t_move', 0.9))
         self.t_final = float(settings.get('t_final', self.t_move))
         self.move_check_thickness = int(settings.get('move_check_thickness', 1))
         self.training_subv_shape = np.array(settings.get('training_subv_shape',
-                                                         self.fov_shape + ((self.fov_shape - 1) / 2)))
+                                                         self.input_fov_shape + ((self.input_fov_shape - 1) / 2)))
 
 
 class NetworkConfig(BaseConfig):

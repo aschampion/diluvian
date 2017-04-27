@@ -4,8 +4,11 @@
 
 import inspect
 
+import numpy as np
+
 from keras.layers import (
         Convolution3D,
+        Cropping3D,
         Input,
         merge,
         )
@@ -14,9 +17,11 @@ from keras.models import Model
 import keras.optimizers
 
 
-def make_flood_fill_network(fov_shape, network_config):
-    image_input = Input(shape=tuple(fov_shape) + (1,), dtype='float32', name='image_input')
-    mask_input = Input(shape=tuple(fov_shape) + (1,), dtype='float32', name='mask_input')
+def make_flood_fill_network(input_fov_shape, output_fov_shape, network_config):
+    """Construct a stacked convolution module flood filling network.
+    """
+    image_input = Input(shape=tuple(input_fov_shape) + (1,), dtype='float32', name='image_input')
+    mask_input = Input(shape=tuple(input_fov_shape) + (1,), dtype='float32', name='mask_input')
     ffn = merge([image_input, mask_input], mode='concat')
 
     # Convolve and activate before beginning the skip connection modules,
@@ -29,8 +34,22 @@ def make_flood_fill_network(fov_shape, network_config):
                         activation='relu',
                         border_mode='same')(ffn)
 
-    for _ in range(0, network_config.num_modules):
+    contraction = (input_fov_shape - output_fov_shape) / 2
+    if np.any(np.less(contraction, 0)):
+        raise ValueError('Output FOV shape can not be larger than input FOV shape.')
+    contraction_cumu = np.zeros(3, dtype=np.int32)
+    contraction_step = contraction / network_config.num_modules
+
+    for i in range(0, network_config.num_modules):
         ffn = add_convolution_module(ffn, network_config)
+        contraction_dims = np.floor(i * contraction_step - contraction_cumu).astype(np.int32)
+        if np.count_nonzero(contraction_dims):
+            ffn = Cropping3D(zip(list(contraction_dims), list(contraction_dims)))(ffn)
+            contraction_cumu += contraction_dims
+
+    if np.any(np.less(contraction_cumu, contraction)):
+        remainder = contraction - contraction_cumu
+        ffn = Cropping3D(zip(list(remainder), list(remainder)))(ffn)
 
     mask_output = Convolution3D(1,
                                 network_config.convolution_dim[0],

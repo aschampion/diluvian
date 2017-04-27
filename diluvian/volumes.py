@@ -380,9 +380,9 @@ class SparseWrappedVolume(VolumeView):
     """Wrap a existing volume for memory cached block sparse access."""
     def __init__(self, parent, image_leaf_shape=None, label_leaf_shape=None):
         if image_leaf_shape is None:
-            image_leaf_shape = list(CONFIG.model.fov_shape)
+            image_leaf_shape = list(CONFIG.model.input_fov_shape)
         if label_leaf_shape is None:
-            label_leaf_shape = list(CONFIG.model.fov_shape)
+            label_leaf_shape = list(CONFIG.model.input_fov_shape)
 
         image_data = OctreeVolume(image_leaf_shape,
                                   (np.zeros(3), parent.image_data.shape),
@@ -641,6 +641,9 @@ class ImageStackVolume(Volume):
 def static_training_generator(subvolumes, batch_size, training_size,
                               f_a_bins=None, reset_generators=True):
     """Generate Keras non-moving training tuples from a subvolume generator.
+
+    Note that this generator is not yet compatible with networks with different
+    input and output FOV shapes.
 
     Parameters
     ----------

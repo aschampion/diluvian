@@ -36,7 +36,7 @@ class DenseRegion(object):
         return itertools.imap(DenseRegion.from_subvolume, subvolumes)
 
     def __init__(self, image, target=None, seed_vox=None, mask=None):
-        self.MOVE_DELTA = (CONFIG.model.fov_shape - 1) / CONFIG.model.fov_move_fraction
+        self.MOVE_DELTA = (CONFIG.model.output_fov_shape - 1) / CONFIG.model.output_fov_move_fraction
         self.queue = Queue.PriorityQueue()
         self.visited = set()
         self.image = image
@@ -140,7 +140,7 @@ class DenseRegion(object):
     def get_next_block(self):
         next_pos = np.asarray(self.queue.get()[1])
         next_vox = self.pos_to_vox(next_pos)
-        margin = (CONFIG.model.fov_shape - 1) / 2
+        margin = (CONFIG.model.input_fov_shape - 1) / 2
         block_min = next_vox - margin
         block_max = next_vox + margin + 1
         image_block = self.image[block_min[0]:block_max[0],
@@ -153,14 +153,17 @@ class DenseRegion(object):
         mask_block[np.isnan(mask_block)] = CONFIG.model.v_false
 
         if self.target is not None:
-            target_block = self.target[block_min[0]:block_max[0],
-                                       block_min[1]:block_max[1],
-                                       block_min[2]:block_max[2]]
+            margin = (CONFIG.model.output_fov_shape - 1) / 2
+            oblock_min = next_vox - margin
+            oblock_max = next_vox + margin + 1
+            target_block = self.target[oblock_min[0]:oblock_max[0],
+                                       oblock_min[1]:oblock_max[1],
+                                       oblock_min[2]:oblock_max[2]]
         else:
             target_block = None
 
-        assert image_block.shape == tuple(CONFIG.model.fov_shape), 'Image wrong shape: {}'.format(image_block.shape)
-        assert mask_block.shape == tuple(CONFIG.model.fov_shape), 'Mask wrong shape: {}'.format(mask_block.shape)
+        assert image_block.shape == tuple(CONFIG.model.input_fov_shape), 'Image wrong shape: {}'.format(image_block.shape)
+        assert mask_block.shape == tuple(CONFIG.model.input_fov_shape), 'Mask wrong shape: {}'.format(mask_block.shape)
         return {'image': image_block,
                 'mask': mask_block,
                 'target': target_block,
@@ -251,7 +254,7 @@ class DenseRegion(object):
             'bt': {},
         }
         current_vox = self.pos_to_vox(self.seed_pos)
-        margin = (CONFIG.model.fov_shape) / 2
+        margin = (CONFIG.model.input_fov_shape) / 2
         for plane, ax in axes.iteritems():
             ax.get_xaxis().set_visible(False)
             ax.get_yaxis().set_visible(False)

@@ -72,7 +72,7 @@ def test_octree_map_copy():
 def test_region_moves():
     mock_image = np.zeros(tuple(CONFIG.model.training_subv_shape), dtype='float32')
     region = regions.DenseRegion(mock_image)
-    mock_mask = np.zeros(tuple(CONFIG.model.fov_shape), dtype='float32')
+    mock_mask = np.zeros(tuple(CONFIG.model.output_fov_shape), dtype='float32')
     ctr = np.array(mock_mask.shape) / 2 + 1
     expected_moves = {}
     for i, move in enumerate(map(np.array, [(1, 0, 0), (-1, 0, 0),
