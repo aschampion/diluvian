@@ -37,6 +37,7 @@ class DenseRegion(object):
 
     def __init__(self, image, target=None, seed_vox=None, mask=None):
         self.MOVE_DELTA = (CONFIG.model.output_fov_shape - 1) / CONFIG.model.output_fov_move_fraction
+        self.MOVE_GRID_OFFSET = np.mod(seed_vox, self.MOVE_DELTA).astype('int64')
         self.queue = Queue.PriorityQueue()
         self.visited = set()
         self.image = image
@@ -85,10 +86,10 @@ class DenseRegion(object):
         return Body(hard_mask, self.pos_to_vox(self.seed_pos))
 
     def vox_to_pos(self, vox):
-        return np.floor_divide(vox, self.MOVE_DELTA).astype('int64')
+        return np.floor_divide(vox - self.MOVE_GRID_OFFSET, self.MOVE_DELTA).astype('int64')
 
     def pos_to_vox(self, pos):
-        return (pos * self.MOVE_DELTA).astype('int64')
+        return (pos * self.MOVE_DELTA).astype('int64') + self.MOVE_GRID_OFFSET
 
     def pos_in_bounds(self, pos):
         return np.all(np.less(pos, self.move_bounds)) and np.all(pos > 1)
