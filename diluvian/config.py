@@ -114,6 +114,9 @@ class NetworkConfig(BaseConfig):
     output_activation : str
         Name of the Keras activation function to use for the final network
         output.
+    dropout_probability : float
+        Probability for dropout layers. If zero, no dropout layers will be
+        included.
     """
     def __init__(self, settings):
         self.factory = str(settings.get('factory'))
@@ -123,6 +126,7 @@ class NetworkConfig(BaseConfig):
         self.convolution_filters = int(settings.get('convolution_filters', 32))
         self.initialization = str(settings.get('initialization', 'glorot_uniform'))
         self.output_activation = str(settings.get('output_activation', 'sigmoid'))
+        self.dropout_probability = float(settings.get('dropout_probability', 0.0))
 
 
 class OptimizerConfig(BaseConfig):

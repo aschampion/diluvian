@@ -9,9 +9,11 @@ import numpy as np
 from keras.layers import (
         Convolution3D,
         Cropping3D,
+        GaussianDropout,
         Input,
         merge,
         Permute,
+        UpSampling3D
         )
 from keras.layers.core import Activation
 from keras.models import load_model as keras_load_model, Model
@@ -86,6 +88,117 @@ def add_convolution_module(model, network_config):
     # http://torch.ch/blog/2016/02/04/resnets.html
     # https://github.com/gcr/torch-residual-networks
     model = Activation('relu')(model)
+    if network_config.dropout_probability > 0.0:
+        model = GaussianDropout(network_config.dropout_probability)(model)
+
+    return model
+
+
+def make_flood_fill_unet(input_fov_shape, output_fov_shape, network_config):
+    """Construct a U-net flood filling network.
+    """
+    image_input = Input(shape=tuple(input_fov_shape) + (1,), dtype='float32', name='image_input')
+    mask_input = Input(shape=tuple(input_fov_shape) + (1,), dtype='float32', name='mask_input')
+    ffn = merge([image_input, mask_input], mode='concat')
+
+    ffn = Convolution3D(network_config.convolution_filters,
+                        network_config.convolution_dim[0],
+                        network_config.convolution_dim[1],
+                        network_config.convolution_dim[2],
+                        init=network_config.initialization,
+                        activation='relu',
+                        border_mode='same')(ffn)
+
+    ffn = add_unet_layer(ffn, network_config, 4, output_fov_shape)
+
+    mask_output = Convolution3D(1,
+                                network_config.convolution_dim[0],
+                                network_config.convolution_dim[1],
+                                network_config.convolution_dim[2],
+                                init=network_config.initialization,
+                                border_mode='same',
+                                name='mask_output',
+                                activation=network_config.output_activation)(ffn)
+    ffn = Model(input=[image_input, mask_input], output=[mask_output])
+
+    return ffn
+
+
+def add_unet_layer(model, network_config, remaining_layers, output_shape):
+    # Double number of channels at each layer.
+    n_channels = 2 * model.get_shape().as_list()[-1]
+    downsample = np.array([0, 1, 1])
+
+    # First U convolution module.
+    model = Convolution3D(n_channels,
+                          network_config.convolution_dim[0],
+                          network_config.convolution_dim[1],
+                          network_config.convolution_dim[2],
+                          init=network_config.initialization,
+                          activation='relu',
+                          border_mode='same')(model)
+    model = Convolution3D(n_channels,
+                          network_config.convolution_dim[0],
+                          network_config.convolution_dim[1],
+                          network_config.convolution_dim[2],
+                          init=network_config.initialization,
+                          activation='relu',
+                          border_mode='same')(model)
+
+    # Crop and pass forward to upsampling.
+    contraction = (np.array(model.get_shape().as_list()[1:4]) - output_shape) / 2
+    forward = Cropping3D(zip(list(contraction), list(contraction)))(model)
+    if network_config.dropout_probability > 0.0:
+        forward = GaussianDropout(network_config.dropout_probability)(forward)
+
+    # Terminal layer of the U.
+    if remaining_layers <= 0:
+        return forward
+
+    # Downsample and recurse.
+    model = Convolution3D(n_channels,
+                          network_config.convolution_dim[0],
+                          network_config.convolution_dim[1],
+                          network_config.convolution_dim[2],
+                          subsample=list(downsample + 1),
+                          init=network_config.initialization,
+                          activation='relu',
+                          border_mode='same')(model)
+    model = add_unet_layer(model,
+                           network_config,
+                           remaining_layers - 1,
+                           np.ceil(np.divide(output_shape, downsample.astype('float32') + 1.0)).astype(np.int32))
+
+    # Upsample output of previous layer and merge with forward link.
+    # TODO: This is a bad hack for convolutional upsampling. My old hack of
+    # this used a custom layer, but this hack is used for the sake of using
+    # simple Keras layers. This should be fixed when upgrading to Keras 2.
+    model = UpSampling3D(list(downsample + 1))(model)
+    model = Convolution3D(n_channels,
+                          downsample[0] + 1,
+                          downsample[1] + 1,
+                          downsample[2] + 1,
+                          init=network_config.initialization,
+                          activation='relu',
+                          border_mode='valid')(model)
+
+    model = merge([forward, model], mode='concat')
+
+    # Second U convolution module.
+    model = Convolution3D(n_channels,
+                          network_config.convolution_dim[0],
+                          network_config.convolution_dim[1],
+                          network_config.convolution_dim[2],
+                          init=network_config.initialization,
+                          activation='relu',
+                          border_mode='same')(model)
+    model = Convolution3D(n_channels,
+                          network_config.convolution_dim[0],
+                          network_config.convolution_dim[1],
+                          network_config.convolution_dim[2],
+                          init=network_config.initialization,
+                          activation='relu',
+                          border_mode='same')(model)
 
     return model
 
