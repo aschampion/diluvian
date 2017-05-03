@@ -172,7 +172,7 @@ def train_network(model_file=None, volumes=None, static_validation=True,
                 v.subvolume_generator(shape=CONFIG.model.input_fov_shape),
                 CONFIG.training.batch_size,
                 CONFIG.training.validation_size,
-                {'outputs': None}, # Allows use of moving training gen like static.
+                {'outputs': None},  # Allows use of moving training gen like static.
                 f_a_bins=f_a_bins,
                 reset_generators=True) for k, v in validation_volumes.iteritems()}
     else:
@@ -191,7 +191,7 @@ def train_network(model_file=None, volumes=None, static_validation=True,
             v.subvolume_generator(shape=CONFIG.model.input_fov_shape),
             CONFIG.training.batch_size,
             CONFIG.training.training_size,
-            {'outputs': None}, # Allows use of moving training gen like static.
+            {'outputs': None},  # Allows use of moving training gen like static.
             f_a_bins=f_a_bins,
             reset_generators=reset_generators_each_epoch) for k, v in training_volumes.iteritems()}
     training_data = roundrobin(*training_data.values())

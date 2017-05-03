@@ -163,8 +163,10 @@ class DenseRegion(object):
         else:
             target_block = None
 
-        assert image_block.shape == tuple(CONFIG.model.input_fov_shape), 'Image wrong shape: {}'.format(image_block.shape)
-        assert mask_block.shape == tuple(CONFIG.model.input_fov_shape), 'Mask wrong shape: {}'.format(mask_block.shape)
+        assert image_block.shape == tuple(CONFIG.model.input_fov_shape), \
+            'Image wrong shape: {}'.format(image_block.shape)
+        assert mask_block.shape == tuple(CONFIG.model.input_fov_shape), \
+            'Mask wrong shape: {}'.format(mask_block.shape)
         return {'image': image_block,
                 'mask': mask_block,
                 'target': target_block,
