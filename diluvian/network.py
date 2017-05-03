@@ -7,13 +7,16 @@ import inspect
 import numpy as np
 
 from keras.layers import (
-        Convolution3D,
+        Conv3D,
         Cropping3D,
         GaussianDropout,
         Input,
-        merge,
         Permute,
         UpSampling3D
+        )
+from keras.layers.merge import (
+        add,
+        concatenate,
         )
 from keras.layers.core import Activation
 from keras.models import load_model as keras_load_model, Model
@@ -25,17 +28,16 @@ def make_flood_fill_network(input_fov_shape, output_fov_shape, network_config):
     """
     image_input = Input(shape=tuple(input_fov_shape) + (1,), dtype='float32', name='image_input')
     mask_input = Input(shape=tuple(input_fov_shape) + (1,), dtype='float32', name='mask_input')
-    ffn = merge([image_input, mask_input], mode='concat')
+    ffn = concatenate([image_input, mask_input])
 
     # Convolve and activate before beginning the skip connection modules,
     # as discussed in the Appendix of He et al 2016.
-    ffn = Convolution3D(network_config.convolution_filters,
-                        network_config.convolution_dim[0],
-                        network_config.convolution_dim[1],
-                        network_config.convolution_dim[2],
-                        init=network_config.initialization,
-                        activation='relu',
-                        border_mode='same')(ffn)
+    ffn = Conv3D(
+            network_config.convolution_filters,
+            tuple(network_config.convolution_dim),
+            kernel_initializer=network_config.initialization,
+            activation='relu',
+            padding='same')(ffn)
 
     contraction = (input_fov_shape - output_fov_shape) / 2
     if np.any(np.less(contraction, 0)):
@@ -54,34 +56,31 @@ def make_flood_fill_network(input_fov_shape, output_fov_shape, network_config):
         remainder = contraction - contraction_cumu
         ffn = Cropping3D(zip(list(remainder), list(remainder)))(ffn)
 
-    mask_output = Convolution3D(1,
-                                network_config.convolution_dim[0],
-                                network_config.convolution_dim[1],
-                                network_config.convolution_dim[2],
-                                init=network_config.initialization,
-                                border_mode='same',
-                                name='mask_output',
-                                activation=network_config.output_activation)(ffn)
-    ffn = Model(input=[image_input, mask_input], output=[mask_output])
+    mask_output = Conv3D(
+            1,
+            tuple(network_config.convolution_dim),
+            kernel_initializer=network_config.initialization,
+            padding='same',
+            name='mask_output',
+            activation=network_config.output_activation)(ffn)
+    ffn = Model(inputs=[image_input, mask_input], outputs=[mask_output])
 
     return ffn
 
 
 def add_convolution_module(model, network_config):
-    model2 = Convolution3D(network_config.convolution_filters,
-                           network_config.convolution_dim[0],
-                           network_config.convolution_dim[1],
-                           network_config.convolution_dim[2],
-                           init=network_config.initialization,
-                           activation='relu',
-                           border_mode='same')(model)
-    model2 = Convolution3D(network_config.convolution_filters,
-                           network_config.convolution_dim[0],
-                           network_config.convolution_dim[1],
-                           network_config.convolution_dim[2],
-                           init=network_config.initialization,
-                           border_mode='same')(model2)
-    model = merge([model, model2], mode='sum')
+    model2 = Conv3D(
+            network_config.convolution_filters,
+            tuple(network_config.convolution_dim),
+            kernel_initializer=network_config.initialization,
+            activation='relu',
+            padding='same')(model)
+    model2 = Conv3D(
+            network_config.convolution_filters,
+            tuple(network_config.convolution_dim),
+            kernel_initializer=network_config.initialization,
+            padding='same')(model2)
+    model = add([model, model2])
     # Note that the activation here differs from He et al 2016, as that
     # activation is not on the skip connection path. However, this is not
     # likely to be important, see:
@@ -99,27 +98,27 @@ def make_flood_fill_unet(input_fov_shape, output_fov_shape, network_config):
     """
     image_input = Input(shape=tuple(input_fov_shape) + (1,), dtype='float32', name='image_input')
     mask_input = Input(shape=tuple(input_fov_shape) + (1,), dtype='float32', name='mask_input')
-    ffn = merge([image_input, mask_input], mode='concat')
+    ffn = concatenate([image_input, mask_input])
 
-    ffn = Convolution3D(network_config.convolution_filters,
-                        network_config.convolution_dim[0],
-                        network_config.convolution_dim[1],
-                        network_config.convolution_dim[2],
-                        init=network_config.initialization,
-                        activation='relu',
-                        border_mode='same')(ffn)
+    ffn = Conv3D(
+            network_config.convolution_filters,
+            tuple(network_config.convolution_dim),
+            kernel_initializer=network_config.initialization,
+            activation='relu',
+            padding='same')(ffn)
 
-    ffn = add_unet_layer(ffn, network_config, 4, output_fov_shape)
+    # Note that since the Keras 2 upgrade strangely models with depth > 3 are
+    # rejected by TF.
+    ffn = add_unet_layer(ffn, network_config, 3, output_fov_shape)
 
-    mask_output = Convolution3D(1,
-                                network_config.convolution_dim[0],
-                                network_config.convolution_dim[1],
-                                network_config.convolution_dim[2],
-                                init=network_config.initialization,
-                                border_mode='same',
-                                name='mask_output',
-                                activation=network_config.output_activation)(ffn)
-    ffn = Model(input=[image_input, mask_input], output=[mask_output])
+    mask_output = Conv3D(
+            1,
+            tuple(network_config.convolution_dim),
+            kernel_initializer=network_config.initialization,
+            padding='same',
+            name='mask_output',
+            activation=network_config.output_activation)(ffn)
+    ffn = Model(inputs=[image_input, mask_input], outputs=[mask_output])
 
     return ffn
 
@@ -130,20 +129,18 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape):
     downsample = np.array([0, 1, 1])
 
     # First U convolution module.
-    model = Convolution3D(n_channels,
-                          network_config.convolution_dim[0],
-                          network_config.convolution_dim[1],
-                          network_config.convolution_dim[2],
-                          init=network_config.initialization,
-                          activation='relu',
-                          border_mode='same')(model)
-    model = Convolution3D(n_channels,
-                          network_config.convolution_dim[0],
-                          network_config.convolution_dim[1],
-                          network_config.convolution_dim[2],
-                          init=network_config.initialization,
-                          activation='relu',
-                          border_mode='same')(model)
+    model = Conv3D(
+            n_channels,
+            tuple(network_config.convolution_dim),
+            kernel_initializer=network_config.initialization,
+            activation='relu',
+            padding='same')(model)
+    model = Conv3D(
+            n_channels,
+            tuple(network_config.convolution_dim),
+            kernel_initializer=network_config.initialization,
+            activation='relu',
+            padding='same')(model)
 
     # Crop and pass forward to upsampling.
     contraction = (np.array(model.get_shape().as_list()[1:4]) - output_shape) / 2
@@ -156,49 +153,42 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape):
         return forward
 
     # Downsample and recurse.
-    model = Convolution3D(n_channels,
-                          network_config.convolution_dim[0],
-                          network_config.convolution_dim[1],
-                          network_config.convolution_dim[2],
-                          subsample=list(downsample + 1),
-                          init=network_config.initialization,
-                          activation='relu',
-                          border_mode='same')(model)
+    model = Conv3D(
+            n_channels,
+            tuple(network_config.convolution_dim),
+            strides=list(downsample + 1),
+            kernel_initializer=network_config.initialization,
+            activation='relu',
+            padding='same')(model)
     model = add_unet_layer(model,
                            network_config,
                            remaining_layers - 1,
                            np.ceil(np.divide(output_shape, downsample.astype('float32') + 1.0)).astype(np.int32))
 
     # Upsample output of previous layer and merge with forward link.
-    # TODO: This is a bad hack for convolutional upsampling. My old hack of
-    # this used a custom layer, but this hack is used for the sake of using
-    # simple Keras layers. This should be fixed when upgrading to Keras 2.
-    model = UpSampling3D(list(downsample + 1))(model)
-    model = Convolution3D(n_channels,
-                          downsample[0] + 1,
-                          downsample[1] + 1,
-                          downsample[2] + 1,
-                          init=network_config.initialization,
-                          activation='relu',
-                          border_mode='valid')(model)
+    model = UpSampling3D(tuple(downsample + 1))(model)
+    model = Conv3D(
+            n_channels,
+            tuple(downsample + 1),
+            kernel_initializer=network_config.initialization,
+            activation='relu',
+            padding='valid')(model)
 
-    model = merge([forward, model], mode='concat')
+    model = concatenate([forward, model])
 
     # Second U convolution module.
-    model = Convolution3D(n_channels,
-                          network_config.convolution_dim[0],
-                          network_config.convolution_dim[1],
-                          network_config.convolution_dim[2],
-                          init=network_config.initialization,
-                          activation='relu',
-                          border_mode='same')(model)
-    model = Convolution3D(n_channels,
-                          network_config.convolution_dim[0],
-                          network_config.convolution_dim[1],
-                          network_config.convolution_dim[2],
-                          init=network_config.initialization,
-                          activation='relu',
-                          border_mode='same')(model)
+    model = Conv3D(
+            n_channels,
+            tuple(network_config.convolution_dim),
+            kernel_initializer=network_config.initialization,
+            activation='relu',
+            padding='same')(model)
+    model = Conv3D(
+            n_channels,
+            tuple(network_config.convolution_dim),
+            kernel_initializer=network_config.initialization,
+            activation='relu',
+            padding='same')(model)
 
     return model
 

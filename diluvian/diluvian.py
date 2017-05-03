@@ -369,6 +369,9 @@ def train_network(
             f_a_bins=f_a_bins,
             reset_generators=True)
 
+    TRAINING_STEPS_PER_EPOCH = CONFIG.training.training_size / CONFIG.training.batch_size
+    VALIDATION_STEPS = CONFIG.training.validation_size / CONFIG.training.batch_size
+
     # Pre-train
     training_gens = [
             augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.input_fov_shape))
@@ -389,13 +392,13 @@ def train_network(
             reset_generators=CONFIG.training.reset_generators) for gen in worker_gens]
     history = ffn.fit_generator(
             Roundrobin(*training_data),
-            samples_per_epoch=CONFIG.training.training_size,
-            nb_epoch=CONFIG.training.static_train_epochs,
+            steps_per_epoch=TRAINING_STEPS_PER_EPOCH,
+            epochs=CONFIG.training.static_train_epochs,
             max_q_size=CONFIG.training.num_workers,
-            nb_worker=1,
+            workers=1,
             callbacks=callbacks,
             validation_data=validation_data,
-            nb_val_samples=CONFIG.training.validation_size)
+            validation_steps=VALIDATION_STEPS)
 
     # Moving training
     kludges = [{'inputs': None, 'outputs': None} for _ in range(CONFIG.training.num_workers)]
@@ -423,14 +426,14 @@ def train_network(
             reset_generators=CONFIG.training.reset_generators) for gen, kludge in zip(worker_gens, kludges)]
     moving_history = ffn.fit_generator(
             Roundrobin(*training_data),
-            samples_per_epoch=CONFIG.training.training_size,
-            nb_epoch=CONFIG.training.total_epochs,
+            steps_per_epoch=TRAINING_STEPS_PER_EPOCH,
+            epochs=CONFIG.training.total_epochs,
             initial_epoch=CONFIG.training.static_train_epochs,
             max_q_size=CONFIG.training.num_workers,
-            nb_worker=1,
+            workers=1,
             callbacks=callbacks,
             validation_data=validation_data,
-            nb_val_samples=CONFIG.training.validation_size)
+            validation_steps=VALIDATION_STEPS)
     extend_keras_history(history, moving_history)
 
     write_keras_history_to_csv(history, model_output_filebase + '.csv')
