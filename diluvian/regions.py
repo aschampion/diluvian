@@ -19,21 +19,21 @@ from .util import (
         )
 
 
-class DenseRegion(object):
+class Region(object):
     @staticmethod
     def from_subvolume(subvolume):
         if subvolume.label_mask is not None and np.issubdtype(subvolume.label_mask.dtype, np.bool):
             target = mask_to_output_target(subvolume.label_mask)
         else:
             target = subvolume.label_mask
-        return DenseRegion(subvolume.image,
-                           target=target,
-                           seed_vox=subvolume.seed)
+        return Region(subvolume.image,
+                      target=target,
+                      seed_vox=subvolume.seed)
 
     @staticmethod
     def from_subvolume_generator(subvolumes):
         subvolumes = itertools.ifilter(lambda s: s.has_uniform_seed_margin, subvolumes)
-        return itertools.imap(DenseRegion.from_subvolume, subvolumes)
+        return itertools.imap(Region.from_subvolume, subvolumes)
 
     def __init__(self, image, target=None, seed_vox=None, mask=None):
         self.MOVE_DELTA = (CONFIG.model.output_fov_shape - 1) / CONFIG.model.output_fov_move_fraction
@@ -73,7 +73,7 @@ class DenseRegion(object):
         self.mask[tuple(seed_vox)] = CONFIG.model.v_true
 
     def unfilled_copy(self):
-        copy = DenseRegion(self.image, self.target, self.seed_pos)
+        copy = Region(self.image, self.target, self.seed_pos)
         copy.bias_against_merge = self.bias_against_merge
         copy.move_based_on_new_mask = self.move_based_on_new_mask
 

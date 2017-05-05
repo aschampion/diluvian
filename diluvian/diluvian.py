@@ -34,7 +34,7 @@ from .volumes import (
         static_training_generator,
         moving_training_generator,
         )
-from .regions import DenseRegion
+from .regions import Region
 
 
 def plot_history(history):
@@ -96,7 +96,7 @@ def fill_region_from_model(model_file, volumes=None, bounds_input_file=None,
         else:
             gen_kwargs = {k: {'shape': CONFIG.model.training_subv_shape * 4 - 3} for k in volumes.iterkeys()}
     regions = roundrobin(*[
-            DenseRegion.from_subvolume_generator(
+            Region.from_subvolume_generator(
                 v.downsample(CONFIG.volume.resolution)
                  .subvolume_generator(**gen_kwargs[k]))
             for k, v in volumes.iteritems()])

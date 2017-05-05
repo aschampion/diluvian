@@ -17,7 +17,7 @@ from keras.utils.data_utils import get_file
 from .config import CONFIG
 from .octrees import OctreeVolume
 from .regions import (
-        DenseRegion,
+        Region,
         mask_to_output_target,
         )
 from .util import pad_dims
@@ -778,7 +778,7 @@ def moving_training_generator(subvolumes, batch_size, training_size, callback_kl
             if region is None or region.queue.empty():
                 subvolume = subvolumes.next()
 
-                regions[r] = DenseRegion.from_subvolume(subvolume)
+                regions[r] = Region.from_subvolume(subvolume)
                 region = regions[r]
                 epoch_move_counts.append(move_counts[r])
                 move_counts[r] = 0
