@@ -91,10 +91,13 @@ def _make_main_parser():
     sparse_fill_parser.add_argument(
             '--max-moves', dest='max_moves', default=None, type=int,
             help='Cancel filling after this many moves.')
+    # Fix using a multi-GPU trained model that was not saved properly by
+    # setting this to the number of training GPUs. Because only the original
+    # author has these broken models, this argument is hidden to avoid
+    # confusion.
     sparse_fill_parser.add_argument(
             '--multi-gpu-model-kludge', dest='multi_gpu_model_kludge', default=None, type=int,
-            help='Fix using a multi-GPU trained model that was not saved properly by '
-                 'setting this to the number of training GPUs.')
+            help=argparse.SUPPRESS)
 
     check_config_parser = commandparsers.add_parser(
             'check-config', parents=[common_parser],
