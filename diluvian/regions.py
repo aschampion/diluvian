@@ -73,9 +73,17 @@ class Region(object):
         self.mask[tuple(seed_vox)] = CONFIG.model.v_true
 
     def unfilled_copy(self):
-        copy = Region(self.image, self.target, self.seed_pos)
+        """Clone this region in an initial state without any filling.
+
+        Returns
+        -------
+        Region
+        """
+        copy = Region(self.image, target=self.target, seed_vox=self.pos_to_vox(self.seed_pos))
         copy.bias_against_merge = self.bias_against_merge
         copy.move_based_on_new_mask = self.move_based_on_new_mask
+
+        return copy
 
     def to_body(self):
         def threshold(a):
