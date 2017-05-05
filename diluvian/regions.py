@@ -37,11 +37,14 @@ class DenseRegion(object):
 
     def __init__(self, image, target=None, seed_vox=None, mask=None):
         self.MOVE_DELTA = (CONFIG.model.output_fov_shape - 1) / CONFIG.model.output_fov_move_fraction
-        self.MOVE_GRID_OFFSET = np.mod(seed_vox, self.MOVE_DELTA).astype('int64')
         self.queue = Queue.PriorityQueue()
         self.visited = set()
         self.image = image
         self.bounds = image.shape
+        if seed_vox is None:
+            self.MOVE_GRID_OFFSET = np.array([0, 0, 0], dtype=np.int64)
+        else:
+            self.MOVE_GRID_OFFSET = np.mod(seed_vox, self.MOVE_DELTA).astype(np.int64)
         self.move_bounds = self.vox_to_pos(self.bounds) - 1
         self.move_check_thickness = CONFIG.model.move_check_thickness
         if mask is None:
