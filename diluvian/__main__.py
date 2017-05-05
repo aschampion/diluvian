@@ -72,24 +72,26 @@ def _make_main_parser():
             help='Plot metric history at the end of training. '
                  'Will be saved as a PNG with the model output base filename.')
 
-    fill_parser = commandparsers.add_parser(
-            'fill', parents=[common_parser],
-            help='Use a trained network to fill random regions in a volume.')
-    fill_parser.add_argument(
-            '-bi', '--bounds-input-file', dest='bounds_input_file', default=None,
-            help='Filename for bounds CSV input. Should contain "{volume}", which will be '
-                 'substituted with the volume name for each respective volume\'s bounds.')
-    fill_parser.add_argument(
+    fill_common_parser = argparse.ArgumentParser(add_help=False)
+    fill_common_parser.add_argument(
             '--no-bias', action='store_false', dest='bias', default=True,
             help='Overwrite prediction mask at the end of each field of view inference '
                  'rather than using the anti-merge bias update.')
-    fill_parser.add_argument(
+    fill_common_parser.add_argument(
             '--move-batch-size', dest='move_batch_size', default=1, type=int,
             help='Maximum number of fill moves to process in each prediction batch.')
-    fill_parser.add_argument(
+
+    sparse_fill_parser = commandparsers.add_parser(
+            'sparse-fill', parents=[common_parser, fill_common_parser],
+            help='Use a trained network to fill random regions in a volume.')
+    sparse_fill_parser.add_argument(
+            '-bi', '--bounds-input-file', dest='bounds_input_file', default=None,
+            help='Filename for bounds CSV input. Should contain "{volume}", which will be '
+                 'substituted with the volume name for each respective volume\'s bounds.')
+    sparse_fill_parser.add_argument(
             '--max-moves', dest='max_moves', default=None, type=int,
             help='Cancel filling after this many moves.')
-    fill_parser.add_argument(
+    sparse_fill_parser.add_argument(
             '--multi-gpu-model-kludge', dest='multi_gpu_model_kludge', default=None, type=int,
             help='Fix using a multi-GPU trained model that was not saved properly by '
                  'setting this to the number of training GPUs.')
@@ -141,7 +143,7 @@ def main():
                       viewer=args.viewer,
                       metric_plot=args.metric_plot)
 
-    elif args.command == 'fill':
+    elif args.command == 'sparse-fill':
         # Late import to prevent loading large modules for short CLI commands.
         from .diluvian import fill_region_from_model
 
