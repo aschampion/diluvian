@@ -433,16 +433,20 @@ class HDF5Volume(Volume):
                 hdf5_file = dataset['hdf5_file']
                 if dataset.get('use_keras_cache', False):
                     hdf5_file = get_file(hdf5_file, dataset['download_url'], md5_hash=dataset.get('download_md5', None))
+                label_dataset = dataset.get('label_dataset', None)
                 volumes[dataset['name']] = HDF5Volume(hdf5_file,
                                                       dataset['image_dataset'],
-                                                      dataset['label_dataset'])
+                                                      label_dataset)
 
         return volumes
 
     def __init__(self, orig_file, image_dataset, label_dataset):
         self.file = h5py.File(orig_file, 'r')
         self.image_data = self.file[image_dataset]
-        self.label_data = self.file[label_dataset]
+        if label_dataset is not None:
+            self.label_data = self.file[label_dataset]
+        else:
+            self.label_data = np.full_like(self.image_data, np.NaN, dtype=np.uint64)
         if 'resolution' in self.file[image_dataset].attrs:
             self.resolution = np.array(self.file[image_dataset].attrs['resolution'])
         else:
