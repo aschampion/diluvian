@@ -54,7 +54,7 @@ def _make_main_parser():
     train_parser.add_argument(
             '-mc', '--model-checkpoint-file', dest='model_checkpoint_file', default=None,
             help='Filename for model checkpoints at every epoch. '
-                 'This is different that the model output file; if provided, this HDF5 model '
+                 'This is different than the model output file; if provided, this HDF5 model '
                  'file is saved every epoch regardless of validation performance.'
                  'Can use Keras format arguments: https://keras.io/callbacks/#modelcheckpoint')
     train_parser.add_argument(
