@@ -80,21 +80,31 @@ def generate_subvolume_bounds(filename, volumes, num_bounds, sparse=False):
         SubvolumeBounds.iterable_to_csv(bounds, filename.format(volume=k))
 
 
-def fill_region_from_model(model_file, volumes=None, bounds_input_file=None,
-                           bias=True, move_batch_size=1,
-                           max_moves=None, multi_gpu_model_kludge=None, sparse=False):
+def fill_region_from_model(
+        model_file,
+        volumes=None,
+        bounds_input_file=None,
+        bias=True,
+        move_batch_size=1,
+        max_moves=None,
+        multi_gpu_model_kludge=None,
+        sparse=False):
     if volumes is None:
         raise ValueError('Volumes must be provided.')
 
     if bounds_input_file is not None:
-        gen_kwargs = {k: {
-                  'bounds_generator': iter(SubvolumeBounds.iterable_from_csv(bounds_input_file.format(volume=k)))}
-                  for k in volumes.iterkeys()}
+        gen_kwargs = {
+                k: {'bounds_generator': iter(SubvolumeBounds.iterable_from_csv(bounds_input_file.format(volume=k)))}
+                for k in volumes.iterkeys()}
     else:
         if sparse:
-            gen_kwargs = {k: {'sparse_margin': CONFIG.model.training_subv_shape * 4 - 3} for k in volumes.iterkeys()}
+            gen_kwargs = {
+                    k: {'sparse_margin': CONFIG.model.training_subv_shape * 4 - 3}
+                    for k in volumes.iterkeys()}
         else:
-            gen_kwargs = {k: {'shape': CONFIG.model.training_subv_shape * 4 - 3} for k in volumes.iterkeys()}
+            gen_kwargs = {
+                    k: {'shape': CONFIG.model.training_subv_shape * 4 - 3}
+                    for k in volumes.iterkeys()}
     regions = roundrobin(*[
             Region.from_subvolume_generator(
                 v.downsample(CONFIG.volume.resolution)
@@ -125,10 +135,16 @@ def fill_region_from_model(model_file, volumes=None, bounds_input_file=None,
             body.to_swc('{}.swc'.format('_'.join(map(str, tuple(body.seed)))))
 
 
-def train_network(model_file=None, volumes=None, static_validation=True,
-                  reset_generators_each_epoch=True,
-                  model_output_filebase=None, model_checkpoint_file=None,
-                  tensorboard=False, viewer=False, metric_plot=False):
+def train_network(
+        model_file=None,
+        volumes=None,
+        static_validation=True,
+        reset_generators_each_epoch=True,
+        model_output_filebase=None,
+        model_checkpoint_file=None,
+        tensorboard=False,
+        viewer=False,
+        metric_plot=False):
     if model_file is None:
         factory_mod_name, factory_func_name = CONFIG.network.factory.rsplit('.', 1)
         factory_mod = importlib.import_module(factory_mod_name)
