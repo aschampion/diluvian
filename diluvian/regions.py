@@ -35,7 +35,8 @@ class Region(object):
         subvolumes = itertools.ifilter(lambda s: s.has_uniform_seed_margin, subvolumes)
         return itertools.imap(Region.from_subvolume, subvolumes)
 
-    def __init__(self, image, target=None, seed_vox=None, mask=None):
+    def __init__(self, image, target=None, seed_vox=None, mask=None, block_padding=None):
+        self.block_padding = block_padding
         self.MOVE_DELTA = (CONFIG.model.output_fov_shape - 1) / CONFIG.model.output_fov_move_fraction
         self.queue = Queue.PriorityQueue()
         self.visited = set()
@@ -71,7 +72,6 @@ class Region(object):
             np.testing.assert_almost_equal(self.target[tuple(seed_vox)], CONFIG.model.v_true,
                                            err_msg='Seed position should be in target body.')
         self.mask[tuple(seed_vox)] = CONFIG.model.v_true
-        self.block_padding = None  # Error if blocks extend outside region bounds
 
     def unfilled_copy(self):
         """Clone this region in an initial state without any filling.
@@ -104,7 +104,10 @@ class Region(object):
         return (pos * self.MOVE_DELTA).astype('int64') + self.MOVE_GRID_OFFSET
 
     def pos_in_bounds(self, pos):
-        return np.all(np.less(pos, self.move_bounds)) and np.all(pos > 1)
+        if self.block_padding is None:
+            return np.all(np.less(pos, self.move_bounds)) and np.all(pos > 1)
+        else:
+            return np.all(np.less_equal(pos, self.move_bounds)) and np.all(pos > 0)
 
     def get_block_bounds(self, vox, shape):
         """Get the bounds of a block by center and shape, accounting padding.
