@@ -71,6 +71,7 @@ class Region(object):
             np.testing.assert_almost_equal(self.target[tuple(seed_vox)], CONFIG.model.v_true,
                                            err_msg='Seed position should be in target body.')
         self.mask[tuple(seed_vox)] = CONFIG.model.v_true
+        self.block_padding = None  # Error if blocks extend outside region bounds
 
     def unfilled_copy(self):
         """Clone this region in an initial state without any filling.
@@ -105,6 +106,39 @@ class Region(object):
     def pos_in_bounds(self, pos):
         return np.all(np.less(pos, self.move_bounds)) and np.all(pos > 1)
 
+    def get_block_bounds(self, vox, shape):
+        """Get the bounds of a block by center and shape, accounting padding.
+
+        Returns the voxel bounds of a block specified by shape and center in
+        the region, clamping the bounds to be in the volume but returning
+        padding margins that extend outside the region bounds.
+
+        Parameters
+        ----------
+        vox : ndarray
+            Center of the block in voxel coordinates.
+        shape : ndarray
+            Shape of the block.
+
+        Returns
+        -------
+        block_min, block_max : ndarray
+            Extents of the block in voxel coordinates clamped to the region
+            bounds.
+        padding_pre, padding_post : ndarray
+            How much the block extends outside the region bounds.
+        """
+        margin = (shape - 1) / 2
+        block_min = vox - margin
+        block_max = vox + margin + 1
+        padding_pre = np.maximum(0, -block_min)
+        padding_post = np.maximum(0, block_max - self.bounds)
+
+        block_min = np.maximum(0, block_min)
+        block_max = np.minimum(block_max, self.bounds)
+
+        return block_min, block_max, padding_pre, padding_post
+
     def get_moves(self, mask):
         moves = []
         ctr = (np.asarray(mask.shape) - 1) / 2 + 1
@@ -122,10 +156,17 @@ class Region(object):
         return moves
 
     def add_mask(self, mask_block, mask_pos):
-        mask_origin = self.pos_to_vox(mask_pos) - (np.asarray(mask_block.shape) - 1) / 2
-        current_mask = self.mask[mask_origin[0]:mask_origin[0] + mask_block.shape[0],
-                                 mask_origin[1]:mask_origin[1] + mask_block.shape[1],
-                                 mask_origin[2]:mask_origin[2] + mask_block.shape[2]]
+        mask_vox = self.pos_to_vox(mask_pos)
+        mask_min, mask_max, pad_pre, pad_post = self.get_block_bounds(mask_vox, np.asarray(mask_block.shape))
+
+        if np.any(pad_pre) or np.any(pad_post):
+            assert self.block_padding is not None, \
+                'Position block extends out of region bounds, but padding is not enabled: {}'.format(mask_pos)
+            pad_post = [-x if x != 0 else None for x in pad_post]
+            mask_block = mask_block[map(slice, pad_pre, pad_post)]
+        current_mask = self.mask[mask_min[0]:mask_max[0],
+                                 mask_min[1]:mask_max[1],
+                                 mask_min[2]:mask_max[2]]
 
         if self.bias_against_merge:
             update_mask = np.isnan(current_mask) | (current_mask > 0.5) | np.less(mask_block, current_mask)
@@ -133,9 +174,9 @@ class Region(object):
         else:
             current_mask[:] = mask_block
 
-        self.mask[mask_origin[0]:mask_origin[0] + mask_block.shape[0],
-                  mask_origin[1]:mask_origin[1] + mask_block.shape[1],
-                  mask_origin[2]:mask_origin[2] + mask_block.shape[2]] = current_mask
+        self.mask[mask_min[0]:mask_max[0],
+                  mask_min[1]:mask_max[1],
+                  mask_min[2]:mask_max[2]] = current_mask
 
         if self.move_based_on_new_mask:
             new_moves = self.get_moves(mask_block)
@@ -152,9 +193,11 @@ class Region(object):
     def get_next_block(self):
         next_pos = np.asarray(self.queue.get()[1])
         next_vox = self.pos_to_vox(next_pos)
-        margin = (CONFIG.model.input_fov_shape - 1) / 2
-        block_min = next_vox - margin
-        block_max = next_vox + margin + 1
+        block_min, block_max, pad_pre, pad_post = self.get_block_bounds(next_vox, CONFIG.model.input_fov_shape)
+
+        assert self.block_padding is not None or not (np.any(pad_pre) or np.any(pad_post)), \
+            'Position block extends out of region bounds, but padding is not enabled: {}'.format(next_pos)
+
         image_block = self.image[block_min[0]:block_max[0],
                                  block_min[1]:block_max[1],
                                  block_min[2]:block_max[2]]
@@ -164,13 +207,21 @@ class Region(object):
 
         mask_block[np.isnan(mask_block)] = CONFIG.model.v_false
 
+        if np.any(pad_pre) or np.any(pad_post):
+            assert self.block_padding is not None, \
+                'Position block extends out of region bounds, but padding is not enabled: {}'.format(next_pos)
+            pad_width = zip(list(pad_pre), list(pad_post))
+            image_block = np.pad(image_block, pad_width, self.block_padding)
+            mask_block = np.pad(mask_block, pad_width, self.block_padding)
+
         if self.target is not None:
-            margin = (CONFIG.model.output_fov_shape - 1) / 2
-            oblock_min = next_vox - margin
-            oblock_max = next_vox + margin + 1
-            target_block = self.target[oblock_min[0]:oblock_max[0],
-                                       oblock_min[1]:oblock_max[1],
-                                       oblock_min[2]:oblock_max[2]]
+            block_min, block_max, pad_pre, pad_post = self.get_block_bounds(next_vox, CONFIG.model.output_fov_shape)
+            target_block = self.target[block_min[0]:block_max[0],
+                                       block_min[1]:block_max[1],
+                                       block_min[2]:block_max[2]]
+            if np.any(pad_pre) or np.any(pad_post):
+                pad_width = zip(list(pad_pre), list(pad_post))
+                target_block = np.pad(target_block, pad_width, self.block_padding)
         else:
             target_block = None
 
