@@ -174,8 +174,7 @@ def fill_volumes_with_model(
             viewer.add(prediction, name='Labels')
             viewer.add(conflict_count, name='Conflicts')
 
-            print viewer
-            raw_input("Press any key to continue...")
+            viewer.print_view_prompt()
 
 
 def fill_region_with_model(
@@ -220,17 +219,22 @@ def fill_region_with_model(
                     multi_gpu_pad_kludge=multi_gpu_model_kludge)
         viewer = region.get_viewer()
         print viewer
-        s = raw_input("Press Enter to continue, a to export animation, q to quit...")
-        if s == 'q':
-            break
-        elif s == 'a':
-            region_copy = region.unfilled_copy()
-            # Must assign the animation to a variable so that it is not GCed.
-            ani = region_copy.fill_animation(model, 'export.mp4', verbose=True) # noqa
-            s = raw_input("Press Enter when animation is complete...")
-        elif s == 's':
-            body = region.to_body()
-            body.to_swc('{}.swc'.format('_'.join(map(str, tuple(body.seed)))))
+        while True:
+            s = raw_input("Press Enter to continue, v to open in browser, a to export animation, q to quit...")
+            if s == 'q':
+                return
+            elif s == 'a':
+                region_copy = region.unfilled_copy()
+                # Must assign the animation to a variable so that it is not GCed.
+                ani = region_copy.fill_animation(model, 'export.mp4', verbose=True) # noqa
+                s = raw_input("Press Enter when animation is complete...")
+            elif s == 's':
+                body = region.to_body()
+                body.to_swc('{}.swc'.format('_'.join(map(str, tuple(body.seed)))))
+            elif s == 'v':
+                viewer.open_in_browser()
+            else:
+                break
 
 
 def train_network(
@@ -393,5 +397,4 @@ def view_volumes(volumes):
                    name='{} (Labels)'.format(volume_name),
                    voxel_size=list(np.flipud(volume.resolution)))
 
-    print viewer
-    raw_input("Press any key to continue...")
+    viewer.print_view_prompt()

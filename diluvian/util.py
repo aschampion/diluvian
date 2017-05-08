@@ -4,6 +4,7 @@
 import collections
 import csv
 import itertools
+import webbrowser
 
 import neuroglancer
 import numpy as np
@@ -25,6 +26,19 @@ class WrappedViewer(neuroglancer.Viewer):
                 state['navigation']['pose']['position'] = collections.OrderedDict()
             state['navigation']['pose']['position']['voxelCoordinates'] = map(int, list(self.voxel_coordinates))
         return state
+
+    def open_in_browser(self):
+        webbrowser.open_new_tab(str(self))
+
+    def print_view_prompt(self):
+        print self
+
+        while True:
+            s = raw_input('Press v, enter to open in browser, or enter to close...')
+            if s == 'v':
+                self.open_in_browser()
+            else:
+                break
 
 
 def extend_keras_history(a, b):
