@@ -1,0 +1,28 @@
+# Cropped test datasets from the CREMI MICCAI Challenge on
+# Circuit Reconstruction from Electron Microscopy Images
+#
+# https://cremi.org/
+
+[[dataset]]
+name = "Sample A+"
+hdf5_file = "sample_A+_20160601.hdf"
+image_dataset = "volumes/raw"
+use_keras_cache = true
+download_url = "https://cremi.org/static/data/sample_A%2B_20160601.hdf"
+download_md5 = "5b77b53d56333a261f80c7c3bc2168be"
+
+[[dataset]]
+name = "Sample B+"
+hdf5_file = "sample_B+_20160601.hdf"
+image_dataset = "volumes/raw"
+use_keras_cache = true
+download_url = "https://cremi.org/static/data/sample_B%2B_20160601.hdf"
+download_md5 = "d4d53f207b00978c83e4d853b150b1d7"
+
+[[dataset]]
+name = "Sample C+"
+hdf5_file = "sample_C+_20160601.hdf"
+image_dataset = "volumes/raw"
+use_keras_cache = true
+download_url = "https://cremi.org/static/data/sample_C%2B_20160601.hdf"
+download_md5 = "69c7677c952f847c550375e516166dfa"
