@@ -31,8 +31,9 @@ def _make_main_parser():
             '-m', '--model-file', dest='model_file', default=None,
             help='Existing network model file to use for prediction or continued training.')
     common_parser.add_argument(
-            '-v', '--volume-file', dest='volume_file', default=None,
-            help='Volume configuration file. For example, see `conf/cremi_datasets.toml`.')
+            '-v', '--volume-file', action='append', dest='volume_files', default=[],
+            help='Volume configuration files. For example, see `conf/cremi_datasets.toml`.'
+                 'Values are overwritten in the order provided.')
     common_parser.add_argument(
             '--no-in-memory', action='store_false', dest='in_memory', default=True,
             help='Do not preload entire volumes into memory.')
@@ -165,7 +166,7 @@ def main():
         # Late import to prevent loading large modules for short CLI commands.
         from .diluvian import train_network
 
-        volumes = load_volumes(args.volume_file, args.in_memory)
+        volumes = load_volumes(args.volume_files, args.in_memory)
         train_network(model_file=args.model_file,
                       volumes=volumes,
                       reset_generators_each_epoch=args.reset_generators_each_epoch,
@@ -179,7 +180,7 @@ def main():
         # Late import to prevent loading large modules for short CLI commands.
         from .diluvian import fill_volumes_with_model
 
-        volumes = load_volumes(args.volume_file, args.in_memory)
+        volumes = load_volumes(args.volume_files, args.in_memory)
         fill_volumes_with_model(args.model_file,
                                 volumes,
                                 args.segmentation_output_file,
@@ -193,7 +194,7 @@ def main():
         # Late import to prevent loading large modules for short CLI commands.
         from .diluvian import fill_region_with_model
 
-        volumes = load_volumes(args.volume_file, args.in_memory)
+        volumes = load_volumes(args.volume_files, args.in_memory)
         fill_region_with_model(args.model_file,
                                volumes=volumes,
                                bounds_input_file=args.bounds_input_file,
@@ -206,7 +207,7 @@ def main():
         # Late import to prevent loading large modules for short CLI commands.
         from .diluvian import view_volumes
 
-        volumes = load_volumes(args.volume_file, args.in_memory, name_regex=args.volume_name_regex)
+        volumes = load_volumes(args.volume_files, args.in_memory, name_regex=args.volume_name_regex)
         view_volumes(volumes)
 
     elif args.command == 'check-config':
@@ -221,17 +222,17 @@ def main():
         # Late import to prevent loading large modules for short CLI commands.
         from .diluvian import generate_subvolume_bounds
 
-        volumes = load_volumes(args.volume_file, args.in_memory)
+        volumes = load_volumes(args.volume_files, args.in_memory)
         generate_subvolume_bounds(args.bounds_output_file, volumes, args.num_bounds)
 
 
-def load_volumes(volume_file, in_memory, name_regex=None):
+def load_volumes(volume_files, in_memory, name_regex=None):
     """Load HDF5 volumes specified in a TOML description file.
 
     Parameters
     ----------
-    volume_file : str
-        Filename of the TOML volume description to load.
+    volume_file : list of str
+        Filenames of the TOML volume descriptions to load.
     in_memory : bool
         If true, the entire dataset is read into an in-memory volume.
 
@@ -243,8 +244,10 @@ def load_volumes(volume_file, in_memory, name_regex=None):
     from .volumes import HDF5Volume
 
     print 'Loading volumes...'
-    if volume_file:
-        volumes = HDF5Volume.from_toml(volume_file)
+    if volume_files:
+        volumes = {}
+        for volume_file in volume_files:
+            volumes.update(HDF5Volume.from_toml(volume_file))
     else:
         volumes = HDF5Volume.from_toml(os.path.join(os.path.dirname(__file__), '..', 'conf', 'cremi_datasets.toml'))
 
