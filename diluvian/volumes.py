@@ -455,13 +455,13 @@ class HDF5Volume(Volume):
             # Store in ZYX.
             image_data = np.transpose(image_data)
             dataset = h5file.create_dataset(image_dataset, data=image_data, dtype=image_data.dtype)
-            dataset.resolution = np.flipud(resolution)
+            dataset.attrs['resolution'] = np.flipud(resolution)
             config['image_dataset'] = image_dataset
         if label_data is not None:
             # Store in ZYX.
             label_data = np.transpose(label_data)
             dataset = h5file.create_dataset(label_dataset, data=label_data, dtype=label_data.dtype)
-            dataset.resolution = np.flipud(resolution)
+            dataset.attrs['resolution'] = np.flipud(resolution)
             config['label_dataset'] = label_dataset
 
         h5file.close()
