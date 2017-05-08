@@ -5,6 +5,7 @@
 import argparse
 import logging
 import os
+import re
 
 from .config import CONFIG
 
@@ -119,6 +120,14 @@ def _make_main_parser():
             '--multi-gpu-model-kludge', dest='multi_gpu_model_kludge', default=None, type=int,
             help=argparse.SUPPRESS)
 
+    view_parser = commandparsers.add_parser(
+            'view', parents=[common_parser],
+            help='View a set of co-registered volumes in neuroglancer.')
+    view_parser.add_argument(
+            'volume_name_regex', default='.', nargs='?',
+            help='Regex to filter which volumes of those defined in the '
+                 'volume configuration should be loaded.')
+
     check_config_parser = commandparsers.add_parser(
             'check-config', parents=[common_parser],
             help='Check a configuration value.')
@@ -193,6 +202,13 @@ def main():
                                max_moves=args.max_moves,
                                multi_gpu_model_kludge=args.multi_gpu_model_kludge)
 
+    elif args.command == 'view':
+        # Late import to prevent loading large modules for short CLI commands.
+        from .diluvian import view_volumes
+
+        volumes = load_volumes(args.volume_file, args.in_memory, name_regex=args.volume_name_regex)
+        view_volumes(volumes)
+
     elif args.command == 'check-config':
         prop = CONFIG
         if args.config_property is not None:
@@ -209,7 +225,7 @@ def main():
         generate_subvolume_bounds(args.bounds_output_file, volumes, args.num_bounds)
 
 
-def load_volumes(volume_file, in_memory):
+def load_volumes(volume_file, in_memory, name_regex=None):
     """Load HDF5 volumes specified in a TOML description file.
 
     Parameters
@@ -231,6 +247,10 @@ def load_volumes(volume_file, in_memory):
         volumes = HDF5Volume.from_toml(volume_file)
     else:
         volumes = HDF5Volume.from_toml(os.path.join(os.path.dirname(__file__), '..', 'conf', 'cremi_datasets.toml'))
+
+    if name_regex is not None:
+        name_regex = re.compile(name_regex)
+        volumes = {k: v for k, v in volumes.iteritems() if name_regex.match(k)}
 
     if in_memory:
         print 'Copying volumes to memory...'

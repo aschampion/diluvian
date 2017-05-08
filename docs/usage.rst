@@ -13,6 +13,7 @@ Arguments for the ``diluvian`` command line interface are available via help:
    diluvian train -h
    diluvian fill -h
    diluvian sparse-fill -h
+   diluvian view -h
    ...
 
 and also :ref:`in the section below <command-line-interface>`.
