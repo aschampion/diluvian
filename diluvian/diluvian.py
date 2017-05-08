@@ -383,16 +383,15 @@ def train_network(
 
 
 def view_volumes(volumes):
-    resolution = volumes.values()[0].resolution
-    viewer = WrappedViewer(voxel_size=list(np.flipud(resolution)))
+    viewer = WrappedViewer()
 
     for volume_name, volume in volumes.iteritems():
-        if not np.array_equal(resolution, volume.resolution):
-            logging.warning('Volume "%s" has the wrong resolution: %s (expected %s), skipping...',
-                            volume_name, np.array_str(volume.resolution), np.array_str(resolution))
-            continue
-        viewer.add(volume.image_data, name='{} (Image)'.format(volume_name))
-        viewer.add(volume.label_data, name='{} (Labels)'.format(volume_name))
+        viewer.add(volume.image_data,
+                   name='{} (Image)'.format(volume_name),
+                   voxel_size=list(np.flipud(volume.resolution)))
+        viewer.add(volume.label_data,
+                   name='{} (Labels)'.format(volume_name),
+                   voxel_size=list(np.flipud(volume.resolution)))
 
     print viewer
     raw_input("Press any key to continue...")
