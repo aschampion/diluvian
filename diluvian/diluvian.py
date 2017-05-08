@@ -12,6 +12,7 @@ mpl.use('Agg')  # noqa
 import matplotlib.pyplot as plt
 import neuroglancer
 import numpy as np
+import pytoml as toml
 
 from keras.callbacks import (
         Callback,
@@ -158,10 +159,14 @@ def fill_volumes_with_model(
         volume = volume.get_subvolume(SubvolumeBounds(start=np.zeros(3, dtype=np.int64), stop=volume.shape))
         prediction, conflict_count = fill_subvolume_with_model(model_file, volume, **kwargs)
 
-        HDF5Volume.write_file(
-                filename.format(volume=volume_name),
+        volume_filename = filename.format(volume=volume_name)
+        config = HDF5Volume.write_file(
+                volume_filename + '.hdf5',
                 CONFIG.volume.resolution,
                 label_data=prediction)
+        config['name'] = volume_name + ' segmentation'
+        with open(volume_filename + '.toml', 'wb') as tomlfile:
+            tomlfile.write(str(toml.dumps({'dataset': [config]})))
 
         if viewer:
             viewer = WrappedViewer(voxel_size=list(np.flipud(CONFIG.volume.resolution)))

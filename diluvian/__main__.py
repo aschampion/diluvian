@@ -96,9 +96,10 @@ def _make_main_parser():
                  'diagnostics).')
     fill_parser.add_argument(
             'segmentation_output_file', default=None,
-            help='Filename for the HDF5 segmentation output. Should contain '
-                 '"{volume}", which will be substituted with the volume name '
-                 'for each respective volume\'s bounds.')
+            help='Filename for the HDF5 segmentation output, without '
+                 'extension. Should contain "{volume}", which will be '
+                 'substituted with the volume name for each respective '
+                 'volume\'s bounds.')
 
     sparse_fill_parser = commandparsers.add_parser(
             'sparse-fill', parents=[common_parser, fill_common_parser],
