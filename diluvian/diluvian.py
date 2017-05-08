@@ -3,6 +3,7 @@
 
 import importlib
 import itertools
+import logging
 
 import matplotlib as mpl
 # Use the 'Agg' backend to allow the generation of plots even if no X server
@@ -27,9 +28,11 @@ from .util import (
         extend_keras_history,
         get_color_shader,
         roundrobin,
+        WrappedViewer,
         write_keras_history_to_csv,
         )
 from .volumes import (
+        HDF5Volume,
         SubvolumeBounds,
         static_training_generator,
         moving_training_generator,
@@ -80,7 +83,97 @@ def generate_subvolume_bounds(filename, volumes, num_bounds, sparse=False):
         SubvolumeBounds.iterable_to_csv(bounds, filename.format(volume=k))
 
 
-def fill_region_from_model(
+def fill_subvolume_with_model(
+        model_file,
+        subvolume,
+        background_label_id=0,
+        bias=True,
+        move_batch_size=1,
+        max_bodies=None):
+    # Create an output label volume.
+    prediction = np.full_like(subvolume.image, background_label_id, dtype=np.uint64)
+    # Create a conflict count volume that tracks locations where segmented
+    # bodies overlap. For now the first body takes precedence in the
+    # predicted labels.
+    conflict_count = np.full_like(prediction, 0, dtype=np.uint32)
+
+    # Generate seeds from volume.
+    # For now just use a uniform grid.
+    seeds = []
+    grid_size = (CONFIG.model.output_fov_shape - 1) / 2
+    for x in range(grid_size[0], prediction.shape[0], grid_size[0]):
+        for y in range(grid_size[1], prediction.shape[1], grid_size[1]):
+            for z in range(grid_size[2], prediction.shape[2], grid_size[2]):
+                seeds.append(np.array([x, y, z], dtype=np.int32))
+
+    model = load_model(model_file)
+
+    label_id = 0
+    # For each seed, create region, fill, threshold, and merge to output volume.
+    for seed_idx, seed in enumerate(seeds):
+        logging.debug('Processing seed at %s', np.array_str(seed))
+        if prediction[seed[0], seed[1], seed[2]] != background_label_id:
+            # This seed has already been filled.
+            continue
+
+        # Flood-fill and get resulting mask.
+        # Allow reading outside the image volume bounds to allow segmentation
+        # to fill all the way to the boundary.
+        region = Region(subvolume.image, seed_vox=seed, block_padding='reflect')
+        region.bias_against_merge = bias
+        region.fill(model,
+                    move_batch_size=move_batch_size,
+                    verbose=True)
+        body = region.to_body()
+
+        # Generate a label ID for this region.
+        label_id += 1
+        if label_id == background_label_id:
+            label_id += 1
+
+        logging.debug('Adding body to prediction label volume.')
+        conflict_count[np.logical_and(prediction != background_label_id, body.mask)] += 1
+        prediction[np.logical_and(prediction == background_label_id, body.mask)] = label_id
+        logging.info('Filled seed %s/%s (%s) with %s voxels labeled %s.',
+                     seed_idx, len(seeds), np.array_str(seed), np.count_nonzero(body.mask), label_id)
+
+        if max_bodies and label_id >= max_bodies:
+            break
+
+    return prediction, conflict_count
+
+
+def fill_volumes_with_model(
+        model_file,
+        volumes,
+        filename,
+        viewer=False,
+        **kwargs):
+    if '{volume}' not in filename:
+        raise ValueError('HDF5 filename must contain "{volume}" for volume name replacement.')
+
+    for volume_name, volume in volumes.iteritems():
+        logging.info('Filling volume %s...', volume_name)
+        volume = volume.downsample(CONFIG.volume.resolution)
+        volume = volume.get_subvolume(SubvolumeBounds(start=np.zeros(3, dtype=np.int64), stop=volume.shape))
+        prediction, conflict_count = fill_subvolume_with_model(model_file, volume, **kwargs)
+
+        HDF5Volume.write_file(
+                filename.format(volume=volume_name),
+                CONFIG.volume.resolution,
+                label_data=prediction)
+
+        if viewer:
+            viewer = WrappedViewer(voxel_size=list(np.flipud(CONFIG.volume.resolution)))
+            viewer.add(volume.image, name='Image')
+            viewer.add(prediction, name='Labels')
+            viewer.add(conflict_count, name='Conflicts')
+
+            print viewer
+            raw_input("Press any key to continue...")
+
+
+def fill_region_with_model(
         model_file,
         volumes=None,
         bounds_input_file=None,

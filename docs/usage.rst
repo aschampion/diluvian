@@ -11,6 +11,7 @@ Arguments for the ``diluvian`` command line interface are available via help:
 
    diluvian -h
    diluvian train -h
+   diluvian fill -h
    diluvian sparse-fill -h
    ...
 
@@ -106,7 +107,7 @@ See :class:`ImageStackVolume<diluvian.volumes.ImageStackVolume>` for an example.
 
 Once data is available as a volume, normal training and filling operations can
 be called. See :meth:`diluvian.diluvian.train_network` or
-:meth:`diluvian.diluvian.fill_region_from_model`.
+:meth:`diluvian.diluvian.fill_region_with_model`.
 
 
 .. _command-line-interface:

@@ -81,6 +81,25 @@ def _make_main_parser():
             '--move-batch-size', dest='move_batch_size', default=1, type=int,
             help='Maximum number of fill moves to process in each prediction batch.')
 
+    fill_parser = commandparsers.add_parser(
+            'fill', parents=[common_parser, fill_common_parser],
+            help='Use a trained network to densely segment a volume.')
+    fill_parser.add_argument(
+            '--background-label-id', dest='background_label_id', default=0, type=int,
+            help='Label ID to output for voxels not belonging to any filled body.')
+    fill_parser.add_argument(
+            '--viewer', action='store_true', dest='viewer', default=False,
+            help='Create a neuroglancer viewer for a each volume after filling.')
+    fill_parser.add_argument(
+            '--max-bodies', dest='max_bodies', default=None, type=int,
+            help='Cancel filling after this many bodies (only useful for '
+                 'diagnostics).')
+    fill_parser.add_argument(
+            'segmentation_output_file', default=None,
+            help='Filename for the HDF5 segmentation output. Should contain '
+                 '"{volume}", which will be substituted with the volume name '
+                 'for each respective volume\'s bounds.')
+
     sparse_fill_parser = commandparsers.add_parser(
             'sparse-fill', parents=[common_parser, fill_common_parser],
             help='Use a trained network to fill random regions in a volume.')
@@ -146,12 +165,26 @@ def main():
                       viewer=args.viewer,
                       metric_plot=args.metric_plot)
 
-    elif args.command == 'sparse-fill':
+    elif args.command == 'fill':
         # Late import to prevent loading large modules for short CLI commands.
-        from .diluvian import fill_region_from_model
+        from .diluvian import fill_volumes_with_model
 
         volumes = load_volumes(args.volume_file, args.in_memory)
-        fill_region_from_model(args.model_file,
+        fill_volumes_with_model(args.model_file,
+                                volumes,
+                                args.segmentation_output_file,
+                                viewer=args.viewer,
+                                background_label_id=args.background_label_id,
+                                bias=args.bias,
+                                move_batch_size=args.move_batch_size,
+                                max_bodies=args.max_bodies)
+
+    elif args.command == 'sparse-fill':
+        # Late import to prevent loading large modules for short CLI commands.
+        from .diluvian import fill_region_with_model
+
+        volumes = load_volumes(args.volume_file, args.in_memory)
+        fill_region_with_model(args.model_file,
                                volumes=volumes,
                                bounds_input_file=args.bounds_input_file,
                                bias=args.bias,
