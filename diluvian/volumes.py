@@ -433,9 +433,10 @@ class HDF5Volume(Volume):
                 hdf5_file = dataset['hdf5_file']
                 if dataset.get('use_keras_cache', False):
                     hdf5_file = get_file(hdf5_file, dataset['download_url'], md5_hash=dataset.get('download_md5', None))
+                image_dataset = dataset.get('image_dataset', None)
                 label_dataset = dataset.get('label_dataset', None)
                 volumes[dataset['name']] = HDF5Volume(hdf5_file,
-                                                      dataset['image_dataset'],
+                                                      image_dataset,
                                                       label_dataset)
 
         return volumes
@@ -469,14 +470,32 @@ class HDF5Volume(Volume):
 
     def __init__(self, orig_file, image_dataset, label_dataset):
         self.file = h5py.File(orig_file, 'r')
-        self.image_data = self.file[image_dataset]
+        self.resolution = None
+
+        if image_dataset is None and label_dataset is None:
+            raise ValueError('HDF5 volume must have either an image or label dataset: %s', orig_file)
+
+        if image_dataset is not None:
+            self.image_data = self.file[image_dataset]
+            if 'resolution' in self.file[image_dataset].attrs:
+                self.resolution = np.array(self.file[image_dataset].attrs['resolution'])
+
         if label_dataset is not None:
             self.label_data = self.file[label_dataset]
+            if 'resolution' in self.file[label_dataset].attrs:
+                resolution = np.array(self.file[label_dataset].attrs['resolution'])
+                if self.resolution is not None and not np.array_equal(self.resolution, resolution):
+                    logging.warning('HDF5 image and label dataset resolutions differ in %s: %s, %s',
+                                    orig_file, self.resolution, resolution)
+                else:
+                    self.resolution = resolution
         else:
             self.label_data = np.full_like(self.image_data, np.NaN, dtype=np.uint64)
-        if 'resolution' in self.file[image_dataset].attrs:
-            self.resolution = np.array(self.file[image_dataset].attrs['resolution'])
-        else:
+
+        if image_dataset is None:
+            self.image_data = np.full_like(self.label_data, np.NaN, dtype=np.float32)
+
+        if self.resolution is None:
             self.resolution = np.ones(3)
 
     def world_coord_to_local(self, a):
