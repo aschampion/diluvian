@@ -107,7 +107,7 @@ class Region(object):
         if self.block_padding is None:
             return np.all(np.less(pos, self.move_bounds)) and np.all(pos > 1)
         else:
-            return np.all(np.less_equal(pos, self.move_bounds)) and np.all(pos > 0)
+            return np.all(np.less_equal(pos, self.move_bounds)) and np.all(pos >= 0)
 
     def get_block_bounds(self, vox, shape):
         """Get the bounds of a block by center and shape, accounting padding.
@@ -165,8 +165,8 @@ class Region(object):
         if np.any(pad_pre) or np.any(pad_post):
             assert self.block_padding is not None, \
                 'Position block extends out of region bounds, but padding is not enabled: {}'.format(mask_pos)
-            pad_post = [-x if x != 0 else None for x in pad_post]
-            mask_block = mask_block[map(slice, pad_pre, pad_post)]
+            end = [-x if x != 0 else None for x in pad_post]
+            mask_block = mask_block[map(slice, pad_pre, end)]
         current_mask = self.mask[mask_min[0]:mask_max[0],
                                  mask_min[1]:mask_max[1],
                                  mask_min[2]:mask_max[2]]
@@ -182,9 +182,13 @@ class Region(object):
                   mask_min[2]:mask_max[2]] = current_mask
 
         if self.move_based_on_new_mask:
-            new_moves = self.get_moves(mask_block)
+            move_check_block = mask_block
         else:
-            new_moves = self.get_moves(current_mask)
+            move_check_block = current_mask
+        pad_width = zip(list(pad_pre), list(pad_post))
+        move_check_block = np.pad(move_check_block, pad_width, 'constant')
+
+        new_moves = self.get_moves(move_check_block)
         for move in new_moves:
             new_pos = mask_pos + move['move']
             if not self.pos_in_bounds(new_pos):
