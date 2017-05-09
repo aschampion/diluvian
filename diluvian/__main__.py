@@ -87,6 +87,12 @@ def _make_main_parser():
             'fill', parents=[common_parser, fill_common_parser],
             help='Use a trained network to densely segment a volume.')
     fill_parser.add_argument(
+            '--seed-generator', dest='seed_generator', default='sobel', nargs='?',
+            # Would be nice to pull these from .preprocessing.SEED_GENERATORS,
+            # but want to avoid importing so that CLI is responsive.
+            choices=['grid', 'sobel'],
+            help='Method to generate seed locations for flood filling.')
+    fill_parser.add_argument(
             '--background-label-id', dest='background_label_id', default=0, type=int,
             help='Label ID to output for voxels not belonging to any filled body.')
     fill_parser.add_argument(
@@ -185,6 +191,7 @@ def main():
                                 volumes,
                                 args.segmentation_output_file,
                                 viewer=args.viewer,
+                                seed_generator=args.seed_generator,
                                 background_label_id=args.background_label_id,
                                 bias=args.bias,
                                 move_batch_size=args.move_batch_size,

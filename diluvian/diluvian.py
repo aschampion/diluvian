@@ -24,6 +24,7 @@ from keras.models import load_model
 
 from .config import CONFIG
 from .network import compile_network
+from . import preprocessing
 from .third_party.multi_gpu import make_parallel
 from .util import (
         extend_keras_history,
@@ -87,6 +88,7 @@ def generate_subvolume_bounds(filename, volumes, num_bounds, sparse=False):
 def fill_subvolume_with_model(
         model_file,
         subvolume,
+        seed_generator='sobel',
         background_label_id=0,
         bias=True,
         move_batch_size=1,
@@ -99,13 +101,8 @@ def fill_subvolume_with_model(
     conflict_count = np.full_like(prediction, 0, dtype=np.uint32)
 
     # Generate seeds from volume.
-    # For now just use a uniform grid.
-    seeds = []
-    grid_size = (CONFIG.model.output_fov_shape - 1) / 2
-    for x in range(grid_size[0], prediction.shape[0], grid_size[0]):
-        for y in range(grid_size[1], prediction.shape[1], grid_size[1]):
-            for z in range(grid_size[2], prediction.shape[2], grid_size[2]):
-                seeds.append(np.array([x, y, z], dtype=np.int32))
+    generator = preprocessing.SEED_GENERATORS[seed_generator]
+    seeds = generator(subvolume.image)
 
     model = load_model(model_file)
 
