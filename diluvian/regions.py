@@ -305,15 +305,36 @@ class Region(object):
                 'target': target_block,
                 'position': next_pos}
 
-    def fill(self, model, verbose=False, move_batch_size=1, max_moves=None, multi_gpu_pad_kludge=None):
+    def fill(self, model, progress=False, move_batch_size=1, max_moves=None, multi_gpu_pad_kludge=None):
+        """Flood fill this region.
+
+        Parameters
+        ----------
+        model : keras.models.Model
+            Model to use for object prediction.
+        progress : bool or int, optional
+            Whether to display a progress bar. If an int, indicates the
+            progress bar is nested and should appear at that level.
+        move_batch_size : int, optional
+            Number of moves to process in parallel. Note that in the algorithm
+            as originally described this is 1, because otherwise moves'
+            outputs may affect each other or the queue. Setting this higher
+            can increase throughput.
+        max_moves : int, optional
+            Terminate filling after this many moves even if the queue is not
+            empty.
+        multi_gpu_pad_kludge : int, optional
+            Kludge to support legacy broken models saves. See code for details.
+            You do not need this.
+        """
         moves = 0
-        if verbose:
-            pbar = tqdm(desc='Move queue')
+        if progress:
+            pbar = tqdm(desc='Move queue', position=progress)
         while not self.queue.empty():
             batch_block_data = [self.get_next_block() for _ in
                                 itertools.takewhile(lambda _: not self.queue.empty(), range(move_batch_size))]
             batch_moves = len(batch_block_data)
-            if verbose:
+            if progress:
                 moves += batch_moves
                 pbar.total = moves + self.queue.qsize()
                 pbar.set_description('Move ' + str(batch_block_data[-1]['position']))
@@ -342,7 +363,7 @@ class Region(object):
             if max_moves is not None and moves > max_moves:
                 break
 
-        if verbose:
+        if progress:
             pbar.close()
 
     def fill_animation(self, model, movie_filename, verbose=False):

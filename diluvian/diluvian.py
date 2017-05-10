@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import neuroglancer
 import numpy as np
 import pytoml as toml
+from tqdm import tqdm
 
 from keras.callbacks import (
         Callback,
@@ -108,8 +109,11 @@ def fill_subvolume_with_model(
 
     label_id = 0
     # For each seed, create region, fill, threshold, and merge to output volume.
+    pbar = tqdm(desc='Seed queue', total=len(seeds))
     for seed_idx, seed in enumerate(seeds):
         logging.debug('Processing seed at %s', np.array_str(seed))
+        pbar.set_description('Seed ' + np.array_str(seed))
+        pbar.update()
         if prediction[seed[0], seed[1], seed[2]] != background_label_id:
             # This seed has already been filled.
             continue
@@ -121,7 +125,7 @@ def fill_subvolume_with_model(
         region.bias_against_merge = bias
         region.fill(model,
                     move_batch_size=move_batch_size,
-                    verbose=True)
+                    progress=1)
         body = region.to_body()
 
         # Generate a label ID for this region.
@@ -210,7 +214,7 @@ def fill_region_with_model(
     for region in regions:
         region.bias_against_merge = bias
         region.fill(model,
-                    verbose=True,
+                    progress=True,
                     move_batch_size=move_batch_size,
                     max_moves=max_moves,
                     multi_gpu_pad_kludge=multi_gpu_model_kludge)
