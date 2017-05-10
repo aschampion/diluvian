@@ -109,7 +109,7 @@ def fill_subvolume_with_model(
 
     label_id = 0
     # For each seed, create region, fill, threshold, and merge to output volume.
-    pbar = tqdm(desc='Seed queue', total=len(seeds))
+    pbar = tqdm(desc='Seed queue', total=len(seeds), miniters=1, smoothing=0.0)
     for seed_idx, seed in enumerate(seeds):
         logging.debug('Processing seed at %s', np.array_str(seed))
         pbar.set_description('Seed ' + np.array_str(seed))
