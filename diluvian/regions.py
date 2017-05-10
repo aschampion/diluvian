@@ -20,6 +20,44 @@ from .util import (
 
 
 class Region(object):
+    """A region (single seeded body) for flood filling.
+
+    This object contains the necessary data to perform flood filling for a
+    single body.
+
+    Parameters
+    ----------
+    image : ndarray or diluvian.octrees.OctreeVolume
+        Raw image data. If it is an octree, it is assumed all volumetric
+        storage should also operate block-sparsely and there is no ground
+        truth available.
+    target : ndarray, optional
+        Target mask probabilities (ground truth converted to network targets).
+    seed_vox : ndarray, optional
+        Coordinates of the seed voxel.
+    mask : ndarray, optional
+        Object prediction mask for output. Provided as an argument here in
+        case resuming or extending an existing result.
+    block_padding : str, optional
+        Method to use to pad data when the network's input field of view
+        extends outside the region bounds. This is passed to ``numpy.pad``.
+        Defaults to ``None``, which indicates attempts to operate outside the
+        region bounds are erroneous.
+
+    Attributes
+    ----------
+    bias_against_merge : bool
+        Whether to bias against merge by never overwriting mask probabilities
+        less than 0.5 once they have been written.
+    move_based_on_new_mask : bool
+        Whether to generate moves based on the probabilities only in the newly
+        predicted mask block (if true), or on the mask block once combined with
+        the existing probability mask (if false).
+    move_check_thickness : int
+        Thickness in voxels to check around the move plane in each direction
+        when determining which moves to queue. See ``get_moves`` method.
+    """
+
     @staticmethod
     def from_subvolume(subvolume):
         if subvolume.label_mask is not None and np.issubdtype(subvolume.label_mask.dtype, np.bool):
@@ -143,6 +181,32 @@ class Region(object):
         return block_min, block_max, padding_pre, padding_post
 
     def get_moves(self, mask):
+        """Given a mask block, get maximum probability in each move direction.
+
+        Checks each of six planes comprising a centered cube half the shape
+        of the provided block. For each of these planes, the maximum
+        probability in the mask block is returned along with the move
+        direction.
+
+        Unlike the original implementation, this will check an n-voxel thick
+        slab of voxels around each pane specified by this region's
+        ``move_check_thickness`` property. This is useful for overcoming
+        artifacts that may only affect a single plane that happens to align
+        with the move grid.
+
+        Parameters
+        ----------
+        mask : ndarray
+            Block of mask probabilities, usually of the shape specified by
+            the configured ``output_fov_shape``.
+
+        Returns
+        -------
+        list of dict
+            Each dict should include a ``move`` ndarray unit vector indicating
+            the move direction and a ``v`` indicating the max probability
+            in the move plane in that direction.
+        """
         moves = []
         ctr = (np.asarray(mask.shape) - 1) / 2 + 1
         for move in map(np.array, [(1, 0, 0), (-1, 0, 0),
