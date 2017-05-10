@@ -145,7 +145,7 @@ class Region(object):
         if self.block_padding is None:
             return np.all(np.less(pos, self.move_bounds)) and np.all(pos > 1)
         else:
-            return np.all(np.less_equal(pos, self.move_bounds)) and np.all(pos >= 0)
+            return np.all(np.less_equal(pos, self.move_bounds + 1)) and np.all(pos >= 0)
 
     def get_block_bounds(self, vox, shape):
         """Get the bounds of a block by center and shape, accounting padding.
