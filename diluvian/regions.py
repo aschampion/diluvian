@@ -367,6 +367,13 @@ class Region(object):
             pbar.close()
 
     def fill_animation(self, model, movie_filename, verbose=False):
+        """Create an animated movie of the filling process for this region.
+
+        .. note:: Deprecated
+                  This method is not maintained so has not been updated to
+                  reflect many changes. It is kept as a template but would
+                  need rewriting to be functional.
+        """
         dpi = 100
         fig = plt.figure(figsize=(1920/dpi, 1080/dpi), dpi=dpi)
         fig.patch.set_facecolor('black')
