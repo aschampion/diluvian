@@ -127,6 +127,11 @@ def fill_subvolume_with_model(
                     move_batch_size=move_batch_size,
                     progress=1)
         body = region.to_body()
+        body_size = np.count_nonzero(body.mask)
+
+        if body_size == 0:
+            logging.debug('Body was empty.')
+            continue
 
         # Generate a label ID for this region.
         label_id += 1
@@ -137,7 +142,7 @@ def fill_subvolume_with_model(
         conflict_count[np.logical_and(prediction != background_label_id, body.mask)] += 1
         prediction[np.logical_and(prediction == background_label_id, body.mask)] = label_id
         logging.info('Filled seed %s/%s (%s) with %s voxels labeled %s.',
-                     seed_idx, len(seeds), np.array_str(seed), np.count_nonzero(body.mask), label_id)
+                     seed_idx, len(seeds), np.array_str(seed), body_size, label_id)
 
         if max_bodies and label_id >= max_bodies:
             break
