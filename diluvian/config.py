@@ -92,6 +92,11 @@ class NetworkConfig(BaseConfig):
         Module and function name for a factory method for creating the flood
         filling network. This allows a custom architecture to be provided
         without needing to modify diluvian.
+    transpose : bool
+        If true, any loaded networks will reverse the order of axes for both
+        inputs and outputs. Data is assumed to be ZYX row-major, but old
+        versions of diluvian used XYZ, so this is necessary to load old
+        networks.
     num_modules : int
         Number of convolution modules to use, each module consisting of a skip
         link in parallel with two convolution layers.
@@ -105,6 +110,7 @@ class NetworkConfig(BaseConfig):
     """
     def __init__(self, settings):
         self.factory = str(settings.get('factory'))
+        self.transpose = bool(settings.get('transpose', False))
         self.num_modules = int(settings.get('num_modules', 8))
         self.convolution_dim = np.array(settings.get('convolution_dim', [3, 3, 3]))
         self.convolution_filters = int(settings.get('convolution_filters', 32))

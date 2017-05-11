@@ -11,9 +11,10 @@ from keras.layers import (
         Cropping3D,
         Input,
         merge,
+        Permute,
         )
 from keras.layers.core import Activation
-from keras.models import Model
+from keras.models import load_model as keras_load_model, Model
 import keras.optimizers
 
 
@@ -96,3 +97,41 @@ def compile_network(model, optimizer_config):
     optimizer = optimizer_klass(**optimizer_kwargs)
     model.compile(loss='binary_crossentropy',
                   optimizer=optimizer)
+
+
+def load_model(model_file, network_config):
+    model = keras_load_model(model_file)
+
+    # If necessary, wrap the loaded model to transpose the axes for both
+    # inputs and outputs.
+    if network_config.transpose:
+        inputs = []
+        perms = []
+        for old_input in model.input_layers:
+            input_shape = np.asarray(old_input.input_shape)[[3, 2, 1, 4]]
+            new_input = Input(shape=tuple(input_shape), dtype=old_input.input_dtype, name=old_input.name)
+            perm = Permute((3, 2, 1, 4), input_shape=tuple(input_shape))(new_input)
+            inputs.append(new_input)
+            perms.append(perm)
+
+        old_outputs = model(perms)
+        if not isinstance(old_outputs, list):
+            old_outputs = [old_outputs]
+
+        outputs = []
+        for old_output in old_outputs:
+            new_output = Permute((3, 2, 1, 4))(old_output)
+            outputs.append(new_output)
+
+        new_model = Model(input=inputs, output=outputs)
+
+        # Monkeypatch the save to save just the underlying model.
+        func_type = type(model.save)
+
+        def new_save(_, *args, **kwargs):
+            model.save(*args, **kwargs)
+        new_model.save = func_type(new_save, new_model)
+
+        model = new_model
+
+    return model

@@ -21,10 +21,9 @@ from keras.callbacks import (
         ModelCheckpoint,
         TensorBoard,
         )
-from keras.models import load_model
 
 from .config import CONFIG
-from .network import compile_network
+from .network import compile_network, load_model
 from . import preprocessing
 from .third_party.multi_gpu import make_parallel
 from .util import (
@@ -105,7 +104,7 @@ def fill_subvolume_with_model(
     generator = preprocessing.SEED_GENERATORS[seed_generator]
     seeds = generator(subvolume.image)
 
-    model = load_model(model_file)
+    model = load_model(model_file, CONFIG.network)
 
     label_id = 0
     # For each seed, create region, fill, threshold, and merge to output volume.
@@ -214,7 +213,7 @@ def fill_region_with_model(
                  .subvolume_generator(**gen_kwargs[k]))
             for k, v in volumes.iteritems()])
 
-    model = load_model(model_file)
+    model = load_model(model_file, CONFIG.network)
 
     for region in regions:
         region.bias_against_merge = bias
@@ -261,7 +260,7 @@ def train_network(
                       CONFIG.model.output_fov_shape,
                       CONFIG.network)
     else:
-        ffn = load_model(model_file)
+        ffn = load_model(model_file, CONFIG.network)
 
     # Multi-GPU models are saved as a single-GPU model prior to compilation,
     # so if loading from such a model file it will need to be recompiled.
