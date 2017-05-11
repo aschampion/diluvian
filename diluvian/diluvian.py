@@ -318,9 +318,10 @@ def train_network(
 
     f_a_bins = CONFIG.training.fill_factor_bins
 
-    num_volumes = len(volumes)
-
     training_volumes, validation_volumes = partition_volumes(volumes)
+
+    num_training = len(training_volumes)
+    num_validation = len(validation_volumes)
 
     if static_validation:
         validation_data = {k: moving_training_generator(
@@ -352,10 +353,10 @@ def train_network(
     training_data = roundrobin(*training_data.values())
     history = ffn.fit_generator(
             training_data,
-            samples_per_epoch=CONFIG.training.training_size * num_volumes,
+            samples_per_epoch=CONFIG.training.training_size * num_training,
             nb_epoch=CONFIG.training.static_train_epochs,
             validation_data=validation_data,
-            nb_val_samples=CONFIG.training.validation_size * num_volumes)
+            nb_val_samples=CONFIG.training.validation_size * num_validation)
 
     # Moving training
     kludges = {k: {'inputs': None, 'outputs': None} for k in volumes.iterkeys()}
@@ -377,14 +378,14 @@ def train_network(
     training_data = roundrobin(*training_data.values())
     moving_history = ffn.fit_generator(
             training_data,
-            samples_per_epoch=CONFIG.training.training_size * num_volumes,
+            samples_per_epoch=CONFIG.training.training_size * num_training,
             nb_epoch=CONFIG.training.total_epochs,
             initial_epoch=CONFIG.training.static_train_epochs,
-            max_q_size=num_volumes,
+            max_q_size=num_training,
             nb_worker=1,
             callbacks=callbacks,
             validation_data=validation_data,
-            nb_val_samples=CONFIG.training.validation_size * num_volumes)
+            nb_val_samples=CONFIG.training.validation_size * num_validation)
     extend_keras_history(history, moving_history)
 
     write_keras_history_to_csv(history, model_output_filebase + '.csv')
