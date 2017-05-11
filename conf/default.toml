@@ -11,7 +11,7 @@ t_move = 0.9
 move_check_thickness = 1
 
 [network]
-factory = 'diluvian.network.make_flood_fill_network'
+factory = "diluvian.network.make_flood_fill_network"
 num_modules = 8
 convolution_dim = [3, 3, 3]
 convolution_filters = 32
