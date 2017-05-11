@@ -6,6 +6,7 @@ from __future__ import print_function
 import importlib
 import itertools
 import logging
+import re
 
 import matplotlib as mpl
 # Use the 'Agg' backend to allow the generation of plots even if no X server
@@ -244,6 +245,42 @@ def fill_region_with_model(
                 break
 
 
+def partition_volumes(volumes):
+    """Paritition volumes into training and validation based on configuration.
+
+    Uses the regexes mapping partition sizes and indices in
+    diluvian.config.TrainingConfig by applying them to matching volumes based
+    on name.
+
+    Parameters
+    ----------
+    volumes : dict
+        Dictionary mapping volume name to diluvian.volumes.Volume.
+
+    Returns
+    -------
+    training_volumes, validation_volumes : dict
+        Dictionary mapping volume name to partitioned, downsampled volumes.
+    """
+    def apply_partitioning(volumes, partitioning):
+        partitioned = {}
+        for name, vol in volumes.iteritems():
+            partitions = [p for rgx, p in CONFIG.training.partitions.items() if re.match(rgx, name)]
+            partition_index = [idx for rgx, idx in partitioning.items() if re.match(rgx, name)]
+            if len(partitions) > 1 or len(partition_index) > 1:
+                raise ValueError('Volume "%s" matches more than one partition specifier', name)
+            elif len(partitions) == 1 and len(partition_index) == 1:
+                partitioned[name] = vol.partition(partitions[0], partition_index[0]) \
+                                       .downsample(CONFIG.volume.resolution)
+
+        return partitioned
+
+    training_volumes = apply_partitioning(volumes, CONFIG.training.training_partition)
+    validation_volumes = apply_partitioning(volumes, CONFIG.training.validation_partition)
+
+    return training_volumes, validation_volumes
+
+
 def train_network(
         model_file=None,
         volumes=None,
@@ -283,14 +320,7 @@ def train_network(
 
     num_volumes = len(volumes)
 
-    training_volumes = {
-            k: v.partition(CONFIG.training.partitions, CONFIG.training.training_partition)
-                .downsample(CONFIG.volume.resolution)
-            for k, v in volumes.iteritems()}
-    validation_volumes = {
-            k: v.partition(CONFIG.training.partitions, CONFIG.training.validation_partition)
-                .downsample(CONFIG.volume.resolution)
-            for k, v in volumes.iteritems()}
+    training_volumes, validation_volumes = partition_volumes(volumes)
 
     if static_validation:
         validation_data = {k: moving_training_generator(

@@ -160,12 +160,14 @@ class TrainingConfig(BaseConfig):
         Bin boundaries for filling fractions. If provided, sample loss will be
         weighted to increase loss contribution from less-frequent bins.
         Otherwise all samples are weighted equally.
-    partitions : sequence or ndarray of int
-        Number of volume partitions along each axis. Only one axis should be
-        greater than 1.
-    training_partition, validation_partition : sequence or ndarray of int
-        Index of the partitions to use for training and validation,
-        respectively.
+    partitions : dict
+        Dictionary mapping volume name regexes to a sequence of int indicating
+        number of volume partitions along each axis. Only one axis should be
+        greater than 1. Each volume should match at most one regex.
+    training_partition, validation_partition : dict
+        Dictionaries mapping volume name regexes to a sequence of int indicating
+        index of the partitions to use for training and validation,
+        respectively. Each volume should match at most one regex.
     patience : int
         Number of epochs after the last minimal validation loss to terminate
         training.
@@ -181,9 +183,9 @@ class TrainingConfig(BaseConfig):
         self.fill_factor_bins = settings.get('fill_factor_bins', None)
         if self.fill_factor_bins is not None:
             self.fill_factor_bins = np.array(self.fill_factor_bins)
-        self.partitions = np.array(settings.get('partitions', [2, 1, 1]))
-        self.training_partition = np.array(settings.get('training_partition', [0, 0, 0]))
-        self.validation_partition = np.array(settings.get('validation_partition', [1, 0, 0]))
+        self.partitions = settings.get('partitions', {'.*': [2, 1, 1]})
+        self.training_partition = settings.get('training_partition', {'.*': [0, 0, 0]})
+        self.validation_partition = settings.get('validation_partition', {'.*': [1, 0, 0]})
         self.patience = int(np.array(settings.get('patience', 10)))
 
 
