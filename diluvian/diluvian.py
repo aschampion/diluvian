@@ -13,7 +13,6 @@ import matplotlib as mpl
 # is available. The matplotlib backend must be set before importing pyplot.
 mpl.use('Agg')  # noqa
 import matplotlib.pyplot as plt
-import neuroglancer
 import numpy as np
 import pytoml as toml
 from tqdm import tqdm
@@ -391,8 +390,6 @@ def train_network(
     write_keras_history_to_csv(history, model_output_filebase + '.csv')
 
     if viewer:
-        # for _ in itertools.islice(training_data, 12):
-        #     continue
         dupe_data = static_training_generator(
                 volumes[list(volumes.keys())[0]].subvolume_generator(shape=CONFIG.model.input_fov_shape),
                 CONFIG.training.batch_size,
@@ -400,22 +397,21 @@ def train_network(
         viz_ex = itertools.islice(dupe_data, 1)
 
         for inputs, targets in viz_ex:
-            viewer = neuroglancer.Viewer(voxel_size=list(CONFIG.volume.resolution))
-            viewer.add(np.transpose(inputs['image_input'][0, :, :, :, 0]),
+            viewer = WrappedViewer(voxel_size=list(np.flipud(CONFIG.volume.resolution)))
+            viewer.add(inputs['image_input'][0, :, :, :, 0],
                        name='Image')
-            viewer.add(np.transpose(inputs['mask_input'][0, :, :, :, 0]),
+            viewer.add(inputs['mask_input'][0, :, :, :, 0],
                        name='Mask Input',
                        shader=get_color_shader(2))
-            viewer.add(np.transpose(targets[0][0, :, :, :, 0]),
+            viewer.add(targets[0][0, :, :, :, 0],
                        name='Mask Target',
                        shader=get_color_shader(0))
             output = ffn.predict(inputs)
-            viewer.add(np.transpose(output[0, :, :, :, 0]),
+            viewer.add(output[0, :, :, :, 0],
                        name='Mask Output',
                        shader=get_color_shader(1))
-            print(viewer)
 
-            raw_input("Press any key to exit...")
+            viewer.print_view_prompt()
 
     if metric_plot:
         fig = plot_history(history)
