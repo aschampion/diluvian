@@ -74,7 +74,7 @@ def skeletonize_component(component):
     params = skeletopyze.Parameters()
     res = skeletopyze.point_f3()
     for i in range(3):
-        res[i] = CONFIG.volume.resolution[2 - i]
+        res[i] = CONFIG.volume.resolution[i]
 
     print('Skeletonizing...')
     skel = skeletopyze.get_skeleton_graph(component.astype(np.int32), params, res)
@@ -100,7 +100,7 @@ def skeleton_to_swc(skeleton, offset, resolution):
     for n in t.nodes_iter():
         loc = skeleton.locations(n)
         # skeletopyze is z, y, x (as it should be).
-        loc = np.array([loc[2], loc[1], loc[0]])
+        loc = np.array(loc)
         loc = np.multiply(loc + offset, resolution)
         t.node[n].update({'x': loc[0],
                           'y': loc[1],
