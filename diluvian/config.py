@@ -71,8 +71,8 @@ class ModelConfig(BaseConfig):
         Shape of the subvolumes used during moving training.
     """
     def __init__(self, settings):
-        self.input_fov_shape = np.array(settings.get('input_fov_shape', [17, 33, 17]))
-        self.output_fov_shape = np.array(settings.get('output_fov_shape', [17, 33, 17]))
+        self.input_fov_shape = np.array(settings.get('input_fov_shape', [17, 33, 33]))
+        self.output_fov_shape = np.array(settings.get('output_fov_shape', [17, 33, 33]))
         self.output_fov_move_fraction = int(settings.get('output_fov_move_fraction', 4))
         self.v_true = float(settings.get('v_true', 0.95))
         self.v_false = float(settings.get('v_false', 0.05))
