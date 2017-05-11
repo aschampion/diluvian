@@ -441,9 +441,16 @@ class HDF5Volume(Volume):
                     hdf5_file = get_file(hdf5_file, dataset['download_url'], md5_hash=dataset.get('download_md5', None))
                 image_dataset = dataset.get('image_dataset', None)
                 label_dataset = dataset.get('label_dataset', None)
-                volumes[dataset['name']] = HDF5Volume(hdf5_file,
-                                                      image_dataset,
-                                                      label_dataset)
+                resolution = dataset.get('resolution', None)
+                volume = HDF5Volume(hdf5_file,
+                                    image_dataset,
+                                    label_dataset)
+                # If the volume configuration specifies an explicit resolution,
+                # override any provided in the HDF5 itself.
+                if resolution:
+                    logging.info('Overriding resolution for volume "%s"', dataset['name'])
+                    volume.resolution = np.array(resolution)
+                volumes[dataset['name']] = volume
 
         return volumes
 
