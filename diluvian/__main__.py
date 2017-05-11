@@ -2,6 +2,8 @@
 """Command line interface for diluvian."""
 
 
+from __future__ import print_function
+
 import argparse
 import logging
 import os
@@ -223,7 +225,7 @@ def main():
             properties = args.config_property.split('.')
             for p in properties:
                 prop = getattr(prop, p)
-        print prop
+        print(prop)
 
     elif args.command == 'gen-subv-bounds':
         # Late import to prevent loading large modules for short CLI commands.
@@ -250,7 +252,7 @@ def load_volumes(volume_files, in_memory, name_regex=None):
     # Late import to prevent loading large modules for short CLI commands.
     from .volumes import HDF5Volume
 
-    print 'Loading volumes...'
+    print('Loading volumes...')
     if volume_files:
         volumes = {}
         for volume_file in volume_files:
@@ -263,10 +265,10 @@ def load_volumes(volume_files, in_memory, name_regex=None):
         volumes = {k: v for k, v in volumes.iteritems() if name_regex.match(k)}
 
     if in_memory:
-        print 'Copying volumes to memory...'
+        print('Copying volumes to memory...')
         volumes = {k: v.to_memory_volume() for k, v in volumes.iteritems()}
 
-    print 'Done.'
+    print('Done.')
     return volumes
 
 

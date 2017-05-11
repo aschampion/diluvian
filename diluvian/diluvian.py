@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
 
+from __future__ import print_function
+
 import importlib
 import itertools
 import logging
@@ -223,7 +225,7 @@ def fill_region_with_model(
                     max_moves=max_moves,
                     multi_gpu_pad_kludge=multi_gpu_model_kludge)
         viewer = region.get_viewer()
-        print viewer
+        print(viewer)
         while True:
             s = raw_input("Press Enter to continue, v to open in browser, a to export animation, q to quit...")
             if s == 'q':
@@ -380,7 +382,7 @@ def train_network(
             viewer.add(np.transpose(output[0, :, :, :, 0]),
                        name='Mask Output',
                        shader=get_color_shader(1))
-            print viewer
+            print(viewer)
 
             raw_input("Press any key to exit...")
 

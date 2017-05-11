@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
 
+from __future__ import print_function
+
 import collections
 import csv
 import itertools
@@ -31,7 +33,7 @@ class WrappedViewer(neuroglancer.Viewer):
         webbrowser.open_new_tab(str(self))
 
     def print_view_prompt(self):
-        print self
+        print(self)
 
         while True:
             s = raw_input('Press v, enter to open in browser, or enter to close...')

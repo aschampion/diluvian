@@ -2,6 +2,8 @@
 """Segmentation processing and skeletonization after flood filling."""
 
 
+from __future__ import print_function
+
 import csv
 import logging
 
@@ -58,7 +60,7 @@ class Body(object):
 
     def to_swc(self, filename):
         component, bounds = self.get_largest_component(closing_shape=CONFIG.postprocessing.closing_shape)
-        print 'Skeleton is within {}, {}'.format(np.array_str(bounds[0]), np.array_str(bounds[1]))
+        print('Skeleton is within {}, {}'.format(np.array_str(bounds[0]), np.array_str(bounds[1])))
         skel = skeletonize_component(component)
         swc = skeleton_to_swc(skel, bounds[0], CONFIG.volume.resolution)
         with open(filename, 'w') as swcfile:
@@ -74,7 +76,7 @@ def skeletonize_component(component):
     for i in range(3):
         res[i] = CONFIG.volume.resolution[2 - i]
 
-    print 'Skeletonizing...'
+    print('Skeletonizing...')
     skel = skeletopyze.get_skeleton_graph(component.astype(np.int32), params, res)
 
     return skel
