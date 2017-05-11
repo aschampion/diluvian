@@ -104,6 +104,9 @@ class NetworkConfig(BaseConfig):
         Shape of the convolution for each layer.
     convolution_filters : int
         Number of convolution filters for each layer.
+    initialization : str
+        Name of the Keras initialization function to use for weight
+        initialization of all layers.
     output_activation : str
         Name of the Keras activation function to use for the final network
         output.
