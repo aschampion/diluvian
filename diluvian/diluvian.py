@@ -391,7 +391,7 @@ def train_network(
 
     if viewer:
         dupe_data = static_training_generator(
-                volumes[list(volumes.keys())[0]].subvolume_generator(shape=CONFIG.model.input_fov_shape),
+                validation_volumes.values()[0].subvolume_generator(shape=CONFIG.model.input_fov_shape),
                 CONFIG.training.batch_size,
                 CONFIG.training.training_size)
         viz_ex = itertools.islice(dupe_data, 1)
