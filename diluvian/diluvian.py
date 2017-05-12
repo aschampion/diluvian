@@ -421,6 +421,13 @@ def train_network(
 
 
 def view_volumes(volumes):
+    """Display a set of volumes together in a neuroglancer viewer.
+
+    Parameters
+    ----------
+    volumes : dict
+        Dictionary mapping volume name to diluvian.volumes.Volume.
+    """
     viewer = WrappedViewer()
 
     for volume_name, volume in volumes.iteritems():
