@@ -144,10 +144,14 @@ class SubvolumeGenerator(object):
 class Volume(object):
     DIM = DimOrder(Z=0, Y=1, X=2)
 
-    def __init__(self, image_data, label_data, resolution):
+    def __init__(self, resolution, image_data=None, label_data=None, mask_data=None):
+        self.resolution = resolution
         self.image_data = image_data
         self.label_data = label_data
-        self.resolution = resolution
+        self.mask_data = mask_data
+
+    def local_coord_to_world(self, a):
+        return a
 
     def world_coord_to_local(self, a):
         return a
@@ -232,6 +236,29 @@ class Volume(object):
             self.ctr_max = (np.array(self.volume.shape) - self.margin - 1).astype(np.int64)
             self.random = np.random.RandomState(0)
 
+            # If the volume has a mask channel, further limit ctr_min and
+            # ctr_max to lie inside a margin in the AABB of the mask.
+            if self.volume.mask_data is not None:
+                mask_min = []
+                mask_max = []
+
+                for axes in [(1, 2), (0, 2), (0, 1)]:
+                    proj = np.any(self.volume.mask_data, axis=axes)
+                    amin, amax = np.where(proj)[0][[0, -1]]
+
+                    mask_min.append(amin)
+                    mask_max.append(amax)
+
+                mask_min = self.volume.local_coord_to_world(np.array(mask_min, dtype=np.int64))
+                mask_max = self.volume.local_coord_to_world(np.array(mask_max, dtype=np.int64))
+
+                self.ctr_min = np.maximum(self.ctr_min, mask_min + self.margin)
+                self.ctr_max = np.minimum(self.ctr_max, mask_max - self.margin - 1)
+
+            if np.any(self.ctr_min >= self.ctr_max - self.shape):
+                raise ValueError('Cannot generate subvolume bounds: bounds ({}, {}) too small for shape ({})'.format(
+                                 np.array_str(self.ctr_min), np.array_str(self.ctr_max), np.array_str(self.shape)))
+
         def __iter__(self):
             return self
 
@@ -240,11 +267,27 @@ class Volume(object):
 
         def next(self):
             while True:
+                ctr = np.array([self.random.randint(self.ctr_min[n], self.ctr_max[n])
+                                for n in range(3)]).astype(np.int64)
+                start = ctr - self.margin
+                stop = ctr + self.margin + np.mod(self.shape, 2).astype(np.int64)
+
+                # If the volume has a mask channel, only accept subvolumes
+                # entirely contained in it.
+                if self.volume.mask_data is not None:
+                    start_local = self.volume.world_coord_to_local(start)
+                    stop_local = self.volume.world_coord_to_local(stop)
+                    mask = self.volume.mask_data[
+                            start_local[0]:stop_local[0],
+                            start_local[1]:stop_local[1],
+                            start_local[2]:stop_local[2]]
+                    if not mask.all():
+                        logging.debug('Skipping subvolume not entirely in mask.')
+                        continue
+
                 # Only accept subvolumes where the central seed voxel will be
                 # of a uniform label after downsampling. For more stringent
                 # seed region uniformity filtering, see has_uniform_seed_margin.
-                ctr = np.array([self.random.randint(self.ctr_min[n], self.ctr_max[n])
-                                for n in range(3)]).astype(np.int64)
                 if self.volume.label_data is None:
                     label_id = None
                     break
@@ -257,9 +300,8 @@ class Volume(object):
                 if (label_ids == label_ids.item(0)).all():
                     label_id = label_ids.item(0)
                     break
-            return SubvolumeBounds(ctr - self.margin,
-                                   ctr + self.margin + np.mod(self.shape, 2).astype(np.int64),
-                                   label_id=label_id)
+
+            return SubvolumeBounds(start, stop, label_id=label_id)
 
 
 class NdarrayVolume(Volume):
@@ -269,16 +311,19 @@ class NdarrayVolume(Volume):
     exists mostly as a bookkeeping convenience to make actual ndarray volumes
     explicit.
     """
-    def __init__(self, *args):
-        super(NdarrayVolume, self).__init__(*args)
+    def __init__(self, *args, **kwargs):
+        super(NdarrayVolume, self).__init__(*args, **kwargs)
         self.image_data.flags.writeable = False
         self.label_data.flags.writeable = False
 
 
 class VolumeView(Volume):
-    def __init__(self, parent, image_data, label_data, resolution):
-        super(VolumeView, self).__init__(image_data, label_data, resolution)
+    def __init__(self, parent, *args, **kwargs):
+        super(VolumeView, self).__init__(*args, **kwargs)
         self.parent = parent
+
+    def local_coord_to_world(self, a):
+        return self.parent.local_coord_to_world(a)
 
     def world_coord_to_local(self, a):
         return self.parent.world_coord_to_local(a)
@@ -313,14 +358,18 @@ class PartitionedVolume(VolumeView):
     def __init__(self, parent, partitioning, partition_index):
         super(PartitionedVolume, self).__init__(
                 parent,
-                parent.image_data,
-                parent.label_data,
-                parent.resolution)
+                parent.resolution,
+                image_data=parent.image_data,
+                label_data=parent.label_data,
+                mask_data=parent.mask_data)
         self.partitioning = np.asarray(partitioning)
         self.partition_index = np.asarray(partition_index)
         partition_shape = np.floor_divide(np.array(self.parent.shape), self.partitioning)
         self.bounds = ((np.multiply(partition_shape, self.partition_index)).astype(np.int64),
                        (np.multiply(partition_shape, self.partition_index + 1)).astype(np.int64))
+
+    def local_coord_to_world(self, a):
+        return self.parent.local_coord_to_world(a - self.bounds[0])
 
     def world_coord_to_local(self, a):
         return self.parent.world_coord_to_local(a) + self.bounds[0]
@@ -347,9 +396,13 @@ class DownsampledVolume(VolumeView):
         self.scale = np.exp2(downsample).astype(np.int64)
         super(DownsampledVolume, self).__init__(
                 parent,
-                parent.image_data,
-                parent.label_data,
-                np.multiply(parent.resolution, self.scale))
+                np.multiply(parent.resolution, self.scale),
+                image_data=parent.image_data,
+                label_data=parent.label_data,
+                mask_data=parent.mask_data)
+
+    def local_coord_to_world(self, a):
+        return self.parent.local_coord_to_world(np.divide(a, self.scale))
 
     def world_coord_to_local(self, a):
         return np.multiply(self.parent.world_coord_to_local(a), self.scale)
@@ -401,9 +454,9 @@ class SparseWrappedVolume(VolumeView):
 
         super(SparseWrappedVolume, self).__init__(
                 parent,
-                image_data,
-                label_data,
-                parent.resolution)
+                parent.resolution,
+                image_data=image_data,
+                label_data=label_data)
 
     def image_populator(self, bounds):
         return self.parent.image_data[
@@ -441,10 +494,12 @@ class HDF5Volume(Volume):
                     hdf5_file = get_file(hdf5_file, dataset['download_url'], md5_hash=dataset.get('download_md5', None))
                 image_dataset = dataset.get('image_dataset', None)
                 label_dataset = dataset.get('label_dataset', None)
+                mask_dataset = dataset.get('mask_dataset', None)
                 resolution = dataset.get('resolution', None)
                 volume = HDF5Volume(hdf5_file,
                                     image_dataset,
-                                    label_dataset)
+                                    label_dataset,
+                                    mask_dataset)
                 # If the volume configuration specifies an explicit resolution,
                 # override any provided in the HDF5 itself.
                 if resolution:
@@ -455,29 +510,28 @@ class HDF5Volume(Volume):
         return volumes
 
     @staticmethod
-    def write_file(
-            filename,
-            resolution,
-            image_data=None,
-            label_data=None,
-            image_dataset='volumes/raw',
-            label_dataset='volumes/labels/neuron_ids'):
+    def write_file(filename, resolution, **kwargs):
         h5file = h5py.File(filename, 'w')
         config = {'hdf5_file': filename}
-        if image_data is not None:
-            dataset = h5file.create_dataset(image_dataset, data=image_data, dtype=image_data.dtype)
-            dataset.attrs['resolution'] = resolution
-            config['image_dataset'] = image_dataset
-        if label_data is not None:
-            dataset = h5file.create_dataset(label_dataset, data=label_data, dtype=label_data.dtype)
-            dataset.attrs['resolution'] = resolution
-            config['label_dataset'] = label_dataset
+        channels = ['image', 'label', 'mask']
+        default_datasets = {
+            'image': 'volumes/raw',
+            'label': 'volumes/labels/neuron_ids',
+            'mask': 'volumes/labels/mask',
+        }
+        for channel in channels:
+            data = kwargs.get('{}_data'.format(channel), None)
+            dataset_name = kwargs.get('{}_dataset'.format(channel), default_datasets[channel])
+            if data is not None:
+                dataset = h5file.create_dataset(dataset_name, data=data, dtype=data.dtype)
+                dataset.attrs['resolution'] = resolution
+                config['{}_dataset'.format(channel)] = dataset_name
 
         h5file.close()
 
         return config
 
-    def __init__(self, orig_file, image_dataset, label_dataset):
+    def __init__(self, orig_file, image_dataset, label_dataset, mask_dataset):
         self.file = h5py.File(orig_file, 'r')
         self.resolution = None
 
@@ -501,6 +555,11 @@ class HDF5Volume(Volume):
         else:
             self.label_data = np.full_like(self.image_data, np.NaN, dtype=np.uint64)
 
+        if mask_dataset is not None:
+            self.mask_data = self.file[mask_dataset]
+        else:
+            self.mask_data = None
+
         if image_dataset is None:
             self.image_data = np.full_like(self.label_data, np.NaN, dtype=np.float32)
 
@@ -508,10 +567,11 @@ class HDF5Volume(Volume):
             self.resolution = np.ones(3)
 
     def to_memory_volume(self):
-        return NdarrayVolume(
-                self.world_mat_to_local(self.image_data[:]),
-                self.world_mat_to_local(self.label_data[:]),
-                self.world_coord_to_local(self.resolution))
+        data = ['image_data', 'label_data', 'mask_data']
+        data = {
+                k: self.world_mat_to_local(getattr(self, k)[:])
+                for k in data if getattr(self, k) is not None}
+        return NdarrayVolume(self.world_coord_to_local(self.resolution), **data)
 
 
 class ImageStackVolume(Volume):

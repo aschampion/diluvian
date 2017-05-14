@@ -437,5 +437,9 @@ def view_volumes(volumes):
         viewer.add(volume.label_data,
                    name='{} (Labels)'.format(volume_name),
                    voxel_size=list(np.flipud(volume.resolution)))
+        if volume.mask_data is not None:
+            viewer.add(volume.mask_data,
+                       name='{} (Mask)'.format(volume_name),
+                       voxel_size=list(np.flipud(volume.resolution)))
 
     viewer.print_view_prompt()

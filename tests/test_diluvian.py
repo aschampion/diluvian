@@ -92,11 +92,12 @@ def test_volume_transforms():
     mock_image = np.arange(64 * 64 * 64, dtype='uint8').reshape((64, 64, 64))
     mock_label = np.zeros((64, 64, 64), dtype=np.int64)
 
-    v = volumes.Volume(mock_image, mock_label, (1, 1, 1))
+    v = volumes.Volume((1, 1, 1), image_data=mock_image, label_data=mock_label)
     pv = v.partition([1, 1, 2], [0, 0, 1])
     dpv = pv.downsample((4, 4, 1))
 
     np.testing.assert_array_equal(dpv.world_coord_to_local(np.array([2, 2, 2])), np.array([8, 8, 34]))
+    np.testing.assert_array_equal(dpv.local_coord_to_world(np.array([8, 8, 34])), np.array([2, 2, 2]))
 
     svb = volumes.SubvolumeBounds(np.array((0, 0, 32), dtype=np.int64),
                                   np.array((4, 4, 33), dtype=np.int64))
@@ -111,7 +112,7 @@ def test_volume_transforms():
 
 def test_volume_identity_downsample_returns_self():
     resolution = (27, 185, 90)
-    v = volumes.Volume(np.zeros((1, 1, 1)), np.zeros((1, 1, 1)), resolution)
+    v = volumes.Volume(resolution, image_data=np.zeros((1, 1, 1)), label_data=np.zeros((1, 1, 1)))
     dv = v.downsample(resolution)
 
     assert v == dv
