@@ -70,7 +70,7 @@ class Region(object):
 
     @staticmethod
     def from_subvolume_generator(subvolumes):
-        subvolumes = itertools.ifilter(lambda s: s.has_uniform_seed_margin, subvolumes)
+        subvolumes = itertools.ifilter(lambda s: s.has_uniform_seed_margin(), subvolumes)
         return itertools.imap(Region.from_subvolume, subvolumes)
 
     def __init__(self, image, target=None, seed_vox=None, mask=None, block_padding=None):
