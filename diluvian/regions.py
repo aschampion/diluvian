@@ -2,11 +2,11 @@
 
 
 import itertools
-import Queue
 
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
+from six.moves import queue
 from tqdm import tqdm
 
 from .config import CONFIG
@@ -76,7 +76,7 @@ class Region(object):
     def __init__(self, image, target=None, seed_vox=None, mask=None, block_padding=None):
         self.block_padding = block_padding
         self.MOVE_DELTA = (CONFIG.model.output_fov_shape - 1) / CONFIG.model.output_fov_move_fraction
-        self.queue = Queue.PriorityQueue()
+        self.queue = queue.PriorityQueue()
         self.visited = set()
         self.image = image
         self.bounds = image.shape
@@ -495,7 +495,7 @@ class Region(object):
             update_fn.pbar = tqdm(desc='Move queue')
 
         update_fn.next_pos_vox = current_vox
-        update_fn.vox_queue = Queue.Queue()
+        update_fn.vox_queue = queue.Queue()
         update_fn.vox_queue.put(current_vox)
 
         def vox_gen():
