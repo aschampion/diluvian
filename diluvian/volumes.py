@@ -326,11 +326,13 @@ class Volume(object):
             # If the volume has a mask channel, further limit ctr_min and
             # ctr_max to lie inside a margin in the AABB of the mask.
             if self.volume.mask_data is not None:
+                # Explicitly copy the channel to memory. 3x speedup for np ops.
+                mask_data = self.volume.mask_data[:]
                 mask_min = []
                 mask_max = []
 
                 for axes in [(1, 2), (0, 2), (0, 1)]:
-                    proj = np.any(self.volume.mask_data, axis=axes)
+                    proj = np.any(mask_data, axis=axes)
                     amin, amax = np.where(proj)[0][[0, -1]]
 
                     mask_min.append(amin)
