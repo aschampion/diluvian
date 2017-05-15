@@ -159,6 +159,9 @@ class TrainingConfig(BaseConfig):
         be allowed to move the FOV.
     total_epochs : int
         Maximum number of training epochs.
+    reset_generators : bool
+        Reset training generators after each epoch, so that the training
+        examples at each epoch are identical.
     fill_factor_bins : sequence of float
         Bin boundaries for filling fractions. If provided, sample loss will be
         weighted to increase loss contribution from less-frequent bins.
@@ -187,6 +190,7 @@ class TrainingConfig(BaseConfig):
         self.validation_size = int(settings.get('validation_size', 256))
         self.static_train_epochs = int(settings.get('static_train_epochs', 10))
         self.total_epochs = int(settings.get('total_epochs', 100))
+        self.reset_generators = bool(settings.get('reset_generators', False))
         self.fill_factor_bins = settings.get('fill_factor_bins', None)
         if self.fill_factor_bins is not None:
             self.fill_factor_bins = np.array(self.fill_factor_bins)

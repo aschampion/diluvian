@@ -306,7 +306,6 @@ def train_network(
         model_file=None,
         volumes=None,
         static_validation=True,
-        reset_generators_each_epoch=True,
         model_output_filebase=None,
         model_checkpoint_file=None,
         tensorboard=False,
@@ -372,7 +371,7 @@ def train_network(
             CONFIG.training.training_size,
             {'outputs': None},  # Allows use of moving training gen like static.
             f_a_bins=f_a_bins,
-            reset_generators=reset_generators_each_epoch) for k, v in training_volumes.iteritems()}
+            reset_generators=CONFIG.training.reset_generators) for k, v in training_volumes.iteritems()}
     training_data = roundrobin(*training_data.values())
     history = ffn.fit_generator(
             training_data,
@@ -397,7 +396,7 @@ def train_network(
             CONFIG.training.training_size,
             kludges[k],
             f_a_bins=f_a_bins,
-            reset_generators=reset_generators_each_epoch) for k, v in training_volumes.iteritems()}
+            reset_generators=CONFIG.training.reset_generators) for k, v in training_volumes.iteritems()}
     training_data = roundrobin(*training_data.values())
     moving_history = ffn.fit_generator(
             training_data,

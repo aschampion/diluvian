@@ -62,10 +62,6 @@ def _make_main_parser():
                  'file is saved every epoch regardless of validation performance.'
                  'Can use Keras format arguments: https://keras.io/callbacks/#modelcheckpoint')
     train_parser.add_argument(
-            '--no-generator-reset', action='store_false', dest='reset_generators_each_epoch', default=True,
-            help='Do not reset training data generators after each epoch. Otherwise an identical '
-                 'sequence of subvolumes are used each training epoch.')
-    train_parser.add_argument(
             '--tensorboard', action='store_true', dest='tensorboard', default=False,
             help='Output tensorboard log files while training.')
     train_parser.add_argument(
@@ -177,7 +173,6 @@ def main():
         volumes = load_volumes(args.volume_files, args.in_memory)
         train_network(model_file=args.model_file,
                       volumes=volumes,
-                      reset_generators_each_epoch=args.reset_generators_each_epoch,
                       model_output_filebase=args.model_output_filebase,
                       model_checkpoint_file=args.model_checkpoint_file,
                       tensorboard=args.tensorboard,
