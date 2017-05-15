@@ -344,6 +344,8 @@ def train_network(
     num_training = len(training_volumes)
     num_validation = len(validation_volumes)
 
+    logging.info('Using {} volumes for training, {} for validation.'.format(num_training, num_validation))
+
     if static_validation:
         validation_data = {k: moving_training_generator(
                 augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.input_fov_shape)),
