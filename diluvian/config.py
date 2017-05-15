@@ -174,6 +174,10 @@ class TrainingConfig(BaseConfig):
     patience : int
         Number of epochs after the last minimal validation loss to terminate
         training.
+    augment_mirrors : sequence of int
+        Axes along which to mirror for data augmentation.
+    augment_permute_axes : sequence of sequence of int
+        Axis permutations to use for data augmentation.
     """
     def __init__(self, settings):
         self.num_gpus = int(settings.get('num_gpus', 1))
@@ -190,6 +194,8 @@ class TrainingConfig(BaseConfig):
         self.training_partition = settings.get('training_partition', {'.*': [0, 0, 0]})
         self.validation_partition = settings.get('validation_partition', {'.*': [1, 0, 0]})
         self.patience = int(np.array(settings.get('patience', 10)))
+        self.augment_mirrors = map(int, np.array(settings.get('augment_mirrors', [0, 1, 2])))
+        self.augment_permute_axes = settings.get('augment_permute_axes', [[0, 2, 1]])
 
 
 class PostprocessingConfig(BaseConfig):

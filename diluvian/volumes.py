@@ -137,8 +137,95 @@ class SubvolumeGenerator(object):
         self.bounds_generator.reset()
 
     def next(self):
-        while True:
-            return self.volume.get_subvolume(next(self.bounds_generator))
+        return self.volume.get_subvolume(next(self.bounds_generator))
+
+
+class MirrorAugmentGenerator(object):
+    """Repeats subvolumes from a subvolume generator mirrored along an axis.
+
+    For each subvolume in the original generator, this generator will yield two
+    subvolumes: the original subvolume and the subvolume with the image,
+    label mask, and seed mirrored along a given axis.
+
+    Parameters
+    ----------
+    subvolume_generator : SubvolumeGenerator
+    axis : int
+    """
+    def __init__(self, subvolume_generator, axis):
+        self.subvolume_generator = subvolume_generator
+        self.axis = axis
+        self.subvolume = None
+
+    @property
+    def shape(self):
+        return self.subvolume_generator.shape
+
+    def __iter__(self):
+        return self
+
+    def reset(self):
+        self.subvolume = None
+        self.subvolume_generator.reset()
+
+    def next(self):
+        if self.subvolume is None:
+            self.subvolume = next(self.subvolume_generator)
+            return self.subvolume
+        else:
+            subv = self.subvolume
+            shape = subv.image.shape[self.axis]
+            seed = subv.seed.copy()
+            seed[self.axis] = shape - subv.seed[self.axis] - 1
+            subv = Subvolume(np.flip(subv.image, self.axis),
+                             np.flip(subv.label_mask, self.axis),
+                             seed,
+                             subv.label_id)
+            self.subvolume = None
+            return subv
+
+
+class PermuteAxesAugmentGenerator(object):
+    """Repeats subvolumes from a subvolume generator with an axes permutation.
+
+    For each subvolume in the original generator, this generator will yield two
+    subvolumes: the original subvolume and the subvolume with the image,
+    label mask, and seed axes permuted according to a given axes order.
+
+    Parameters
+    ----------
+    subvolume_generator : SubvolumeGenerator
+    axes : sequence of int
+    """
+    def __init__(self, subvolume_generator, axes):
+        self.subvolume_generator = subvolume_generator
+        self.axes = list(axes)
+        self.subvolume = None
+
+    @property
+    def shape(self):
+        # This generator actually has two shapes, but not expressed here.
+        return self.subvolume_generator.shape
+
+    def __iter__(self):
+        return self
+
+    def reset(self):
+        self.subvolume = None
+        self.subvolume_generator.reset()
+
+    def next(self):
+        if self.subvolume is None:
+            self.subvolume = next(self.subvolume_generator)
+            return self.subvolume
+        else:
+            subv = self.subvolume
+            subv = Subvolume(np.transpose(subv.image, self.axes),
+                             np.transpose(subv.label_mask, self.axes),
+                             subv.seed[self.axes],
+                             self.subvolume.label_id)
+            self.subvolume = None
+            return subv
 
 
 class Volume(object):

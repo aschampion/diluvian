@@ -38,6 +38,8 @@ from .util import (
 from .volumes import (
         HDF5Volume,
         SubvolumeBounds,
+        MirrorAugmentGenerator,
+        PermuteAxesAugmentGenerator,
         static_training_generator,
         moving_training_generator,
         )
@@ -280,6 +282,26 @@ def partition_volumes(volumes):
     return training_volumes, validation_volumes
 
 
+def augment_subvolume_generator(subvolume_generator):
+    """Apply data augmentations to a subvolume generator.
+
+    Parameters
+    ----------
+    subvolume_generator : diluvian.volumes.SubvolumeGenerator
+
+    Returns
+    -------
+    diluvian.volumes.SubvolumeGenerator
+    """
+    gen = subvolume_generator
+    for axes in CONFIG.training.augment_permute_axes:
+        gen = PermuteAxesAugmentGenerator(gen, axes)
+    for axis in CONFIG.training.augment_mirrors:
+        gen = MirrorAugmentGenerator(gen, axis)
+
+    return gen
+
+
 def train_network(
         model_file=None,
         volumes=None,
@@ -324,7 +346,7 @@ def train_network(
 
     if static_validation:
         validation_data = {k: moving_training_generator(
-                v.subvolume_generator(shape=CONFIG.model.input_fov_shape),
+                augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.input_fov_shape)),
                 CONFIG.training.batch_size,
                 CONFIG.training.validation_size,
                 {'outputs': None},  # Allows use of moving training gen like static.
@@ -343,7 +365,7 @@ def train_network(
 
     # Pre-train
     training_data = {k: moving_training_generator(
-            v.subvolume_generator(shape=CONFIG.model.input_fov_shape),
+            augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.input_fov_shape)),
             CONFIG.training.batch_size,
             CONFIG.training.training_size,
             {'outputs': None},  # Allows use of moving training gen like static.
@@ -368,7 +390,7 @@ def train_network(
         callbacks.append(TensorBoard())
 
     training_data = {k: moving_training_generator(
-            v.subvolume_generator(shape=CONFIG.model.training_subv_shape),
+            augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.training_subv_shape)),
             CONFIG.training.batch_size,
             CONFIG.training.training_size,
             kludges[k],

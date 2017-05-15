@@ -37,5 +37,7 @@ partitions = {".*" = [2, 1, 1]}
 training_partition = {".*" = [0, 0, 0]}
 validation_partition = {".*" = [1, 0, 0]}
 patience = 20
+augment_mirrors = [0, 1, 2]
+augment_permute_axes = [[0, 2, 1]]
 
 [postprocessing]
