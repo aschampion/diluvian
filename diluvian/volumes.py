@@ -619,6 +619,7 @@ class HDF5Volume(Volume):
         return config
 
     def __init__(self, orig_file, image_dataset, label_dataset, mask_dataset):
+        logging.debug('Loading HDF5 file "{}"'.format(orig_file))
         self.file = h5py.File(orig_file, 'r')
         self.resolution = None
 
