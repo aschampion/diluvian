@@ -42,7 +42,7 @@ class Body(object):
         label_im = np.minimum(label_im, 1)
 
         if label_im[tuple(self.seed - bounds[0])] == 0:
-            logging.warning('Seed voxel (%s) is not in connected component.', np.array_str(self.seed))
+            logging.warning('Seed voxel ({}) is not in connected component.'.format(np.array_str(self.seed)))
 
         return label_im, bounds
 

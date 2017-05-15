@@ -269,7 +269,7 @@ def partition_volumes(volumes):
             partitions = [p for rgx, p in CONFIG.training.partitions.items() if re.match(rgx, name)]
             partition_index = [idx for rgx, idx in partitioning.items() if re.match(rgx, name)]
             if len(partitions) > 1 or len(partition_index) > 1:
-                raise ValueError('Volume "%s" matches more than one partition specifier', name)
+                raise ValueError('Volume "{}" matches more than one partition specifier'.format(name))
             elif len(partitions) == 1 and len(partition_index) == 1:
                 partitioned[name] = vol.partition(partitions[0], partition_index[0]) \
                                        .downsample(CONFIG.volume.resolution)

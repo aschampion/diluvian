@@ -624,7 +624,7 @@ class HDF5Volume(Volume):
         self.resolution = None
 
         if image_dataset is None and label_dataset is None:
-            raise ValueError('HDF5 volume must have either an image or label dataset: %s', orig_file)
+            raise ValueError('HDF5 volume must have either an image or label dataset: {}'.format(orig_file))
 
         if image_dataset is not None:
             self.image_data = self.file[image_dataset]
