@@ -236,6 +236,7 @@ class Volume(object):
         self.image_data = image_data
         self.label_data = label_data
         self.mask_data = mask_data
+        self._mask_bounds = None
 
     def local_coord_to_world(self, a):
         return a
@@ -245,6 +246,10 @@ class Volume(object):
 
     def world_mat_to_local(self, m):
         return m
+
+    @property
+    def mask_bounds(self):
+        return self._mask_bounds
 
     @property
     def shape(self):
@@ -326,20 +331,7 @@ class Volume(object):
             # If the volume has a mask channel, further limit ctr_min and
             # ctr_max to lie inside a margin in the AABB of the mask.
             if self.volume.mask_data is not None:
-                # Explicitly copy the channel to memory. 3x speedup for np ops.
-                mask_data = self.volume.mask_data[:]
-                mask_min = []
-                mask_max = []
-
-                for axes in [(1, 2), (0, 2), (0, 1)]:
-                    proj = np.any(mask_data, axis=axes)
-                    amin, amax = np.where(proj)[0][[0, -1]]
-
-                    mask_min.append(amin)
-                    mask_max.append(amax)
-
-                mask_min = self.volume.local_coord_to_world(np.array(mask_min, dtype=np.int64))
-                mask_max = self.volume.local_coord_to_world(np.array(mask_max, dtype=np.int64))
+                mask_min, mask_max = self.volume.mask_bounds
 
                 self.ctr_min = np.maximum(self.ctr_min, mask_min + self.margin)
                 self.ctr_max = np.minimum(self.ctr_max, mask_max - self.margin - 1)
@@ -421,6 +413,14 @@ class VolumeView(Volume):
         return self.parent.world_mat_to_local(m)
 
     @property
+    def mask_bounds(self):
+        if self.parent.mask_bounds is None:
+            return None
+        else:
+            return (self.local_coord_to_world(self.parent.mask_bounds[0]),
+                    self.local_coord_to_world(self.parent.mask_bounds[1]))
+
+    @property
     def shape(self):
         return self.parent.shape
 
@@ -462,6 +462,16 @@ class PartitionedVolume(VolumeView):
 
     def world_coord_to_local(self, a):
         return self.parent.world_coord_to_local(a) + self.bounds[0]
+
+    @property
+    def mask_bounds(self):
+        if self.parent.mask_bounds is None:
+            return None
+        else:
+            bound_min = np.maximum(self.parent.mask_bounds[0], self.bounds[0])
+            bound_max = np.minimum(self.parent.mask_bounds[1], self.bounds[1])
+            return (self.local_coord_to_world(bound_min),
+                    self.local_coord_to_world(bound_max))
 
     @property
     def shape(self):
@@ -584,11 +594,13 @@ class HDF5Volume(Volume):
                 image_dataset = dataset.get('image_dataset', None)
                 label_dataset = dataset.get('label_dataset', None)
                 mask_dataset = dataset.get('mask_dataset', None)
+                mask_bounds = dataset.get('mask_bounds', None)
                 resolution = dataset.get('resolution', None)
                 volume = HDF5Volume(hdf5_file,
                                     image_dataset,
                                     label_dataset,
-                                    mask_dataset)
+                                    mask_dataset,
+                                    mask_bounds=mask_bounds)
                 # If the volume configuration specifies an explicit resolution,
                 # override any provided in the HDF5 itself.
                 if resolution:
@@ -620,10 +632,11 @@ class HDF5Volume(Volume):
 
         return config
 
-    def __init__(self, orig_file, image_dataset, label_dataset, mask_dataset):
+    def __init__(self, orig_file, image_dataset, label_dataset, mask_dataset, mask_bounds=None):
         logging.debug('Loading HDF5 file "{}"'.format(orig_file))
         self.file = h5py.File(orig_file, 'r')
         self.resolution = None
+        self._mask_bounds = tuple(map(np.asarray, mask_bounds)) if mask_bounds is not None else None
 
         if image_dataset is None and label_dataset is None:
             raise ValueError('HDF5 volume must have either an image or label dataset: {}'.format(orig_file))
@@ -655,6 +668,32 @@ class HDF5Volume(Volume):
 
         if self.resolution is None:
             self.resolution = np.ones(3)
+
+    @property
+    def mask_bounds(self):
+        if self._mask_bounds is not None:
+            return self._mask_bounds
+        if self.mask_data is None:
+            return None
+
+        # Explicitly copy the channel to memory. 3x speedup for np ops.
+        mask_data = self.mask_data[:]
+        mask_min = []
+        mask_max = []
+
+        for axes in [(1, 2), (0, 2), (0, 1)]:
+            proj = np.any(mask_data, axis=axes)
+            amin, amax = np.where(proj)[0][[0, -1]]
+
+            mask_min.append(amin)
+            mask_max.append(amax)
+
+        mask_min = self.local_coord_to_world(np.array(mask_min, dtype=np.int64))
+        mask_max = self.local_coord_to_world(np.array(mask_max, dtype=np.int64))
+
+        self._mask_bounds = (mask_min, mask_max)
+
+        return self._mask_bounds
 
     def to_memory_volume(self):
         data = ['image_data', 'label_data', 'mask_data']
