@@ -66,11 +66,13 @@ class PredictionCopy(Callback):
     using a custom Keras training function to copy model predictions at the
     same time as gradient updates.
     """
-    def __init__(self, kludge):
+    def __init__(self, kludge, name=None):
         self.kludge = kludge
+        self.name = name if name is not None else ''
 
     def on_batch_end(self, batch, logs={}):
         if self.kludge['inputs'] and self.kludge['outputs'] is None:
+            logging.debug('Running prediction kludge {}'.format(self.name))
             self.kludge['outputs'] = self.model.predict(self.kludge['inputs'])
 
 
@@ -305,7 +307,7 @@ def augment_subvolume_generator(subvolume_generator):
 def train_network(
         model_file=None,
         volumes=None,
-        static_validation=True,
+        static_validation=False,
         model_output_filebase=None,
         model_checkpoint_file=None,
         tensorboard=False,
@@ -345,23 +347,18 @@ def train_network(
 
     logging.info('Using {} volumes for training, {} for validation.'.format(num_training, num_validation))
 
-    if static_validation:
-        validation_data = {k: moving_training_generator(
-                augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.input_fov_shape)),
-                CONFIG.training.batch_size,
-                CONFIG.training.validation_size,
-                {'outputs': None},  # Allows use of moving training gen like static.
-                f_a_bins=f_a_bins,
-                reset_generators=True) for k, v in validation_volumes.iteritems()}
-    else:
-        validation_kludges = {k: {'inputs': None, 'outputs': None} for k in volumes.iterkeys()}
-        validation_data = {k: moving_training_generator(
-                v.subvolume_generator(shape=CONFIG.model.training_subv_shape),
-                CONFIG.training.batch_size,
-                CONFIG.training.validation_size,
-                validation_kludges[k],
-                f_a_bins=f_a_bins,
-                reset_generators=True) for k, v in validation_volumes.iteritems()}
+    callbacks = []
+
+    validation_kludges = {k: {'inputs': None, 'outputs': None} for k in volumes.iterkeys()}
+    if not static_validation:
+        callbacks.extend([PredictionCopy(kludge, 'Val: ' + k) for k, kludge in validation_kludges.iteritems()])
+    validation_data = {k: moving_training_generator(
+            v.subvolume_generator(shape=CONFIG.model.training_subv_shape),
+            CONFIG.training.batch_size,
+            CONFIG.training.validation_size,
+            validation_kludges[k],
+            f_a_bins=f_a_bins,
+            reset_generators=True) for k, v in validation_volumes.iteritems()}
     validation_data = roundrobin(*validation_data.values())
 
     # Pre-train
@@ -377,12 +374,13 @@ def train_network(
             training_data,
             samples_per_epoch=CONFIG.training.training_size * num_training,
             nb_epoch=CONFIG.training.static_train_epochs,
+            callbacks=callbacks,
             validation_data=validation_data,
             nb_val_samples=CONFIG.training.validation_size * num_validation)
 
     # Moving training
     kludges = {k: {'inputs': None, 'outputs': None} for k in volumes.iterkeys()}
-    callbacks = [PredictionCopy(kludge) for kludge in kludges.values()]
+    callbacks.extend([PredictionCopy(kludge, 'Train: ' + k) for k, kludge in kludges.iteritems()])
     callbacks.append(ModelCheckpoint(model_output_filebase + '.hdf5', save_best_only=True))
     if model_checkpoint_file:
         callbacks.append(ModelCheckpoint(model_checkpoint_file))
