@@ -333,6 +333,9 @@ class Volume(object):
             if self.volume.mask_data is not None:
                 mask_min, mask_max = self.volume.mask_bounds
 
+                mask_min = self.volume.local_coord_to_world(mask_min)
+                mask_max = self.volume.local_coord_to_world(mask_max)
+
                 self.ctr_min = np.maximum(self.ctr_min, mask_min + self.margin)
                 self.ctr_max = np.minimum(self.ctr_max, mask_max - self.margin - 1)
 
@@ -414,11 +417,7 @@ class VolumeView(Volume):
 
     @property
     def mask_bounds(self):
-        if self.parent.mask_bounds is None:
-            return None
-        else:
-            return (self.local_coord_to_world(self.parent.mask_bounds[0]),
-                    self.local_coord_to_world(self.parent.mask_bounds[1]))
+        return self.parent.mask_bounds
 
     @property
     def shape(self):
@@ -470,8 +469,7 @@ class PartitionedVolume(VolumeView):
         else:
             bound_min = np.maximum(self.parent.mask_bounds[0], self.bounds[0])
             bound_max = np.minimum(self.parent.mask_bounds[1], self.bounds[1])
-            return (self.local_coord_to_world(bound_min),
-                    self.local_coord_to_world(bound_max))
+            return bound_min, bound_max
 
     @property
     def shape(self):
@@ -688,8 +686,8 @@ class HDF5Volume(Volume):
             mask_min.append(amin)
             mask_max.append(amax)
 
-        mask_min = self.local_coord_to_world(np.array(mask_min, dtype=np.int64))
-        mask_max = self.local_coord_to_world(np.array(mask_max, dtype=np.int64))
+        mask_min = np.array(mask_min, dtype=np.int64)
+        mask_max = np.array(mask_max, dtype=np.int64)
 
         self._mask_bounds = (mask_min, mask_max)
 
