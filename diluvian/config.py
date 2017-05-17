@@ -151,6 +151,8 @@ class TrainingConfig(BaseConfig):
     ----------
     num_gpus : int
         Number of GPUs to use for data-parallelism.
+    num_workers : int
+        Number of worker queues to use for generating training data.
     gpu_batch_size : int
         Per-GPU batch size. The effective batch size will be this times
         ``num_gpus``.
@@ -188,6 +190,7 @@ class TrainingConfig(BaseConfig):
     """
     def __init__(self, settings):
         self.num_gpus = int(settings.get('num_gpus', 1))
+        self.num_workers = int(settings.get('num_workers', 4))
         self.gpu_batch_size = int(settings.get('gpu_batch_size', 8))
         self.batch_size = self.num_gpus * self.gpu_batch_size
         self.training_size = int(settings.get('training_size', 256))

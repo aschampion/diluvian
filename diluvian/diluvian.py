@@ -371,24 +371,32 @@ def train_network(
             augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.input_fov_shape))
             for v in training_volumes.itervalues()]
     random.shuffle(training_gens)
-    training_data = moving_training_generator(
-            Roundrobin(*training_gens),
+    # Divide training generators up for workers.
+    worker_gens = [
+            training_gens[i::CONFIG.training.num_workers]
+            for i in xrange(CONFIG.training.num_workers)]
+    worker_training_size = CONFIG.training.training_size / CONFIG.training.num_workers
+    # Create a training data generator for each worker.
+    training_data = [moving_training_generator(
+            Roundrobin(*gen),
             CONFIG.training.batch_size,
-            CONFIG.training.training_size,
+            worker_training_size,
             {'outputs': None},  # Allows use of moving training gen like static.
             f_a_bins=f_a_bins,
-            reset_generators=CONFIG.training.reset_generators)
+            reset_generators=CONFIG.training.reset_generators) for gen in worker_gens]
     history = ffn.fit_generator(
-            training_data,
-            samples_per_epoch=CONFIG.training.training_size * num_training,
+            Roundrobin(*training_data),
+            samples_per_epoch=CONFIG.training.training_size,
             nb_epoch=CONFIG.training.static_train_epochs,
+            max_q_size=CONFIG.training.num_workers,
+            nb_worker=1,
             callbacks=callbacks,
             validation_data=validation_data,
-            nb_val_samples=CONFIG.training.validation_size * num_validation)
+            nb_val_samples=CONFIG.training.validation_size)
 
     # Moving training
-    kludge = {'inputs': None, 'outputs': None}
-    callbacks.append(PredictionCopy(kludge, 'Training'))
+    kludges = [{'inputs': None, 'outputs': None} for _ in range(CONFIG.training.num_workers)]
+    callbacks.extend([PredictionCopy(kludge, 'Training {}'.format(n)) for n, kludge in enumerate(kludges)])
     callbacks.append(ModelCheckpoint(model_output_filebase + '.hdf5', save_best_only=True))
     if model_checkpoint_file:
         callbacks.append(ModelCheckpoint(model_checkpoint_file))
@@ -400,23 +408,27 @@ def train_network(
             augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.training_subv_shape))
             for v in training_volumes.itervalues()]
     random.shuffle(training_gens)
-    training_data = moving_training_generator(
-            Roundrobin(*training_gens),
+    worker_gens = [
+            training_gens[i::CONFIG.training.num_workers]
+            for i in xrange(CONFIG.training.num_workers)]
+    training_data = [moving_training_generator(
+            Roundrobin(*gen),
             CONFIG.training.batch_size,
-            CONFIG.training.training_size,
+            worker_training_size,
             kludge,
             f_a_bins=f_a_bins,
-            reset_generators=CONFIG.training.reset_generators)
+            reset_generators=CONFIG.training.reset_generators) for gen, kludge in zip(worker_gens, kludges)]
+    print(len(worker_gens), len(training_gens), len(training_data), len(kludges), len(callbacks))
     moving_history = ffn.fit_generator(
-            training_data,
-            samples_per_epoch=CONFIG.training.training_size * num_training,
+            Roundrobin(*training_data),
+            samples_per_epoch=CONFIG.training.training_size,
             nb_epoch=CONFIG.training.total_epochs,
             initial_epoch=CONFIG.training.static_train_epochs,
-            max_q_size=num_training,
+            max_q_size=CONFIG.training.num_workers,
             nb_worker=1,
             callbacks=callbacks,
             validation_data=validation_data,
-            nb_val_samples=CONFIG.training.validation_size * num_validation)
+            nb_val_samples=CONFIG.training.validation_size)
     extend_keras_history(history, moving_history)
 
     write_keras_history_to_csv(history, model_output_filebase + '.csv')

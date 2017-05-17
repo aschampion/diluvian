@@ -29,6 +29,7 @@ nesterov = true
 [training]
 gpu_batch_size = 32
 num_gpus = 1
+num_workers = 4
 training_size = 256
 validation_size = 32
 static_train_epochs = 1
