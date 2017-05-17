@@ -75,7 +75,7 @@ class Region(object):
 
     def __init__(self, image, target=None, seed_vox=None, mask=None, block_padding=None):
         self.block_padding = block_padding
-        self.MOVE_DELTA = (CONFIG.model.output_fov_shape - 1) / CONFIG.model.output_fov_move_fraction
+        self.MOVE_DELTA = CONFIG.model.move_step
         self.queue = queue.PriorityQueue()
         self.visited = set()
         self.image = image
@@ -84,7 +84,11 @@ class Region(object):
             self.MOVE_GRID_OFFSET = np.array([0, 0, 0], dtype=np.int64)
         else:
             self.MOVE_GRID_OFFSET = np.mod(seed_vox, self.MOVE_DELTA).astype(np.int64)
-        self.move_bounds = self.vox_to_pos(self.bounds) - 1
+        self.move_bounds = (
+            np.ceil(np.divide((CONFIG.model.input_fov_shape - 1) / 2 - self.MOVE_GRID_OFFSET,
+                              self.MOVE_DELTA)).astype(np.int64),
+            self.vox_to_pos(self.bounds - (CONFIG.model.input_fov_shape - 1) / 2),
+            )
         self.move_check_thickness = CONFIG.model.move_check_thickness
         if mask is None:
             if isinstance(self.image, OctreeVolume):
@@ -98,11 +102,12 @@ class Region(object):
         self.bias_against_merge = False
         self.move_based_on_new_mask = False
         if seed_vox is None:
-            seed_pos = np.floor_divide(self.move_bounds, 2) + 1
+            seed_pos = np.floor_divide(self.move_bounds[0] + self.move_bounds[1], 2)
         else:
             seed_pos = self.vox_to_pos(seed_vox)
             assert self.pos_in_bounds(seed_pos), \
-                'Seed position (%s) must be in region bounds (%s).' % (seed_vox, self.bounds)
+                'Seed position (%s) must be in region move bounds (%s, %s).' % \
+                (seed_vox, self.move_bounds[0], self.move_bounds[1])
         self.seed_pos = seed_pos
         self.queue.put((None, seed_pos))
         seed_vox = self.pos_to_vox(seed_pos)
@@ -143,9 +148,10 @@ class Region(object):
 
     def pos_in_bounds(self, pos):
         if self.block_padding is None:
-            return np.all(np.less(pos, self.move_bounds)) and np.all(pos > 1)
+            return np.all(np.greater_equal(pos, self.move_bounds[0])) and \
+                np.all(np.less_equal(pos, self.move_bounds[1]))
         else:
-            return np.all(np.less_equal(pos, self.move_bounds + 1)) and np.all(pos >= 0)
+            return np.all(np.less(self.pos_to_vox(pos), self.bounds)) and np.all(pos >= 0)
 
     def get_block_bounds(self, vox, shape):
         """Get the bounds of a block by center and shape, accounting padding.

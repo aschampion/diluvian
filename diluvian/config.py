@@ -80,7 +80,11 @@ class ModelConfig(BaseConfig):
         self.t_final = float(settings.get('t_final', self.t_move))
         self.move_check_thickness = int(settings.get('move_check_thickness', 1))
         self.training_subv_shape = np.array(settings.get('training_subv_shape',
-                                                         self.input_fov_shape + ((self.input_fov_shape - 1) / 2)))
+                                                         self.input_fov_shape + self.move_step * 2))
+
+    @property
+    def move_step(self):
+        return (self.output_fov_shape - 1) / self.output_fov_move_fraction
 
 
 class NetworkConfig(BaseConfig):
