@@ -406,11 +406,17 @@ class VolumeView(Volume):
         super(VolumeView, self).__init__(*args, **kwargs)
         self.parent = parent
 
+    def parent_coord_to_world(self, a):
+        return a
+
     def local_coord_to_world(self, a):
-        return self.parent.local_coord_to_world(a)
+        return self.parent.local_coord_to_world(self.parent_coord_to_world(a))
+
+    def world_coord_to_parent(self, a):
+        return a
 
     def world_coord_to_local(self, a):
-        return self.parent.world_coord_to_local(a)
+        return self.world_coord_to_parent(self.parent.world_coord_to_local(a))
 
     def world_mat_to_local(self, m):
         return self.parent.world_mat_to_local(m)
@@ -424,9 +430,9 @@ class VolumeView(Volume):
         return self.parent.shape
 
     def get_subvolume(self, bounds):
-        parent_start = self.world_coord_to_local(bounds.start) if bounds.start is not None else None
-        parent_stop = self.world_coord_to_local(bounds.stop) if bounds.stop is not None else None
-        parent_seed = self.world_coord_to_local(bounds.seed) if bounds.seed is not None else None
+        parent_start = self.world_coord_to_parent(bounds.start) if bounds.start is not None else None
+        parent_stop = self.world_coord_to_parent(bounds.stop) if bounds.stop is not None else None
+        parent_seed = self.world_coord_to_parent(bounds.seed) if bounds.seed is not None else None
         parent_bounds = SubvolumeBounds(start=parent_start,
                                         stop=parent_stop,
                                         seed=parent_seed,
@@ -463,11 +469,11 @@ class PartitionedVolume(VolumeView):
         self.bounds = ((np.multiply(partition_shape, self.partition_index)).astype(np.int64),
                        (np.multiply(partition_shape, self.partition_index + 1)).astype(np.int64))
 
-    def local_coord_to_world(self, a):
-        return self.parent.local_coord_to_world(a - self.bounds[0])
+    def parent_coord_to_world(self, a):
+        return a - self.bounds[0]
 
-    def world_coord_to_local(self, a):
-        return self.parent.world_coord_to_local(a) + self.bounds[0]
+    def world_coord_to_parent(self, a):
+        return a + self.bounds[0]
 
     @property
     def mask_bounds(self):
@@ -505,11 +511,11 @@ class DownsampledVolume(VolumeView):
                 label_data=parent.label_data,
                 mask_data=parent.mask_data)
 
-    def local_coord_to_world(self, a):
-        return self.parent.local_coord_to_world(np.divide(a, self.scale))
+    def parent_coord_to_world(self, a):
+        return np.divide(a, self.scale)
 
-    def world_coord_to_local(self, a):
-        return np.multiply(self.parent.world_coord_to_local(a), self.scale)
+    def world_coord_to_parent(self, a):
+        return np.multiply(a, self.scale)
 
     @property
     def shape(self):
@@ -517,8 +523,8 @@ class DownsampledVolume(VolumeView):
 
     def get_subvolume(self, bounds):
         subvol_shape = bounds.stop - bounds.start
-        parent_bounds = SubvolumeBounds(self.world_coord_to_local(bounds.start),
-                                        self.world_coord_to_local(bounds.stop))
+        parent_bounds = SubvolumeBounds(self.world_coord_to_parent(bounds.start),
+                                        self.world_coord_to_parent(bounds.stop))
         subvol = self.parent.get_subvolume(parent_bounds)
         subvol.image = subvol.image.reshape(
                 [subvol_shape[0], self.scale[0],
@@ -534,7 +540,10 @@ class DownsampledVolume(VolumeView):
                  subvol_shape[1], self.scale[1],
                  subvol_shape[2], self.scale[2]]).mean(5).mean(3).mean(1) > 0.5
 
-        subvol.seed = np.divide(subvol.seed, self.scale)
+        # Note that this is not a coordinate xform to parent in the typical
+        # sense, just a rescaling of the coordinate in the subvolume-local
+        # coordinates. Hence no similar call in VolumeView.get_subvolume.
+        subvol.seed = self.parent_coord_to_world(subvol.seed)
 
         return subvol
 
