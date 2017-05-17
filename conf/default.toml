@@ -1,3 +1,5 @@
+random_seed = 0
+
 [volume]
 resolution = [40, 16, 16]
 

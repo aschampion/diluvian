@@ -326,7 +326,7 @@ class Volume(object):
             self.margin = np.floor_divide(self.shape, 2).astype(np.int64)
             self.ctr_min = self.margin
             self.ctr_max = (np.array(self.volume.shape) - self.margin - 1).astype(np.int64)
-            self.random = np.random.RandomState(0)
+            self.random = np.random.RandomState(CONFIG.random_seed)
 
             # If the volume has a mask channel, further limit ctr_min and
             # ctr_max to lie inside a margin in the AABB of the mask.
@@ -868,7 +868,7 @@ class ImageStackVolume(Volume):
             self.margin = np.asarray(margin).astype(np.int64)
             self.ctr_min = self.margin
             self.ctr_max = (np.array(self.volume.shape) - self.margin - 1).astype(np.int64)
-            self.random = np.random.RandomState(0)
+            self.random = np.random.RandomState(CONFIG.random_seed)
 
         @property
         def shape(self):

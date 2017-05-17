@@ -6,6 +6,7 @@ from __future__ import print_function
 import importlib
 import itertools
 import logging
+import random
 import re
 
 import matplotlib as mpl
@@ -313,6 +314,8 @@ def train_network(
         tensorboard=False,
         viewer=False,
         metric_plot=False):
+    random.seed(CONFIG.random_seed)
+
     if model_file is None:
         factory_mod_name, factory_func_name = CONFIG.network.factory.rsplit('.', 1)
         factory_mod = importlib.import_module(factory_mod_name)
@@ -367,6 +370,7 @@ def train_network(
     training_gens = [
             augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.input_fov_shape))
             for v in training_volumes.itervalues()]
+    random.shuffle(training_gens)
     training_data = moving_training_generator(
             roundrobin(*training_gens),
             CONFIG.training.batch_size,
@@ -395,6 +399,7 @@ def train_network(
     training_gens = [
             augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.training_subv_shape))
             for v in training_volumes.itervalues()]
+    random.shuffle(training_gens)
     training_data = moving_training_generator(
             roundrobin(*training_gens),
             CONFIG.training.batch_size,

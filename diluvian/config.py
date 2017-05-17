@@ -219,14 +219,20 @@ class PostprocessingConfig(BaseConfig):
 
 
 class Config(object):
-    """A complete collection of configuration objects."""
+    """A complete collection of configuration objects.
+
+    Attributes
+    ----------
+    random_seed : int
+        Seed for initializing the Python and NumPy random generators.
+    """
 
     def __init__(self, settings_collection=None):
         if settings_collection is not None:
             settings = settings_collection[0].copy()
             for s in settings_collection:
                 for c in s:
-                    if c in settings:
+                    if c in settings and isinstance(settings[c], dict):
                         settings[c].update(s[c])
                     else:
                         settings[c] = s[c]
@@ -240,9 +246,14 @@ class Config(object):
         self.training = TrainingConfig(settings.get('training', {}))
         self.postprocessing = PostprocessingConfig(settings.get('postprocessing', {}))
 
+        self.random_seed = int(settings.get('random_seed', 0))
+
     def __str__(self):
         sanitized = {}
         for n, c in self.__dict__.iteritems():
+            if not isinstance(c, BaseConfig):
+                sanitized[n] = c
+                continue
             sanitized[n] = {}
             for k, v in c.__dict__.iteritems():
                 if isinstance(v, np.ndarray):

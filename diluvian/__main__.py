@@ -40,6 +40,10 @@ def _make_main_parser():
             '--no-in-memory', action='store_false', dest='in_memory', default=True,
             help='Do not preload entire volumes into memory.')
     common_parser.add_argument(
+            '-rs', '--random-seed', action='store', dest='random_seed', type=int,
+            help='Seed for initializing the Python and NumPy random generators. '
+                 'Overrides any seed specified in configuration files.')
+    common_parser.add_argument(
             '-l', '--log', dest='log_level',
             choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
             help='Set the logging level.')
@@ -165,6 +169,9 @@ def main():
 
     if args.config_files:
         CONFIG.from_toml(*args.config_files)
+
+    if args.random_seed:
+        CONFIG.random_seed = args.random_seed
 
     if args.command == 'train':
         # Late import to prevent loading large modules for short CLI commands.
