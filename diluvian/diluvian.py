@@ -418,7 +418,6 @@ def train_network(
             kludge,
             f_a_bins=f_a_bins,
             reset_generators=CONFIG.training.reset_generators) for gen, kludge in zip(worker_gens, kludges)]
-    print(len(worker_gens), len(training_gens), len(training_data), len(kludges), len(callbacks))
     moving_history = ffn.fit_generator(
             Roundrobin(*training_data),
             samples_per_epoch=CONFIG.training.training_size,
