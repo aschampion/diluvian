@@ -32,7 +32,7 @@ from .third_party.multi_gpu import make_parallel
 from .util import (
         extend_keras_history,
         get_color_shader,
-        roundrobin,
+        Roundrobin,
         WrappedViewer,
         write_keras_history_to_csv,
         )
@@ -214,7 +214,7 @@ def fill_region_with_model(
             gen_kwargs = {
                     k: {'shape': CONFIG.model.training_subv_shape * 4 - 3}
                     for k in volumes.iterkeys()}
-    regions = roundrobin(*[
+    regions = Roundrobin(*[
             Region.from_subvolume_generator(
                 v.downsample(CONFIG.volume.resolution)
                  .subvolume_generator(**gen_kwargs[k]))
@@ -359,12 +359,12 @@ def train_network(
             augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.training_subv_shape))
             for v in validation_volumes.itervalues()]
     validation_data = moving_training_generator(
-            roundrobin(*validation_gens),
+            Roundrobin(*validation_gens),
             CONFIG.training.batch_size,
             CONFIG.training.validation_size,
             validation_kludge,
             f_a_bins=f_a_bins,
-            reset_generators=False)
+            reset_generators=True)
 
     # Pre-train
     training_gens = [
@@ -372,7 +372,7 @@ def train_network(
             for v in training_volumes.itervalues()]
     random.shuffle(training_gens)
     training_data = moving_training_generator(
-            roundrobin(*training_gens),
+            Roundrobin(*training_gens),
             CONFIG.training.batch_size,
             CONFIG.training.training_size,
             {'outputs': None},  # Allows use of moving training gen like static.
@@ -401,7 +401,7 @@ def train_network(
             for v in training_volumes.itervalues()]
     random.shuffle(training_gens)
     training_data = moving_training_generator(
-            roundrobin(*training_gens),
+            Roundrobin(*training_gens),
             CONFIG.training.batch_size,
             CONFIG.training.training_size,
             kludge,

@@ -89,16 +89,39 @@ def pad_dims(x):
     return np.expand_dims(np.expand_dims(x, x.ndim), 0)
 
 
-# Taken from the python docs itertools recipes
-def roundrobin(*iterables):
-    "roundrobin('ABC', 'D', 'EF') --> A D E B F C"
-    # Recipe credited to George Sakkis
-    pending = len(iterables)
-    nexts = itertools.cycle(iter(it).next for it in iterables)
-    while pending:
-        try:
-            for next in nexts:
-                yield next()
-        except StopIteration:
-            pending -= 1
-            nexts = itertools.cycle(itertools.islice(nexts, pending))
+class Roundrobin:
+    """Iterate over a collection of iterables, pulling one item from each in
+    a cycle.
+
+    Based on a generator function recipe credited to George Sakkis on the
+    python docs itertools recipes.
+
+    Examples
+    --------
+    >>> list(Roundrobin('ABC', 'D', 'EF'))
+    ['A', 'D', 'E', 'B', 'F', 'C']
+    """
+
+    def __init__(self, *iterables):
+        self.iterables = iterables
+        self.pending = len(self.iterables)
+        self.nexts = itertools.cycle(iter(it).next for it in self.iterables)
+
+    def __iter__(self):
+        return self
+
+    def reset(self):
+        for it in self.iterables:
+            iter(it).reset()
+        self.pending = len(self.iterables)
+        self.nexts = itertools.cycle(iter(it).next for it in self.iterables)
+
+    def next(self):
+        while self.pending:
+            try:
+                for nextgen in self.nexts:
+                    return nextgen()
+            except StopIteration:
+                self.pending -= 1
+                self.nexts = itertools.cycle(itertools.islice(self.nexts, self.pending))
+        raise StopIteration()
