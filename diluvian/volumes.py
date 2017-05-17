@@ -424,7 +424,14 @@ class VolumeView(Volume):
         return self.parent.shape
 
     def get_subvolume(self, bounds):
-        return self.parent.get_subvolume(bounds)
+        parent_start = self.world_coord_to_local(bounds.start) if bounds.start is not None else None
+        parent_stop = self.world_coord_to_local(bounds.stop) if bounds.stop is not None else None
+        parent_seed = self.world_coord_to_local(bounds.seed) if bounds.seed is not None else None
+        parent_bounds = SubvolumeBounds(start=parent_start,
+                                        stop=parent_stop,
+                                        seed=parent_seed,
+                                        label_id=bounds.label_id)
+        return self.parent.get_subvolume(parent_bounds)
 
 
 class PartitionedVolume(VolumeView):
