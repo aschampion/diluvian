@@ -273,8 +273,10 @@ class Volume(object):
             return self
         return DownsampledVolume(self, downsample)
 
-    def partition(self, *args):
-        return PartitionedVolume(self, *args)
+    def partition(self, partitioning, partition_index):
+        if np.array_equal(partitioning, np.ones(3)) and np.array_equal(partition_index, np.zeros(3)):
+            return self
+        return PartitionedVolume(self, partitioning, partition_index)
 
     def sparse_wrapper(self, *args):
         return SparseWrappedVolume(self, *args)
