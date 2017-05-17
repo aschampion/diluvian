@@ -173,8 +173,15 @@ def main():
     if args.random_seed:
         CONFIG.random_seed = args.random_seed
 
+    def init_seeds():
+        import numpy as np
+        np.random.seed(CONFIG.random_seed)
+        import tensorflow as tf
+        tf.set_random_seed(CONFIG.random_seed)
+
     if args.command == 'train':
         # Late import to prevent loading large modules for short CLI commands.
+        init_seeds()
         from .diluvian import train_network
 
         volumes = load_volumes(args.volume_files, args.in_memory)
@@ -188,6 +195,7 @@ def main():
 
     elif args.command == 'fill':
         # Late import to prevent loading large modules for short CLI commands.
+        init_seeds()
         from .diluvian import fill_volumes_with_model
 
         volumes = load_volumes(args.volume_files, args.in_memory)
@@ -203,6 +211,7 @@ def main():
 
     elif args.command == 'sparse-fill':
         # Late import to prevent loading large modules for short CLI commands.
+        init_seeds()
         from .diluvian import fill_region_with_model
 
         volumes = load_volumes(args.volume_files, args.in_memory)
@@ -231,6 +240,7 @@ def main():
 
     elif args.command == 'gen-subv-bounds':
         # Late import to prevent loading large modules for short CLI commands.
+        init_seeds()
         from .diluvian import generate_subvolume_bounds
 
         volumes = load_volumes(args.volume_files, args.in_memory)
