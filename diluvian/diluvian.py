@@ -349,27 +349,31 @@ def train_network(
 
     callbacks = []
 
-    validation_kludges = {k: {'inputs': None, 'outputs': None} for k in volumes.iterkeys()}
+    validation_kludge = {'inputs': None, 'outputs': None}
     if not static_validation:
-        callbacks.extend([PredictionCopy(kludge, 'Val: ' + k) for k, kludge in validation_kludges.iteritems()])
-    validation_data = {k: moving_training_generator(
-            v.subvolume_generator(shape=CONFIG.model.training_subv_shape),
+        callbacks.append(PredictionCopy(validation_kludge, 'Validation'))
+    validation_gens = [
+            augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.training_subv_shape))
+            for v in validation_volumes.itervalues()]
+    validation_data = moving_training_generator(
+            roundrobin(*validation_gens),
             CONFIG.training.batch_size,
             CONFIG.training.validation_size,
-            validation_kludges[k],
+            validation_kludge,
             f_a_bins=f_a_bins,
-            reset_generators=True) for k, v in validation_volumes.iteritems()}
-    validation_data = roundrobin(*validation_data.values())
+            reset_generators=False)
 
     # Pre-train
-    training_data = {k: moving_training_generator(
-            augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.input_fov_shape)),
+    training_gens = [
+            augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.input_fov_shape))
+            for v in training_volumes.itervalues()]
+    training_data = moving_training_generator(
+            roundrobin(*training_gens),
             CONFIG.training.batch_size,
             CONFIG.training.training_size,
             {'outputs': None},  # Allows use of moving training gen like static.
             f_a_bins=f_a_bins,
-            reset_generators=CONFIG.training.reset_generators) for k, v in training_volumes.iteritems()}
-    training_data = roundrobin(*training_data.values())
+            reset_generators=CONFIG.training.reset_generators)
     history = ffn.fit_generator(
             training_data,
             samples_per_epoch=CONFIG.training.training_size * num_training,
@@ -379,8 +383,8 @@ def train_network(
             nb_val_samples=CONFIG.training.validation_size * num_validation)
 
     # Moving training
-    kludges = {k: {'inputs': None, 'outputs': None} for k in volumes.iterkeys()}
-    callbacks.extend([PredictionCopy(kludge, 'Train: ' + k) for k, kludge in kludges.iteritems()])
+    kludge = {'inputs': None, 'outputs': None}
+    callbacks.append(PredictionCopy(kludge, 'Training'))
     callbacks.append(ModelCheckpoint(model_output_filebase + '.hdf5', save_best_only=True))
     if model_checkpoint_file:
         callbacks.append(ModelCheckpoint(model_checkpoint_file))
@@ -388,14 +392,16 @@ def train_network(
     if tensorboard:
         callbacks.append(TensorBoard())
 
-    training_data = {k: moving_training_generator(
-            augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.training_subv_shape)),
+    training_gens = [
+            augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.training_subv_shape))
+            for v in training_volumes.itervalues()]
+    training_data = moving_training_generator(
+            roundrobin(*training_gens),
             CONFIG.training.batch_size,
             CONFIG.training.training_size,
-            kludges[k],
+            kludge,
             f_a_bins=f_a_bins,
-            reset_generators=CONFIG.training.reset_generators) for k, v in training_volumes.iteritems()}
-    training_data = roundrobin(*training_data.values())
+            reset_generators=CONFIG.training.reset_generators)
     moving_history = ffn.fit_generator(
             training_data,
             samples_per_epoch=CONFIG.training.training_size * num_training,

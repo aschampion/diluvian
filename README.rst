@@ -84,10 +84,6 @@ choices in ways pertinent to your use:
 * Rather than resampling training data based on the filling fraction
   :math:`f_a`, sample loss is (optionally) weighted based on the filling
   fraction.
-* Currently, when using multiple volumes for training, each training batch is
-  composed only of samples from a single volume. That is, if using three
-  volumes ``A``, ``B``,  and ``C`` and batch size 3 the training would be
-  grouped like ``AAA|BBB|CCC|AAA...``.
 * A FOV center's priority in the move queue is determined by the checking
   plane mask probability of the first move to queue it, rather than the
   highest mask probability with which it is added to the queue.
