@@ -39,7 +39,7 @@ def make_flood_fill_network(input_fov_shape, output_fov_shape, network_config):
     if np.any(np.less(contraction, 0)):
         raise ValueError('Output FOV shape can not be larger than input FOV shape.')
     contraction_cumu = np.zeros(3, dtype=np.int32)
-    contraction_step = contraction / network_config.num_modules
+    contraction_step = np.divide(contraction, float(network_config.num_modules))
 
     for i in range(0, network_config.num_modules):
         ffn = add_convolution_module(ffn, network_config)
