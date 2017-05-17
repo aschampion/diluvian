@@ -128,8 +128,10 @@ def load_model(model_file, network_config):
         # Monkeypatch the save to save just the underlying model.
         func_type = type(model.save)
 
+        old_model = model
+
         def new_save(_, *args, **kwargs):
-            model.save(*args, **kwargs)
+            old_model.save(*args, **kwargs)
         new_model.save = func_type(new_save, new_model)
 
         model = new_model
