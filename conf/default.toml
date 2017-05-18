@@ -1,4 +1,4 @@
-random_seed = 0
+random_seed = 1
 
 [volume]
 resolution = [40, 16, 16]
@@ -30,8 +30,8 @@ nesterov = true
 gpu_batch_size = 32
 num_gpus = 1
 num_workers = 4
-training_size = 256
-validation_size = 32
+training_size = 1024
+validation_size = 128
 static_train_epochs = 1
 total_epochs = 2
 reset_generators = false
