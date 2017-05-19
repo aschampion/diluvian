@@ -353,10 +353,13 @@ def train_network(
     callbacks = []
 
     validation_kludge = {'inputs': None, 'outputs': None}
-    if not static_validation:
+    if static_validation:
+        validation_shape = CONFIG.model.input_fov_shape
+    else:
+        validation_shape = CONFIG.model.training_subv_shape
         callbacks.append(PredictionCopy(validation_kludge, 'Validation'))
     validation_gens = [
-            augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.training_subv_shape))
+            augment_subvolume_generator(v.subvolume_generator(shape=validation_shape))
             for v in validation_volumes.itervalues()]
     validation_data = moving_training_generator(
             Roundrobin(*validation_gens),
