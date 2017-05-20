@@ -12,7 +12,7 @@ import six
 from keras.layers import (
         Conv3D,
         Cropping3D,
-        GaussianDropout,
+        Dropout,
         Input,
         Permute,
         UpSampling3D
@@ -91,7 +91,7 @@ def add_convolution_module(model, network_config):
     # https://github.com/gcr/torch-residual-networks
     model = Activation('relu')(model)
     if network_config.dropout_probability > 0.0:
-        model = GaussianDropout(network_config.dropout_probability)(model)
+        model = Dropout(network_config.dropout_probability)(model)
 
     return model
 
@@ -149,7 +149,7 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape):
     contraction = (np.array(model.get_shape().as_list()[1:4]) - output_shape) // 2
     forward = Cropping3D(zip(list(contraction), list(contraction)))(model)
     if network_config.dropout_probability > 0.0:
-        forward = GaussianDropout(network_config.dropout_probability)(forward)
+        forward = Dropout(network_config.dropout_probability)(forward)
 
     # Terminal layer of the U.
     if remaining_layers <= 0:
