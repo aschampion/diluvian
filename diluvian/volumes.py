@@ -269,7 +269,7 @@ class MissingDataAugmentGenerator(object):
             rolls[self.subvolume.seed[self.axis]] = 1.1
             missing_sections = np.where(rolls < self.probability)
 
-            if missing_sections:
+            if missing_sections and missing_sections[0].size:
                 subv = self.subvolume
                 subv = Subvolume(subv.image.copy(),
                                  subv.label_mask.copy(),
@@ -345,6 +345,76 @@ class GaussianNoiseAugmentGenerator(object):
                              subv.label_id)
             self.subvolume = None
             return subv
+
+
+class ContrastAugmentGenerator(object):
+    """Repeats subvolumes from a subvolume generator with altered contrast.
+
+    For each subvolume in the original generator, this generator will yield the
+    original subvolume and may yield a subvolume with image intensity contrast.
+
+    Currently this augmentation performs simple rescaling of intensity values,
+    not histogram based methods. This simple approach still yields results
+    resembling TEM artifacts. A single rescaling is chosen for all selected
+    sections in each subvolume, not independently per selected section.
+
+    Parameters
+    ----------
+    subvolume_generator : SubvolumeGenerator
+    axis : int
+        Axis along which contrast may be altered. For example, 0 will alter
+        contrast by z-sections.
+    probability : float
+        Independent probability that each plane of data along axis is altered.
+    scaling_mean, scaling_std, center_mean, center_std : float
+        Normal distribution parameters for the rescaling of intensity values.
+    """
+    def __init__(self, subvolume_generator, axis, probability, scaling_mean, scaling_std, center_mean, center_std):
+        self.subvolume_generator = subvolume_generator
+        self.axis = axis
+        self.probability = probability
+        self.scaling_mean = scaling_mean
+        self.scaling_std = scaling_std
+        self.center_mean = center_mean
+        self.center_std = center_std
+        self.subvolume = None
+
+    @property
+    def shape(self):
+        return self.subvolume_generator.shape
+
+    def __iter__(self):
+        return self
+
+    def reset(self):
+        self.subvolume = None
+        self.subvolume_generator.reset()
+
+    def next(self):
+        if self.subvolume is not None:
+            rolls = np.random.sample(self.shape[self.axis])
+            sections = np.where(rolls < self.probability)
+
+            if sections and sections[0].size:
+                subv = self.subvolume
+                subv = Subvolume(subv.image.copy(),
+                                 subv.label_mask,
+                                 subv.seed,
+                                 subv.label_id)
+                slices = [slice(None), slice(None), slice(None)]
+                slices[self.axis] = sections
+                data = subv.image[slices]
+                old_min = data.min()
+                old_max = data.max()
+                scaling = np.random.normal(self.scaling_mean, self.scaling_std)
+                center = np.random.normal(self.center_mean, self.center_std)
+                data = scaling*(data - old_min) + 0.5*scaling*center*(old_max - old_min) + old_min
+                subv.image[slices] = data
+                self.subvolume = None
+                return subv
+
+        self.subvolume = next(self.subvolume_generator)
+        return self.subvolume
 
 
 class Volume(object):

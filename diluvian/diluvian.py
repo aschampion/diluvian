@@ -39,6 +39,7 @@ from .util import (
         write_keras_history_to_csv,
         )
 from .volumes import (
+        ContrastAugmentGenerator,
         GaussianNoiseAugmentGenerator,
         HDF5Volume,
         SubvolumeBounds,
@@ -309,6 +310,9 @@ def augment_subvolume_generator(subvolume_generator):
         gen = GaussianNoiseAugmentGenerator(gen, v['axis'], v['mul'], v['add'])
     for v in CONFIG.training.augment_missing_data:
         gen = MissingDataAugmentGenerator(gen, v['axis'], v['prob'])
+    for v in CONFIG.training.augment_contrast:
+        gen = ContrastAugmentGenerator(gen, v['axis'], v['prob'], v['scaling_mean'], v['scaling_std'],
+                                       v['center_mean'], v['center_std'])
 
     return gen
 

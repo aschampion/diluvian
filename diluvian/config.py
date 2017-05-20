@@ -203,6 +203,13 @@ class TrainingConfig(BaseConfig):
         an axis to perform independent Gaussian noise augmentation on, and the
         standard deviations of 1-mean multiplicative and 0-mean additive noise,
         respectively.
+    augment_contrast : list of dict
+        List of dictionaries with ``axis``, ``prob``, ``scaling_mean``,
+        ``scaling_std``, ``center_mean`` and ``center_std`` keys. These
+        specify the probability to alter the contrast of a section, the mean
+        and standard deviation to draw from a normal distribution to scale
+        contrast, and the mean and standard deviation to draw from a normal
+        distribution to move the intensity center multiplicatively.
     """
     def __init__(self, settings):
         self.num_gpus = int(settings.get('num_gpus', 1))
@@ -225,6 +232,10 @@ class TrainingConfig(BaseConfig):
         self.augment_permute_axes = settings.get('augment_permute_axes', [[0, 2, 1]])
         self.augment_missing_data = settings.get('augment_missing_data', [{'axis': 0, 'prob': 0.01}])
         self.augment_noise = settings.get('augment_noise', [{'axis': 0, 'mul': 0.1, 'add': 0.1}])
+        self.augment_contrast = settings.get(
+                'augment_contrast',
+                [{'axis': 0, 'prob': 0.05, 'scaling_mean': 0.5, 'scaling_std': 0.1,
+                  'center_mean': 1.2, 'center_std': 0.2}])
 
 
 class PostprocessingConfig(BaseConfig):
