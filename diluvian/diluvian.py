@@ -16,6 +16,7 @@ mpl.use('Agg')  # noqa
 import matplotlib.pyplot as plt
 import numpy as np
 import pytoml as toml
+import six
 from tqdm import tqdm
 
 from keras.callbacks import (
@@ -85,7 +86,7 @@ def generate_subvolume_bounds(filename, volumes, num_bounds, sparse=False):
         gen_kwargs = {'sparse_margin': CONFIG.model.training_subv_shape * 4 - 3}
     else:
         gen_kwargs = {'shape': CONFIG.model.training_subv_shape * 4 - 3}
-    for k, v in volumes.iteritems():
+    for k, v in six.iteritems(volumes):
         bounds = v.downsample(CONFIG.volume.resolution)\
                   .subvolume_bounds_generator(**gen_kwargs)
         bounds = itertools.islice(bounds, num_bounds)
@@ -165,7 +166,7 @@ def fill_volumes_with_model(
     if '{volume}' not in filename:
         raise ValueError('HDF5 filename must contain "{volume}" for volume name replacement.')
 
-    for volume_name, volume in volumes.iteritems():
+    for volume_name, volume in six.iteritems(volumes):
         logging.info('Filling volume %s...', volume_name)
         volume = volume.downsample(CONFIG.volume.resolution)
         volume = volume.get_subvolume(SubvolumeBounds(start=np.zeros(3, dtype=np.int64), stop=volume.shape))
@@ -218,7 +219,7 @@ def fill_region_with_model(
             Region.from_subvolume_generator(
                 v.downsample(CONFIG.volume.resolution)
                  .subvolume_generator(**gen_kwargs[k]))
-            for k, v in volumes.iteritems()])
+            for k, v in six.iteritems(volumes)])
 
     model = load_model(model_file, CONFIG.network)
 
@@ -268,7 +269,7 @@ def partition_volumes(volumes):
     """
     def apply_partitioning(volumes, partitioning):
         partitioned = {}
-        for name, vol in volumes.iteritems():
+        for name, vol in six.iteritems(volumes):
             partitions = [p for rgx, p in CONFIG.training.partitions.items() if re.match(rgx, name)]
             partition_index = [idx for rgx, idx in partitioning.items() if re.match(rgx, name)]
             if len(partitions) > 1 or len(partition_index) > 1:
@@ -479,7 +480,7 @@ def view_volumes(volumes):
     """
     viewer = WrappedViewer()
 
-    for volume_name, volume in volumes.iteritems():
+    for volume_name, volume in six.iteritems(volumes):
         viewer.add(volume.image_data,
                    name='{} (Image)'.format(volume_name),
                    voxel_size=list(np.flipud(volume.resolution)))

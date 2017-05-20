@@ -9,6 +9,8 @@ import logging
 import os
 import re
 
+import six
+
 from .config import CONFIG
 
 
@@ -274,11 +276,11 @@ def load_volumes(volume_files, in_memory, name_regex=None):
 
     if name_regex is not None:
         name_regex = re.compile(name_regex)
-        volumes = {k: v for k, v in volumes.iteritems() if name_regex.match(k)}
+        volumes = {k: v for k, v in six.iteritems(volumes) if name_regex.match(k)}
 
     if in_memory:
         print('Copying volumes to memory...')
-        volumes = {k: v.to_memory_volume() for k, v in volumes.iteritems()}
+        volumes = {k: v.to_memory_volume() for k, v in six.iteritems(volumes)}
 
     print('Done.')
     return volumes

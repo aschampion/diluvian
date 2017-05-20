@@ -5,6 +5,7 @@
 import inspect
 
 import numpy as np
+import six
 
 from keras.layers import (
         Conv3D,
@@ -196,7 +197,7 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape):
 def compile_network(model, optimizer_config):
     optimizer_klass = getattr(keras.optimizers, optimizer_config.klass)
     optimizer_kwargs = inspect.getargspec(optimizer_klass.__init__)[0]
-    optimizer_kwargs = {k: v for k, v in optimizer_config.__dict__.iteritems() if k in optimizer_kwargs}
+    optimizer_kwargs = {k: v for k, v in six.iteritems(optimizer_config.__dict__) if k in optimizer_kwargs}
     optimizer = optimizer_klass(**optimizer_kwargs)
     model.compile(loss='binary_crossentropy',
                   optimizer=optimizer)

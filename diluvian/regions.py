@@ -6,6 +6,7 @@ import itertools
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
+import six
 from six.moves import queue
 from tqdm import tqdm
 
@@ -425,7 +426,7 @@ class Region(object):
         }
         current_vox = self.pos_to_vox(self.seed_pos)
         margin = (CONFIG.model.input_fov_shape) / 2
-        for plane, ax in axes.iteritems():
+        for plane, ax in six.iteritems(axes):
             ax.get_xaxis().set_visible(False)
             ax.get_yaxis().set_visible(False)
 
@@ -476,11 +477,11 @@ class Region(object):
                     else:
                         update_fn.vox_queue.put(vox)
 
-            for plane, im in images['image'].iteritems():
+            for plane, im in six.iteritems(images['image']):
                 image_data = get_plane(self.image, vox, plane)
                 im.set_data(image_data)
 
-            for plane, im in images['mask'].iteritems():
+            for plane, im in six.iteritems(images['mask']):
                 image_data = get_plane(self.mask, vox, plane)
                 masked_data = np.ma.masked_where(image_data < 0.5, image_data)
                 im.set_data(masked_data)

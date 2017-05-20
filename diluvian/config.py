@@ -10,6 +10,7 @@ import os
 
 import numpy as np
 import pytoml as toml
+import six
 
 
 class BaseConfig(object):
@@ -20,7 +21,7 @@ class BaseConfig(object):
     """
     def __str__(self):
         sanitized = {}
-        for k, v in self.__dict__.iteritems():
+        for k, v in six.iteritems(self.__dict__):
             if isinstance(v, np.ndarray):
                 sanitized[k] = v.tolist()
             else:
@@ -142,7 +143,7 @@ class OptimizerConfig(BaseConfig):
         Class name of the Keras optimizer to use.
     """
     def __init__(self, settings):
-        for k, v in settings.iteritems():
+        for k, v in six.iteritems(settings):
             if k != 'klass':
                 setattr(self, k, v)
         self.klass = str(settings.get('klass', 'SGD'))
@@ -257,12 +258,12 @@ class Config(object):
 
     def __str__(self):
         sanitized = {}
-        for n, c in self.__dict__.iteritems():
+        for n, c in six.iteritems(self.__dict__):
             if not isinstance(c, BaseConfig):
                 sanitized[n] = c
                 continue
             sanitized[n] = {}
-            for k, v in c.__dict__.iteritems():
+            for k, v in six.iteritems(c.__dict__):
                 if isinstance(v, np.ndarray):
                     sanitized[n][k] = v.tolist()
                 else:

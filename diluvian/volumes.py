@@ -12,6 +12,7 @@ import numpy as np
 from PIL import Image
 import pytoml as toml
 import requests
+import six
 
 from keras.utils.data_utils import get_file
 
@@ -44,7 +45,7 @@ class SubvolumeBounds(object):
         with open(filename, 'r') as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:
-                for k, v in row.iteritems():
+                for k, v in six.iteritems(row):
                     if not v:
                         row[k] = None
                     elif v[0] == '[':
