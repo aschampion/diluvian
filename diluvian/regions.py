@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
 
+from __future__ import division
+
 import itertools
 
 import matplotlib.animation as animation
@@ -86,9 +88,9 @@ class Region(object):
         else:
             self.MOVE_GRID_OFFSET = np.mod(seed_vox, self.MOVE_DELTA).astype(np.int64)
         self.move_bounds = (
-            np.ceil(np.divide((CONFIG.model.input_fov_shape - 1) / 2 - self.MOVE_GRID_OFFSET,
+            np.ceil(np.divide((CONFIG.model.input_fov_shape - 1) // 2 - self.MOVE_GRID_OFFSET,
                               self.MOVE_DELTA)).astype(np.int64),
-            self.vox_to_pos(np.array(self.bounds) - 1 - (CONFIG.model.input_fov_shape - 1) / 2),
+            self.vox_to_pos(np.array(self.bounds) - 1 - (CONFIG.model.input_fov_shape - 1) // 2),
             )
         self.move_check_thickness = CONFIG.model.move_check_thickness
         if mask is None:
@@ -176,7 +178,7 @@ class Region(object):
         padding_pre, padding_post : ndarray
             How much the block extends outside the region bounds.
         """
-        margin = (shape - 1) / 2
+        margin = (shape - 1) // 2
         block_min = vox - margin
         block_max = vox + margin + 1
         padding_pre = np.maximum(0, -block_min)
@@ -215,7 +217,7 @@ class Region(object):
             in the move plane in that direction.
         """
         moves = []
-        ctr = (np.asarray(mask.shape) - 1) / 2 + 1
+        ctr = (np.asarray(mask.shape) - 1) // 2 + 1
         for move in map(np.array, [(1, 0, 0), (-1, 0, 0),
                                    (0, 1, 0), (0, -1, 0),
                                    (0, 0, 1), (0, 0, -1)]):
@@ -425,7 +427,7 @@ class Region(object):
             'bt': {},
         }
         current_vox = self.pos_to_vox(self.seed_pos)
-        margin = (CONFIG.model.input_fov_shape) / 2
+        margin = (CONFIG.model.input_fov_shape) // 2
         for plane, ax in six.iteritems(axes):
             ax.get_xaxis().set_visible(False)
             ax.get_yaxis().set_visible(False)

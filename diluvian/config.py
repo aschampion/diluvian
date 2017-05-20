@@ -6,6 +6,8 @@ configuration state.
 """
 
 
+from __future__ import division
+
 import os
 
 import numpy as np
@@ -85,7 +87,7 @@ class ModelConfig(BaseConfig):
 
     @property
     def move_step(self):
-        return (self.output_fov_shape - 1) / self.output_fov_move_fraction
+        return (self.output_fov_shape - 1) // self.output_fov_move_fraction
 
 
 class NetworkConfig(BaseConfig):

@@ -2,6 +2,8 @@
 """Flood-fill network creation and compilation using Keras."""
 
 
+from __future__ import division
+
 import inspect
 
 import numpy as np
@@ -40,7 +42,7 @@ def make_flood_fill_network(input_fov_shape, output_fov_shape, network_config):
             activation='relu',
             padding='same')(ffn)
 
-    contraction = (input_fov_shape - output_fov_shape) / 2
+    contraction = (input_fov_shape - output_fov_shape) // 2
     if np.any(np.less(contraction, 0)):
         raise ValueError('Output FOV shape can not be larger than input FOV shape.')
     contraction_cumu = np.zeros(3, dtype=np.int32)
@@ -144,7 +146,7 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape):
             padding='same')(model)
 
     # Crop and pass forward to upsampling.
-    contraction = (np.array(model.get_shape().as_list()[1:4]) - output_shape) / 2
+    contraction = (np.array(model.get_shape().as_list()[1:4]) - output_shape) // 2
     forward = Cropping3D(zip(list(contraction), list(contraction)))(model)
     if network_config.dropout_probability > 0.0:
         forward = GaussianDropout(network_config.dropout_probability)(forward)

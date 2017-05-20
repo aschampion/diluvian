@@ -2,6 +2,8 @@
 """Volume preprocessing for seed generation and data augmentation."""
 
 
+from __future__ import division
+
 import logging
 
 import numpy as np
@@ -51,7 +53,7 @@ def grid_seeds(image_data):
     """
     seeds = []
     shape = image_data.shape
-    grid_size = (CONFIG.model.output_fov_shape - 1) / 2
+    grid_size = (CONFIG.model.output_fov_shape - 1) // 2
     for x in range(grid_size[0], shape[0], grid_size[0]):
         for y in range(grid_size[1], shape[1], grid_size[1]):
             for z in range(grid_size[2], shape[2], grid_size[2]):

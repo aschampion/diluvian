@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 
+from __future__ import division
 from __future__ import print_function
 
 import importlib
@@ -370,8 +371,8 @@ def train_network(
             f_a_bins=f_a_bins,
             reset_generators=True)
 
-    TRAINING_STEPS_PER_EPOCH = CONFIG.training.training_size / CONFIG.training.batch_size
-    VALIDATION_STEPS = CONFIG.training.validation_size / CONFIG.training.batch_size
+    TRAINING_STEPS_PER_EPOCH = CONFIG.training.training_size // CONFIG.training.batch_size
+    VALIDATION_STEPS = CONFIG.training.validation_size // CONFIG.training.batch_size
 
     # Pre-train
     training_gens = [
@@ -382,7 +383,7 @@ def train_network(
     worker_gens = [
             training_gens[i::CONFIG.training.num_workers]
             for i in xrange(CONFIG.training.num_workers)]
-    worker_training_size = CONFIG.training.training_size / CONFIG.training.num_workers
+    worker_training_size = CONFIG.training.training_size // CONFIG.training.num_workers
     # Create a training data generator for each worker.
     training_data = [moving_training_generator(
             Roundrobin(*gen),

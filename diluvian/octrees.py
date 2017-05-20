@@ -2,6 +2,8 @@
 """Simple octree data structures for block sparse 3D arrays."""
 
 
+from __future__ import division
+
 import numpy as np
 
 
@@ -167,7 +169,7 @@ class Node(object):
 class BranchNode(Node):
     def __init__(self, parent, bounds, **kwargs):
         super(BranchNode, self).__init__(parent, bounds, **kwargs)
-        self.midpoint = (self.bounds[1] + self.bounds[0]) / 2
+        self.midpoint = (self.bounds[1] + self.bounds[0]) // 2
         self.children = [[[None for _ in range(2)] for _ in range(2)] for _ in range(2)]
 
     def count_leaves(self):

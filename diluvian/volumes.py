@@ -2,6 +2,8 @@
 """Volumes of raw image and labeled object data."""
 
 
+from __future__ import division
+
 from collections import namedtuple
 import csv
 import logging
@@ -313,7 +315,7 @@ class Volume(object):
 
         seed = bounds.seed
         if seed is None:
-            seed = np.array(label_subvol.shape, dtype=np.int64) / 2
+            seed = np.array(label_subvol.shape, dtype=np.int64) // 2
 
         label_id = bounds.label_id
         if label_id is None:
@@ -829,7 +831,7 @@ class ImageStackVolume(Volume):
 
         seed = bounds.seed
         if seed is None:
-            seed = np.array(image_subvol.shape, dtype=np.int64) / 2
+            seed = np.array(image_subvol.shape, dtype=np.int64) // 2
 
         return Subvolume(image_subvol, label_subvol, seed, bounds.label_id)
 
@@ -921,7 +923,7 @@ def static_training_generator(subvolumes, batch_size, training_size,
         subvolumes will be sampled in the same order each epoch.
     """
     mask_input = np.full(np.append(subvolumes.shape, (1,)), CONFIG.model.v_false, dtype='float32')
-    mask_input[tuple(np.array(mask_input.shape) / 2)] = CONFIG.model.v_true
+    mask_input[tuple(np.array(mask_input.shape) // 2)] = CONFIG.model.v_true
     mask_input = np.tile(mask_input, (batch_size, 1, 1, 1, 1))
     f_a_init = False
 
