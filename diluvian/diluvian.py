@@ -42,6 +42,7 @@ from .volumes import (
         HDF5Volume,
         SubvolumeBounds,
         MirrorAugmentGenerator,
+        MissingDataAugmentGenerator,
         PermuteAxesAugmentGenerator,
         static_training_generator,
         moving_training_generator,
@@ -303,6 +304,8 @@ def augment_subvolume_generator(subvolume_generator):
         gen = PermuteAxesAugmentGenerator(gen, axes)
     for axis in CONFIG.training.augment_mirrors:
         gen = MirrorAugmentGenerator(gen, axis)
+    for v in CONFIG.training.augment_missing_data:
+        gen = MissingDataAugmentGenerator(gen, v['axis'], v['prob'])
 
     return gen
 

@@ -231,6 +231,61 @@ class PermuteAxesAugmentGenerator(object):
             return subv
 
 
+class MissingDataAugmentGenerator(object):
+    """Repeats subvolumes from a subvolume generator with missing data planes.
+
+    For each subvolume in the original generator, this generator will yield the
+    original subvolume and may yield a subvolume with missing planes of image
+    and label mask data.
+
+    Parameters
+    ----------
+    subvolume_generator : SubvolumeGenerator
+    axis : int
+    probability : float
+        Independent probability that each plane of data along axis is missing.
+    """
+    def __init__(self, subvolume_generator, axis, probability):
+        self.subvolume_generator = subvolume_generator
+        self.axis = axis
+        self.probability = probability
+        self.subvolume = None
+
+    @property
+    def shape(self):
+        return self.subvolume_generator.shape
+
+    def __iter__(self):
+        return self
+
+    def reset(self):
+        self.subvolume = None
+        self.subvolume_generator.reset()
+
+    def next(self):
+        if self.subvolume is not None:
+            rolls = np.random.sample(self.shape[self.axis])
+            # Remove the seed plane from possibilities.
+            rolls[self.subvolume.seed[self.axis]] = 1.1
+            missing_sections = np.where(rolls < self.probability)
+
+            if missing_sections:
+                subv = self.subvolume
+                subv = Subvolume(subv.image.copy(),
+                                 subv.label_mask.copy(),
+                                 subv.seed,
+                                 subv.label_id)
+                slices = [slice(None), slice(None), slice(None)]
+                slices[self.axis] = missing_sections
+                subv.image[slices] = 0
+                subv.label_mask[slices] = False
+                self.subvolume = None
+                return subv
+
+        self.subvolume = next(self.subvolume_generator)
+        return self.subvolume
+
+
 class Volume(object):
     DIM = DimOrder(Z=0, Y=1, X=2)
 

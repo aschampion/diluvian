@@ -44,5 +44,6 @@ validation_partition = {".*" = [1, 0, 0]}
 patience = 20
 augment_mirrors = [0, 1, 2]
 augment_permute_axes = [[0, 2, 1]]
+augment_missing_data = [{axis = 0, prob = 0.01}]
 
 [postprocessing]
