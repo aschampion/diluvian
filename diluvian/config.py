@@ -198,6 +198,11 @@ class TrainingConfig(BaseConfig):
         List of dictionaries with ``axis`` and ``prob`` keys, indicating
         an axis to perform data blanking along, and the probability to blank
         each plane in the axis, respectively.
+    augment_noise : list of dict
+        List of dictionaries with ``axis``, ``mul`` and `add`` keys, indicating
+        an axis to perform independent Gaussian noise augmentation on, and the
+        standard deviations of 1-mean multiplicative and 0-mean additive noise,
+        respectively.
     """
     def __init__(self, settings):
         self.num_gpus = int(settings.get('num_gpus', 1))
@@ -219,6 +224,7 @@ class TrainingConfig(BaseConfig):
         self.augment_mirrors = map(int, np.array(settings.get('augment_mirrors', [0, 1, 2])))
         self.augment_permute_axes = settings.get('augment_permute_axes', [[0, 2, 1]])
         self.augment_missing_data = settings.get('augment_missing_data', [{'axis': 0, 'prob': 0.01}])
+        self.augment_noise = settings.get('augment_noise', [{'axis': 0, 'mul': 0.1, 'add': 0.1}])
 
 
 class PostprocessingConfig(BaseConfig):

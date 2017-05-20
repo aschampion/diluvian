@@ -39,6 +39,7 @@ from .util import (
         write_keras_history_to_csv,
         )
 from .volumes import (
+        GaussianNoiseAugmentGenerator,
         HDF5Volume,
         SubvolumeBounds,
         MirrorAugmentGenerator,
@@ -304,6 +305,8 @@ def augment_subvolume_generator(subvolume_generator):
         gen = PermuteAxesAugmentGenerator(gen, axes)
     for axis in CONFIG.training.augment_mirrors:
         gen = MirrorAugmentGenerator(gen, axis)
+    for v in CONFIG.training.augment_noise:
+        gen = GaussianNoiseAugmentGenerator(gen, v['axis'], v['mul'], v['add'])
     for v in CONFIG.training.augment_missing_data:
         gen = MissingDataAugmentGenerator(gen, v['axis'], v['prob'])
 

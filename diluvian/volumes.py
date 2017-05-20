@@ -286,6 +286,67 @@ class MissingDataAugmentGenerator(object):
         return self.subvolume
 
 
+class GaussianNoiseAugmentGenerator(object):
+    """Repeats subvolumes from a subvolume generator with Gaussian noise.
+
+    For each subvolume in the original generator, this generator will yield two
+    subvolumes: the original subvolume and the subvolume with multiplicative
+    and additive Gaussian noise applied to the image data.
+
+    Parameters
+    ----------
+    subvolume_generator : SubvolumeGenerator
+    axis : int
+        Axis along which noise will be applied independently. For example,
+        0 will apply different noise to each z-section. -1 will apply
+        uniform noise to the entire subvolume.
+    multiplicative : float
+        Standard deviation for 1-mean Gaussian multiplicative noise.
+    multiplicative : float
+        Standard deviation for 0-mean Gaussian additive noise.
+    """
+    def __init__(self, subvolume_generator, axis, multiplicative, additive):
+        self.subvolume_generator = subvolume_generator
+        self.axis = axis
+        self.multiplicative = multiplicative
+        self.additive = additive
+        self.subvolume = None
+
+    @property
+    def shape(self):
+        return self.subvolume_generator.shape
+
+    def __iter__(self):
+        return self
+
+    def reset(self):
+        self.subvolume = None
+        self.subvolume_generator.reset()
+
+    def next(self):
+        if self.subvolume is None:
+            self.subvolume = next(self.subvolume_generator)
+            return self.subvolume
+        else:
+            subv = self.subvolume
+
+            # Generate a transformed shape that will apply vector addition
+            # and multiplication along to correct axis.
+            shape_xform = np.ones((1, 3), dtype=np.int32).ravel()
+            shape_xform[self.axis] = -1
+
+            dim_size = 1 if self.axis == -1 else self.shape[self.axis]
+            mul_noise = np.random.normal(1.0, self.multiplicative, dim_size).astype(subv.image.dtype)
+            add_noise = np.random.normal(0.0, self.additive, dim_size).astype(subv.image.dtype)
+
+            subv = Subvolume(subv.image * mul_noise.reshape(shape_xform) + add_noise.reshape(shape_xform),
+                             subv.label_mask,
+                             subv.seed,
+                             subv.label_id)
+            self.subvolume = None
+            return subv
+
+
 class Volume(object):
     DIM = DimOrder(Z=0, Y=1, X=2)
 
