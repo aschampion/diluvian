@@ -4,84 +4,28 @@
 from __future__ import division
 from __future__ import print_function
 
-import importlib
 import itertools
 import logging
-import random
 import re
 
-import matplotlib as mpl
-# Use the 'Agg' backend to allow the generation of plots even if no X server
-# is available. The matplotlib backend must be set before importing pyplot.
-mpl.use('Agg')  # noqa
-import matplotlib.pyplot as plt
 import numpy as np
 import pytoml as toml
 import six
 from six.moves import input as raw_input
-from six.moves import range as xrange
 from tqdm import tqdm
 
-from keras.callbacks import (
-        Callback,
-        EarlyStopping,
-        ModelCheckpoint,
-        TensorBoard,
-        )
-
 from .config import CONFIG
-from .network import compile_network, load_model
+from .network import load_model
 from . import preprocessing
-from .third_party.multi_gpu import make_parallel
 from .util import (
-        extend_keras_history,
-        get_color_shader,
         Roundrobin,
         WrappedViewer,
-        write_keras_history_to_csv,
         )
 from .volumes import (
-        ContrastAugmentGenerator,
-        GaussianNoiseAugmentGenerator,
         HDF5Volume,
         SubvolumeBounds,
-        MirrorAugmentGenerator,
-        MissingDataAugmentGenerator,
-        PermuteAxesAugmentGenerator,
-        static_training_generator,
-        moving_training_generator,
         )
 from .regions import Region
-
-
-def plot_history(history):
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    ax.plot(history.history['loss'])
-    ax.plot(history.history['val_loss'])
-    fig.suptitle('model loss')
-    ax.set_ylabel('loss')
-    ax.set_xlabel('epoch')
-    ax.legend(['train', 'test'], loc='upper right')
-
-    return fig
-
-
-class PredictionCopy(Callback):
-    """Keras batch end callback to run prediction on input from a kludge.
-
-    Used to predict masks for FOV moving. Surprisingly this is faster than
-    using a custom Keras training function to copy model predictions at the
-    same time as gradient updates.
-    """
-    def __init__(self, kludge, name=None):
-        self.kludge = kludge
-        self.name = name if name is not None else ''
-
-    def on_batch_end(self, batch, logs={}):
-        if self.kludge['inputs'] and self.kludge['outputs'] is None:
-            logging.debug('Running prediction kludge {}'.format(self.name))
-            self.kludge['outputs'] = self.model.predict(self.kludge['inputs'])
 
 
 def generate_subvolume_bounds(filename, volumes, num_bounds, sparse=False):
@@ -290,197 +234,6 @@ def partition_volumes(volumes):
     validation_volumes = apply_partitioning(volumes, CONFIG.training.validation_partition)
 
     return training_volumes, validation_volumes
-
-
-def augment_subvolume_generator(subvolume_generator):
-    """Apply data augmentations to a subvolume generator.
-
-    Parameters
-    ----------
-    subvolume_generator : diluvian.volumes.SubvolumeGenerator
-
-    Returns
-    -------
-    diluvian.volumes.SubvolumeGenerator
-    """
-    gen = subvolume_generator
-    for axes in CONFIG.training.augment_permute_axes:
-        gen = PermuteAxesAugmentGenerator(gen, axes)
-    for axis in CONFIG.training.augment_mirrors:
-        gen = MirrorAugmentGenerator(gen, axis)
-    for v in CONFIG.training.augment_noise:
-        gen = GaussianNoiseAugmentGenerator(gen, v['axis'], v['mul'], v['add'])
-    for v in CONFIG.training.augment_missing_data:
-        gen = MissingDataAugmentGenerator(gen, v['axis'], v['prob'])
-    for v in CONFIG.training.augment_contrast:
-        gen = ContrastAugmentGenerator(gen, v['axis'], v['prob'], v['scaling_mean'], v['scaling_std'],
-                                       v['center_mean'], v['center_std'])
-
-    return gen
-
-
-def train_network(
-        model_file=None,
-        volumes=None,
-        static_validation=False,
-        model_output_filebase=None,
-        model_checkpoint_file=None,
-        tensorboard=False,
-        viewer=False,
-        metric_plot=False):
-    random.seed(CONFIG.random_seed)
-
-    if model_file is None:
-        factory_mod_name, factory_func_name = CONFIG.network.factory.rsplit('.', 1)
-        factory_mod = importlib.import_module(factory_mod_name)
-        factory = getattr(factory_mod, factory_func_name)
-        ffn = factory(CONFIG.model.input_fov_shape,
-                      CONFIG.model.output_fov_shape,
-                      CONFIG.network)
-    else:
-        ffn = load_model(model_file, CONFIG.network)
-
-    # Multi-GPU models are saved as a single-GPU model prior to compilation,
-    # so if loading from such a model file it will need to be recompiled.
-    if not hasattr(ffn, 'optimizer'):
-        if CONFIG.training.num_gpus > 1:
-            ffn = make_parallel(ffn, CONFIG.training.num_gpus)
-        compile_network(ffn, CONFIG.optimizer)
-
-    if model_output_filebase is None:
-        model_output_filebase = 'model_output'
-
-    if volumes is None:
-        raise ValueError('Volumes must be provided.')
-
-    CONFIG.to_toml(model_output_filebase + '.toml')
-
-    f_a_bins = CONFIG.training.fill_factor_bins
-
-    training_volumes, validation_volumes = partition_volumes(volumes)
-
-    num_training = len(training_volumes)
-    num_validation = len(validation_volumes)
-
-    logging.info('Using {} volumes for training, {} for validation.'.format(num_training, num_validation))
-
-    callbacks = []
-
-    validation_kludge = {'inputs': None, 'outputs': None}
-    if static_validation:
-        validation_shape = CONFIG.model.input_fov_shape
-    else:
-        validation_shape = CONFIG.model.training_subv_shape
-        callbacks.append(PredictionCopy(validation_kludge, 'Validation'))
-    validation_gens = [
-            augment_subvolume_generator(v.subvolume_generator(shape=validation_shape))
-            for v in validation_volumes.itervalues()]
-    validation_data = moving_training_generator(
-            Roundrobin(*validation_gens),
-            CONFIG.training.batch_size,
-            CONFIG.training.validation_size,
-            validation_kludge,
-            f_a_bins=f_a_bins,
-            reset_generators=True)
-
-    TRAINING_STEPS_PER_EPOCH = CONFIG.training.training_size // CONFIG.training.batch_size
-    VALIDATION_STEPS = CONFIG.training.validation_size // CONFIG.training.batch_size
-
-    # Pre-train
-    training_gens = [
-            augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.input_fov_shape))
-            for v in training_volumes.itervalues()]
-    random.shuffle(training_gens)
-    # Divide training generators up for workers.
-    worker_gens = [
-            training_gens[i::CONFIG.training.num_workers]
-            for i in xrange(CONFIG.training.num_workers)]
-    worker_training_size = CONFIG.training.training_size // CONFIG.training.num_workers
-    # Create a training data generator for each worker.
-    training_data = [moving_training_generator(
-            Roundrobin(*gen),
-            CONFIG.training.batch_size,
-            worker_training_size,
-            {'outputs': None},  # Allows use of moving training gen like static.
-            f_a_bins=f_a_bins,
-            reset_generators=CONFIG.training.reset_generators) for gen in worker_gens]
-    history = ffn.fit_generator(
-            Roundrobin(*training_data),
-            steps_per_epoch=TRAINING_STEPS_PER_EPOCH,
-            epochs=CONFIG.training.static_train_epochs,
-            max_q_size=CONFIG.training.num_workers,
-            workers=1,
-            callbacks=callbacks,
-            validation_data=validation_data,
-            validation_steps=VALIDATION_STEPS)
-
-    # Moving training
-    kludges = [{'inputs': None, 'outputs': None} for _ in range(CONFIG.training.num_workers)]
-    callbacks.extend([PredictionCopy(kludge, 'Training {}'.format(n)) for n, kludge in enumerate(kludges)])
-    callbacks.append(ModelCheckpoint(model_output_filebase + '.hdf5', save_best_only=True))
-    if model_checkpoint_file:
-        callbacks.append(ModelCheckpoint(model_checkpoint_file))
-    callbacks.append(EarlyStopping(patience=CONFIG.training.patience))
-    if tensorboard:
-        callbacks.append(TensorBoard())
-
-    training_gens = [
-            augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.training_subv_shape))
-            for v in training_volumes.itervalues()]
-    random.shuffle(training_gens)
-    worker_gens = [
-            training_gens[i::CONFIG.training.num_workers]
-            for i in xrange(CONFIG.training.num_workers)]
-    training_data = [moving_training_generator(
-            Roundrobin(*gen),
-            CONFIG.training.batch_size,
-            worker_training_size,
-            kludge,
-            f_a_bins=f_a_bins,
-            reset_generators=CONFIG.training.reset_generators) for gen, kludge in zip(worker_gens, kludges)]
-    moving_history = ffn.fit_generator(
-            Roundrobin(*training_data),
-            steps_per_epoch=TRAINING_STEPS_PER_EPOCH,
-            epochs=CONFIG.training.total_epochs,
-            initial_epoch=CONFIG.training.static_train_epochs,
-            max_q_size=CONFIG.training.num_workers,
-            workers=1,
-            callbacks=callbacks,
-            validation_data=validation_data,
-            validation_steps=VALIDATION_STEPS)
-    extend_keras_history(history, moving_history)
-
-    write_keras_history_to_csv(history, model_output_filebase + '.csv')
-
-    if viewer:
-        dupe_data = static_training_generator(
-                validation_volumes.values()[0].subvolume_generator(shape=CONFIG.model.input_fov_shape),
-                CONFIG.training.batch_size,
-                CONFIG.training.training_size)
-        viz_ex = itertools.islice(dupe_data, 1)
-
-        for inputs, targets in viz_ex:
-            viewer = WrappedViewer(voxel_size=list(np.flipud(CONFIG.volume.resolution)))
-            viewer.add(inputs['image_input'][0, :, :, :, 0],
-                       name='Image')
-            viewer.add(inputs['mask_input'][0, :, :, :, 0],
-                       name='Mask Input',
-                       shader=get_color_shader(2))
-            viewer.add(targets[0][0, :, :, :, 0],
-                       name='Mask Target',
-                       shader=get_color_shader(0))
-            output = ffn.predict(inputs)
-            viewer.add(output[0, :, :, :, 0],
-                       name='Mask Output',
-                       shader=get_color_shader(1))
-
-            viewer.print_view_prompt()
-
-    if metric_plot:
-        fig = plot_history(history)
-        fig.savefig(model_output_filebase + '.png')
-
-    return history
 
 
 def view_volumes(volumes):

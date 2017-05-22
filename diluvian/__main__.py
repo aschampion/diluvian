@@ -184,7 +184,7 @@ def main():
     if args.command == 'train':
         # Late import to prevent loading large modules for short CLI commands.
         init_seeds()
-        from .diluvian import train_network
+        from .training import train_network
 
         volumes = load_volumes(args.volume_files, args.in_memory)
         train_network(model_file=args.model_file,
