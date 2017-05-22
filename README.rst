@@ -47,6 +47,13 @@ Install diluvian and its dependencies into your virtualenv:
 
    pip install diluvian
 
+For compatibility diluvian only requires TensorFlow CPU by default, but you
+will want to use TensorFlow GPU if you have installed CUDA:
+
+.. code-block:: console
+
+   pip install 'tensorflow-gpu==1.1'
+
 To test that everything works train diluvian on three volumes from the
 `CREMI challenge <https://cremi.org>`_:
 

@@ -7,8 +7,12 @@ Installation
 Diluvian requires CUDA. For help installing CUDA, follow the
 `TensorFlow installation <https://www.tensorflow.org/install/>`_ instructions
 for GPU support.
-Note that you do not actually need to install TensorFlow itself, as diluvian
-will install the version of ``tensorflow-gpu`` it requires during setup.
+Note that diluvian will only install TensorFlow CPU during setup, so you will
+want to install the version of ``tensorflow-gpu`` diluvian requires:
+
+.. code-block:: console
+
+    pip install 'tensorflow-gpu==1.1'
 
 You should install diluvian
 `in a virtualenv <http://docs.python-guide.org/en/latest/dev/virtualenvs/>`_
