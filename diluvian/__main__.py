@@ -68,6 +68,10 @@ def _make_main_parser():
                  'file is saved every epoch regardless of validation performance.'
                  'Can use Keras format arguments: https://keras.io/callbacks/#modelcheckpoint')
     train_parser.add_argument(
+            '--early-restart', action='store_true', dest='early_restart', default=False,
+            help='If training is aborted early because an early abort metric '
+                 'criteria, restart training with a new random seed.')
+    train_parser.add_argument(
             '--tensorboard', action='store_true', dest='tensorboard', default=False,
             help='Output tensorboard log files while training.')
     train_parser.add_argument(
@@ -184,16 +188,33 @@ def main():
     if args.command == 'train':
         # Late import to prevent loading large modules for short CLI commands.
         init_seeds()
-        from .training import train_network
+        from .training import EarlyAbortException, train_network
 
         volumes = load_volumes(args.volume_files, args.in_memory)
-        train_network(model_file=args.model_file,
-                      volumes=volumes,
-                      model_output_filebase=args.model_output_filebase,
-                      model_checkpoint_file=args.model_checkpoint_file,
-                      tensorboard=args.tensorboard,
-                      viewer=args.viewer,
-                      metric_plot=args.metric_plot)
+        while True:
+            try:
+                train_network(model_file=args.model_file,
+                              volumes=volumes,
+                              model_output_filebase=args.model_output_filebase,
+                              model_checkpoint_file=args.model_checkpoint_file,
+                              tensorboard=args.tensorboard,
+                              viewer=args.viewer,
+                              metric_plot=args.metric_plot)
+            except EarlyAbortException as inst:
+                if args.early_restart:
+                    import numpy as np
+                    new_seed = CONFIG.random_seed
+                    while new_seed == CONFIG.random_seed:
+                        new_seed = np.random.randint(int(1e8))
+                    CONFIG.random_seed = new_seed
+                    logging.warning(str(inst))
+                    logging.warning('Training aborted, restarting with random seed %s', new_seed)
+                    init_seeds()
+                    continue
+                else:
+                    logging.critical(str(inst))
+                    break
+            break
 
     elif args.command == 'fill':
         # Late import to prevent loading large modules for short CLI commands.

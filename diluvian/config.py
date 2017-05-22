@@ -190,6 +190,13 @@ class TrainingConfig(BaseConfig):
     patience : int
         Number of epochs after the last minimal validation loss to terminate
         training.
+    early_abort_epoch : int
+        If provided, training will check at the end of this epoch
+        whether validation loss is less than ``early_abort_loss``. If not,
+        training will be aborted, and may be restarted with a new seed
+        depending on CLI options. By default this is disabled.
+    early_abort_loss : float
+        See ``early_abort_epoch``.
     augment_mirrors : sequence of int
         Axes along which to mirror for data augmentation.
     augment_permute_axes : sequence of sequence of int
@@ -228,6 +235,8 @@ class TrainingConfig(BaseConfig):
         self.training_partition = settings.get('training_partition', {'.*': [0, 0, 0]})
         self.validation_partition = settings.get('validation_partition', {'.*': [1, 0, 0]})
         self.patience = int(np.array(settings.get('patience', 10)))
+        self.early_abort_epoch = settings.get('early_abort_epoch', None)
+        self.early_abort_loss = settings.get('early_abort_loss', None)
         self.augment_mirrors = map(int, np.array(settings.get('augment_mirrors', [0, 1, 2])))
         self.augment_permute_axes = settings.get('augment_permute_axes', [[0, 2, 1]])
         self.augment_missing_data = settings.get('augment_missing_data', [{'axis': 0, 'prob': 0.01}])

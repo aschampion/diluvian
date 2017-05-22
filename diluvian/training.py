@@ -80,6 +80,35 @@ class PredictionCopy(Callback):
             self.kludge['outputs'] = self.model.predict(self.kludge['inputs'])
 
 
+class EarlyAbortException(Exception):
+    pass
+
+
+class EarlyAbort(Callback):
+    """Keras epoch end callback that aborts if a metric is above a threshold.
+
+    This is useful when convergence is sensitive to initial conditions and
+    models are obviously not useful to continue training after only a few
+    epochs. Unlike the early stopping callback, this is considered an
+    abnormal termination and throws an exception so that behaviors like
+    restarting with a new random seed are possible.
+    """
+    def __init__(self, monitor='val_loss', threshold_epoch=None, threshold_value=None):
+        if threshold_epoch is None or threshold_value is None:
+            raise ValueError('Epoch and value to enforce threshold must be provided.')
+
+        self.monitor = monitor
+        self.threshold_epoch = threshold_epoch - 1
+        self.threshold_value = threshold_value
+
+    def on_epoch_end(self, epoch, logs=None):
+        if epoch == self.threshold_epoch:
+            current = logs.get(self.monitor)
+            if current >= self.threshold_value:
+                raise EarlyAbortException('Aborted after epoch {} because {} was {} < {}'.format(
+                    self.threshold_epoch, self.monitor, current, self.threshold_value))
+
+
 def augment_subvolume_generator(subvolume_generator):
     """Apply data augmentations to a subvolume generator.
 
@@ -334,6 +363,10 @@ def train_network(
     logging.info('Using {} volumes for training, {} for validation.'.format(num_training, num_validation))
 
     callbacks = []
+    if CONFIG.training.early_abort_epoch is not None and \
+       CONFIG.training.early_abort_loss is not None:
+        callbacks.append(EarlyAbort(threshold_epoch=CONFIG.training.early_abort_epoch,
+                                    threshold_value=CONFIG.training.early_abort_loss))
 
     validation_kludge = {'inputs': None, 'outputs': None}
     if static_validation:
