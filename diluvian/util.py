@@ -10,6 +10,7 @@ import webbrowser
 
 import neuroglancer
 import numpy as np
+from six.moves import input as raw_input
 
 
 class WrappedViewer(neuroglancer.Viewer):

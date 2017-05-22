@@ -15,6 +15,7 @@ from PIL import Image
 import pytoml as toml
 import requests
 import six
+from six.moves import range as xrange
 
 from keras.utils.data_utils import get_file
 

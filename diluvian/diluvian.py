@@ -18,6 +18,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytoml as toml
 import six
+from six.moves import input as raw_input
+from six.moves import range as xrange
 from tqdm import tqdm
 
 from keras.callbacks import (
