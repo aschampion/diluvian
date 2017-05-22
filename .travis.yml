@@ -8,7 +8,7 @@ notifications:
   email: false
 install:
     - pip install -U pip
-    - pip install tox-travis coverage==4.3.4 tensorflow
+    - pip install tox-travis coverage==4.3.4
 script: tox
 deploy:
   on:
