@@ -25,7 +25,7 @@ Diluvian uses a packaging and build harness
 
 .. [Januszewski2016]
    Michał Januszewski, Jeremy Maitin-Shepard, Peter Li, Jorgen Kornfeld,
-   and Winfried Denk.
+   Winfried Denk, and Viren Jain.
    Flood-filling networks. *arXiv preprint*
    *arXiv:1611.00421*, 2016.
 
