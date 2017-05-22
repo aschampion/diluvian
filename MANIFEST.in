@@ -15,4 +15,4 @@ recursive-include docs *.rst conf.py Makefile make.bat *.jpg *.png *.gif
 recursive-include diluvian *.py *.txt
 include requirements.txt
 recursive-include requirements *.txt
-include conf/default.toml conf/cremi_datasets.toml
+include conf/default.toml conf/cremi_datasets.toml conf/cremi_test_datasets.toml
