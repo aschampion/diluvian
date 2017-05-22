@@ -318,4 +318,4 @@ class Config(object):
 
 
 CONFIG = Config()
-CONFIG.from_toml(os.path.join(os.path.dirname(__file__), '..', 'conf', 'default.toml'))
+CONFIG.from_toml(os.path.join(os.path.dirname(__file__), 'conf', 'default.toml'))

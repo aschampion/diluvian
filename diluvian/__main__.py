@@ -29,14 +29,14 @@ def _make_main_parser():
 
     common_parser.add_argument(
             '-c', '--config-file', action='append', dest='config_files', default=[],
-            help='Configuration files to use. For defaults, see `conf/default.toml`. '
+            help='Configuration files to use. For defaults, see `diluvian/conf/default.toml`. '
                  'Values are overwritten in the order provided.')
     common_parser.add_argument(
             '-m', '--model-file', dest='model_file', default=None,
             help='Existing network model file to use for prediction or continued training.')
     common_parser.add_argument(
             '-v', '--volume-file', action='append', dest='volume_files', default=[],
-            help='Volume configuration files. For example, see `conf/cremi_datasets.toml`.'
+            help='Volume configuration files. For example, see `diluvian/conf/cremi_datasets.toml`.'
                  'Values are overwritten in the order provided.')
     common_parser.add_argument(
             '--no-in-memory', action='store_false', dest='in_memory', default=True,
@@ -272,7 +272,7 @@ def load_volumes(volume_files, in_memory, name_regex=None):
         for volume_file in volume_files:
             volumes.update(HDF5Volume.from_toml(volume_file))
     else:
-        volumes = HDF5Volume.from_toml(os.path.join(os.path.dirname(__file__), '..', 'conf', 'cremi_datasets.toml'))
+        volumes = HDF5Volume.from_toml(os.path.join(os.path.dirname(__file__), 'conf', 'cremi_datasets.toml'))
 
     if name_regex is not None:
         name_regex = re.compile(name_regex)

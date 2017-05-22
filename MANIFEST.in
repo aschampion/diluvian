@@ -13,6 +13,6 @@ recursive-exclude * *.py[co]
 recursive-include docs *.rst conf.py Makefile make.bat *.jpg *.png *.gif
 
 recursive-include diluvian *.py *.txt
+recursive-include diluvian/conf *.toml
 include requirements.txt
 recursive-include requirements *.txt
-include conf/default.toml conf/cremi_datasets.toml conf/cremi_test_datasets.toml
