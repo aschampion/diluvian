@@ -282,3 +282,17 @@ texinfo_documents = [
 # Fix numpydoc and autosummary compatibility.
 # See: https://github.com/numpy/numpydoc/pull/6
 numpydoc_class_members_toctree = False
+
+# Run autodoc here, rather than in a Makefile, so that it is also
+# executed by readthedocs.org.
+def run_apidoc(_):
+    from sphinx.apidoc import main
+    import os
+    import sys
+    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+    cur_dir = os.path.abspath(os.path.dirname(__file__))
+    module = os.path.join('..', project)
+    main(['-e', '-o', cur_dir, module, '--force'])
+
+def setup(app):
+    app.connect('builder-inited', run_apidoc)
