@@ -6,7 +6,9 @@ python:
     - 2.7
 notifications:
   email: false
-install: pip install tox-travis coverage==4.3.4 tensorflow
+install:
+    - pip install -U pip
+    - pip install tox-travis coverage==4.3.4 tensorflow
 script: tox
 deploy:
   on:
