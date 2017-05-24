@@ -78,13 +78,14 @@ def fill_subvolume_with_model(
         # Flood-fill and get resulting mask.
         # Allow reading outside the image volume bounds to allow segmentation
         # to fill all the way to the boundary.
-        region = Region(subvolume.image, seed_vox=seed, block_padding='reflect')
+        region = Region(subvolume.image, seed_vox=seed, sparse_mask=True, block_padding='reflect')
         region.bias_against_merge = bias
         region.fill(model,
                     move_batch_size=move_batch_size,
                     progress=1)
         body = region.to_body()
-        body_size = np.count_nonzero(body.mask)
+        mask, bounds = body._get_bounded_mask()
+        body_size = np.count_nonzero(mask)
 
         if body_size == 0:
             logging.debug('Body was empty.')
@@ -96,8 +97,10 @@ def fill_subvolume_with_model(
             label_id += 1
 
         logging.debug('Adding body to prediction label volume.')
-        conflict_count[np.logical_and(prediction != background_label_id, body.mask)] += 1
-        prediction[np.logical_and(prediction == background_label_id, body.mask)] = label_id
+        bounds_shape = map(slice, bounds[0], bounds[1])
+        prediction_mask = prediction[bounds_shape] == background_label_id
+        conflict_count[bounds_shape][np.logical_and(np.logical_not(prediction_mask), mask)] += 1
+        prediction[bounds_shape][np.logical_and(prediction_mask, mask)] = label_id
         logging.info('Filled seed %s/%s (%s) with %s voxels labeled %s.',
                      seed_idx, len(seeds), np.array_str(seed), body_size, label_id)
 

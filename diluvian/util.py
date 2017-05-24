@@ -90,6 +90,38 @@ def pad_dims(x):
     return np.expand_dims(np.expand_dims(x, x.ndim), 0)
 
 
+def get_nonzero_aabb(a):
+    """Get the axis-aligned bounding box of nonzero elements of a 3D array.
+
+    Parameters
+    ----------
+    a : ndarray
+        A 3D NumPpy array.
+
+    Returns
+    -------
+    tuple of ndarray
+    """
+    mask_min = []
+    mask_max = []
+
+    for axes in [(1, 2), (0, 2), (0, 1)]:
+        proj = np.any(a, axis=axes)
+        w = np.where(proj)[0]
+        if w.size:
+            amin, amax = w[[0, -1]]
+        else:
+            amin, amax = 0, 0
+
+        mask_min.append(amin)
+        mask_max.append(amax)
+
+    mask_min = np.array(mask_min, dtype=np.int64)
+    mask_max = np.array(mask_max, dtype=np.int64)
+
+    return mask_min, mask_max
+
+
 class Roundrobin:
     """Iterate over a collection of iterables, pulling one item from each in
     a cycle.

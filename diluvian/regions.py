@@ -41,6 +41,11 @@ class Region(object):
     mask : ndarray, optional
         Object prediction mask for output. Provided as an argument here in
         case resuming or extending an existing result.
+    sparse_mask : bool, optional
+        If true, force the predicted mask to be a block-sparse array instead
+        of a dense ndarray. Note that if ``image`` is a
+        ``diluvian.octrees.OctreeVolume``, the mask will be sparse regardless
+        of this parameter.
     block_padding : str, optional
         Method to use to pad data when the network's input field of view
         extends outside the region bounds. This is passed to ``numpy.pad``.
@@ -76,7 +81,7 @@ class Region(object):
         subvolumes = itertools.ifilter(lambda s: s.has_uniform_seed_margin(), subvolumes)
         return itertools.imap(Region.from_subvolume, subvolumes)
 
-    def __init__(self, image, target=None, seed_vox=None, mask=None, block_padding=None):
+    def __init__(self, image, target=None, seed_vox=None, mask=None, sparse_mask=False, block_padding=None):
         self.block_padding = block_padding
         self.MOVE_DELTA = CONFIG.model.move_step
         self.queue = queue.PriorityQueue()
@@ -96,6 +101,8 @@ class Region(object):
         if mask is None:
             if isinstance(self.image, OctreeVolume):
                 self.mask = OctreeVolume(self.image.leaf_shape, (np.zeros(3), self.bounds), 'float32')
+            elif sparse_mask:
+                self.mask = OctreeVolume(CONFIG.model.training_subv_shape, (np.zeros(3), self.bounds), 'float32')
             else:
                 self.mask = np.empty(self.bounds, dtype='float32')
             self.mask[:] = np.NAN

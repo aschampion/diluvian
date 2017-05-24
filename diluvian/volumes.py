@@ -21,6 +21,7 @@ from keras.utils.data_utils import get_file
 
 from .config import CONFIG
 from .octrees import OctreeVolume
+from .util import get_nonzero_aabb
 
 
 DimOrder = namedtuple('DimOrder', ('X', 'Y', 'Z'))
@@ -879,20 +880,8 @@ class HDF5Volume(Volume):
 
         # Explicitly copy the channel to memory. 3x speedup for np ops.
         mask_data = self.mask_data[:]
-        mask_min = []
-        mask_max = []
 
-        for axes in [(1, 2), (0, 2), (0, 1)]:
-            proj = np.any(mask_data, axis=axes)
-            amin, amax = np.where(proj)[0][[0, -1]]
-
-            mask_min.append(amin)
-            mask_max.append(amax)
-
-        mask_min = np.array(mask_min, dtype=np.int64)
-        mask_max = np.array(mask_max, dtype=np.int64)
-
-        self._mask_bounds = (mask_min, mask_max)
+        self._mask_bounds = get_nonzero_aabb(mask_data)
 
         return self._mask_bounds
 

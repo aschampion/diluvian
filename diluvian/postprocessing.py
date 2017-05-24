@@ -13,6 +13,7 @@ from scipy import ndimage
 
 from .config import CONFIG
 from .octrees import OctreeVolume
+from .util import get_nonzero_aabb
 
 
 class Body(object):
@@ -25,6 +26,13 @@ class Body(object):
             # If this is a sparse volume, materialize it to memory.
             bounds = self.mask.get_leaf_bounds()
             mask = self.mask[map(slice, bounds[0], bounds[1])]
+            # Crop the mask and bounds to nonzero region of the mask.
+            mask_min, mask_max = get_nonzero_aabb(mask)
+            bounds[0] += mask_min
+            bounds[1] -= np.array(mask.shape) - mask_max
+            mask = mask[map(slice, mask_min, mask_max)]
+            assert mask.shape == tuple(bounds[1] - bounds[0]), \
+                'Bounds shape ({}) and mask shape ({}) differ.'.format(bounds[1] - bounds[0], mask.shape)
         else:
             bounds = (np.zeros(3), np.array(self.mask.shape))
             mask = self.mask
