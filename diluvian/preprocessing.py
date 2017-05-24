@@ -10,9 +10,10 @@ import numpy as np
 from scipy import ndimage
 
 from .config import CONFIG
+from .util import WrappedViewer
 
 
-def intensity_distance_seeds(image_data):
+def intensity_distance_seeds(image_data, visualize=False):
     """Create seed locations maximally distant from a Sobel filter.
 
     Parameters
@@ -34,7 +35,20 @@ def intensity_distance_seeds(image_data):
     # threshold the histogram at the mean.
     thresh = sobel < np.mean(sobel)
     transform = ndimage.distance_transform_cdt(thresh)
+    # Remove missing sections from distance transform.
+    transform[image_data == 0] = 0
+    logging.debug('Finding local maxima of image shape %s', image_data.shape)
     skmax = extrema.local_maxima(transform)
+
+    if visualize:
+        viewer = WrappedViewer()
+        viewer.add(image_data, name='Image')
+        viewer.add(sobel, name='Filtered')
+        viewer.add(thresh.astype(np.float), name='Thresholded')
+        viewer.add(transform.astype(np.float), name='Distance')
+        viewer.add(skmax, name='Seeds')
+        viewer.print_view_prompt()
+
     seeds = np.transpose(np.nonzero(skmax))
 
     return seeds
