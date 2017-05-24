@@ -44,6 +44,9 @@ def test_octree_bounds():
     ot[10, 5, 4] = 5  # Break the remaining top-level uniform branch node.
     np.testing.assert_almost_equal(ot.fullness(), 1.0, err_msg='Octree fullness should be relative to clip bounds.')
 
+    np.testing.assert_array_equal(ot.get_leaf_bounds()[1], clip_bounds[1],
+                                  err_msg='Leaf bounds should be clipped to clip bounds')
+
 
 def test_octree_map_copy():
     clip_bounds = (np.zeros(3), np.array([11, 6, 5]))

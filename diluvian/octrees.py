@@ -98,6 +98,9 @@ class OctreeVolume(object):
             bounds[0] = np.minimum(bounds[0], leaf.bounds[0])
             bounds[1] = np.maximum(bounds[1], leaf.bounds[1])
 
+        bounds[0] = np.maximum(bounds[0], self.bounds[0])
+        bounds[1] = np.minimum(bounds[1], self.bounds[1])
+
         return bounds
 
     def map_copy(self, dtype, leaf_map, uniform_map):
