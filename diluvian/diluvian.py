@@ -4,8 +4,14 @@
 from __future__ import division
 from __future__ import print_function
 
+from collections import deque
 import itertools
 import logging
+from multiprocessing import (
+        Lock,
+        Process,
+        Queue,
+        )
 import re
 
 import numpy as np
@@ -15,7 +21,6 @@ from six.moves import input as raw_input
 from tqdm import tqdm
 
 from .config import CONFIG
-from .network import load_model
 from . import preprocessing
 from .util import (
         Roundrobin,
@@ -50,7 +55,9 @@ def fill_subvolume_with_model(
         background_label_id=0,
         bias=True,
         move_batch_size=1,
-        max_bodies=None):
+        max_bodies=None,
+        num_workers=CONFIG.training.num_gpus,
+        worker_prequeue=2):
     # Create an output label volume.
     prediction = np.full_like(subvolume.image, background_label_id, dtype=np.uint64)
     # Create a conflict count volume that tracks locations where segmented
@@ -58,32 +65,114 @@ def fill_subvolume_with_model(
     # predicted labels.
     conflict_count = np.full_like(prediction, 0, dtype=np.uint32)
 
+    def worker(worker_id, model_file, image, seeds, results, lock):
+        lock.acquire()
+        import tensorflow as tf
+
+        with tf.device('/gpu:{}'.format(worker_id)):
+            # Late import to avoid Keras import until TF bindings are set.
+            from .network import load_model
+
+            logging.debug('Worker %s: loading model', worker_id)
+            model = load_model(model_file, CONFIG.network)
+        lock.release()
+
+        while True:
+            seed = seeds.get(True)
+
+            if not isinstance(seed, np.ndarray):
+                logging.debug('Worker %s: got DONE', worker_id)
+                break
+
+            logging.debug('Worker %s: got seed %s', worker_id, np.array_str(seed))
+
+            # Flood-fill and get resulting mask.
+            # Allow reading outside the image volume bounds to allow segmentation
+            # to fill all the way to the boundary.
+            region = Region(image, seed_vox=seed, sparse_mask=True, block_padding='reflect')
+            region.bias_against_merge = bias
+            region.fill(model,
+                        move_batch_size=move_batch_size,
+                        progress=1 + worker_id)
+            body = region.to_body()
+            logging.debug('Worker %s: seed %s filled', worker_id, np.array_str(seed))
+
+            results.put((seed, body))
+
+        seed_queue.close()
+        results_queue.close()
+
     # Generate seeds from volume.
     generator = preprocessing.SEED_GENERATORS[seed_generator]
     seeds = generator(subvolume.image)
 
-    model = load_model(model_file, CONFIG.network)
+    pbar = tqdm(desc='Seed queue', total=len(seeds), miniters=1, smoothing=0.0)
+    num_seeds = len(seeds)
+    seeds = iter(seeds)
+    seed_queue = Queue()
+    results_queue = Queue()
+    dispatched_seeds = deque()
+    unordered_results = {}
+    for seed in itertools.islice(seeds, min(num_seeds, num_workers * worker_prequeue)):
+        dispatched_seeds.append(seed)
+        seed_queue.put(seed)
+
+    workers = []
+    loading_lock = Lock()
+    for worker_id in range(num_workers):
+        w = Process(target=worker, args=(worker_id, model_file, subvolume.image,
+                                         seed_queue, results_queue, loading_lock))
+        w.start()
+        workers.append(w)
+
+    def queue_next_seed():
+        total = 0
+        for seed in seeds:
+            if prediction[seed[0], seed[1], seed[2]] != background_label_id:
+                # This seed has already been filled.
+                total += 1
+                continue
+            dispatched_seeds.append(seed)
+            seed_queue.put(seed)
+
+            break
+
+        return total
 
     label_id = 0
+
     # For each seed, create region, fill, threshold, and merge to output volume.
-    pbar = tqdm(desc='Seed queue', total=len(seeds), miniters=1, smoothing=0.0)
-    for seed_idx, seed in enumerate(seeds):
+    while dispatched_seeds:
+        expected_seed = dispatched_seeds.popleft()
+        logging.debug('Expecting seed %s', np.array_str(expected_seed))
+        processed_seeds = 1
+
+        if tuple(expected_seed) in unordered_results:
+            logging.debug('Expected seed %s is in old results', np.array_str(expected_seed))
+            seed = expected_seed
+            body = unordered_results[tuple(seed)]
+            del unordered_results[tuple(seed)]
+
+        else:
+            seed, body = results_queue.get(True)
+            processed_seeds += queue_next_seed()
+
+            while not np.array_equal(seed, expected_seed):
+                logging.debug('Seed %s is early, stashing', np.array_str(seed))
+                unordered_results[tuple(seed)] = body
+                seed, body = results_queue.get(True)
+                processed_seeds += queue_next_seed()
+
         logging.debug('Processing seed at %s', np.array_str(seed))
         pbar.set_description('Seed ' + np.array_str(seed))
-        pbar.update()
+        pbar.update(processed_seeds)
+
         if prediction[seed[0], seed[1], seed[2]] != background_label_id:
             # This seed has already been filled.
+            logging.debug('Seed (%s) was filled but has been covered in the meantime.',
+                          np.array_str(seed))
             continue
 
-        # Flood-fill and get resulting mask.
-        # Allow reading outside the image volume bounds to allow segmentation
-        # to fill all the way to the boundary.
-        region = Region(subvolume.image, seed_vox=seed, sparse_mask=True, block_padding='reflect')
-        region.bias_against_merge = bias
-        region.fill(model,
-                    move_batch_size=move_batch_size,
-                    progress=1)
-        body = region.to_body()
         mask, bounds = body._get_bounded_mask()
         body_size = np.count_nonzero(mask)
 
@@ -101,11 +190,21 @@ def fill_subvolume_with_model(
         prediction_mask = prediction[bounds_shape] == background_label_id
         conflict_count[bounds_shape][np.logical_and(np.logical_not(prediction_mask), mask)] += 1
         prediction[bounds_shape][np.logical_and(prediction_mask, mask)] = label_id
-        logging.info('Filled seed %s/%s (%s) with %s voxels labeled %s.',
-                     seed_idx, len(seeds), np.array_str(seed), body_size, label_id)
+        logging.info('Filled seed (%s) with %s voxels labeled %s.',
+                     np.array_str(seed), body_size, label_id)
 
         if max_bodies and label_id >= max_bodies:
+            # Drain the queues.
+            while not seed_queue.empty():
+                seed_queue.get_nowait()
             break
+
+    for _ in range(num_workers):
+        seed_queue.put('DONE')
+    seed_queue.close()
+    results_queue.close()
+    for wid, worker in enumerate(workers):
+        worker.join()
 
     return prediction, conflict_count
 
@@ -152,6 +251,9 @@ def fill_region_with_model(
         max_moves=None,
         multi_gpu_model_kludge=None,
         sparse=False):
+    # Late import to avoid Keras import until TF bindings are set.
+    from .network import load_model
+
     if volumes is None:
         raise ValueError('Volumes must be provided.')
 
