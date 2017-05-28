@@ -3,26 +3,14 @@ diluvian
 ===============================
 
 
-.. image:: https://img.shields.io/pypi/v/diluvian.svg
-        :target: https://pypi.python.org/pypi/diluvian
-        :alt: PyPI Package Version
-
-.. image:: https://img.shields.io/travis/aschampion/diluvian.svg
-        :target: https://travis-ci.org/aschampion/diluvian
-        :alt: Continuous Integration Status
-
-.. image:: https://readthedocs.org/projects/diluvian/badge/?version=latest
-        :target: https://diluvian.readthedocs.io/en/latest/?badge=latest
-        :alt: Documentation Status
-
-.. image:: https://img.shields.io/badge/License-MIT-blue.svg
-        :target: https://opensource.org/licenses/MIT
-        :alt: License: MIT
-
-
 Flood filling networks for segmenting electron microscopy of neural tissue.
 
-* Documentation: https://diluvian.readthedocs.io.
+==============  ===============
+PyPI Release    |pypi_badge|
+Documentation   |docs_badge|
+License         |license_badge|
+Build Status    |travis_badge|
+==============  ===============
 
 Diluvian is an implementation and extension of the flood-filling network (FFN)
 algorithm first described in [Januszewski2016]_. Flood-filling works by
@@ -104,3 +92,23 @@ choices in ways pertinent to your use:
    Winfried Denk, and Viren Jain.
    Flood-filling networks. *arXiv preprint*
    *arXiv:1611.00421*, 2016.
+
+.. |pypi_badge|
+        image:: https://img.shields.io/pypi/v/diluvian.svg
+        :target: https://pypi.python.org/pypi/diluvian
+        :alt: PyPI Package Version
+
+.. |travis_badge|
+        image:: https://img.shields.io/travis/aschampion/diluvian.svg
+        :target: https://travis-ci.org/aschampion/diluvian
+        :alt: Continuous Integration Status
+
+.. |docs_badge|
+        image:: https://readthedocs.org/projects/diluvian/badge/?version=latest
+        :target: https://diluvian.readthedocs.io/en/latest/?badge=latest
+        :alt: Documentation Status
+
+.. |license_badge|
+        image:: https://img.shields.io/badge/License-MIT-blue.svg
+        :target: https://opensource.org/licenses/MIT
+        :alt: License: MIT
