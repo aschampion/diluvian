@@ -107,7 +107,7 @@ data structures (:class:`diluvian.octrees.OctreeVolume`).
 See :class:`ImageStackVolume<diluvian.volumes.ImageStackVolume>` for an example.
 
 Once data is available as a volume, normal training and filling operations can
-be called. See :meth:`diluvian.diluvian.train_network` or
+be called. See :meth:`diluvian.training.train_network` or
 :meth:`diluvian.diluvian.fill_region_with_model`.
 
 
