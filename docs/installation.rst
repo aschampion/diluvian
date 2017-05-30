@@ -19,6 +19,10 @@ You should install diluvian
 or similar isolated environment. All other documentation here assumes a
 a virtualenv has been created and is active.
 
+The neuroglancer PyPI package release is out-of-date, so to avoid spurious
+console output and other issues you may want to
+`install from source <https://github.com/google/neuroglancer/tree/master/python>`_.
+
 To use skeletonization you must install the
 `skeletopyze <https://github.com/funkey/skeletopyze>`_ library into the
 virtualenv manually. See its documentation for requirements and instructions.
