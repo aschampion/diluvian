@@ -12,6 +12,7 @@ from multiprocessing import (
         Process,
         Queue,
         )
+import os
 import re
 
 import numpy as np
@@ -69,7 +70,13 @@ def fill_subvolume_with_model(
         lock.acquire()
         import tensorflow as tf
 
-        with tf.device('/gpu:{}'.format(worker_id)):
+        # Only make one GPU visible to Tensorflow so that it does not allocate
+        # all available memory on all devices.
+        # See: https://stackoverflow.com/questions/37893755
+        os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(worker_id)
+
+        with tf.device('/gpu:0'.format(worker_id)):
             # Late import to avoid Keras import until TF bindings are set.
             from .network import load_model
 
