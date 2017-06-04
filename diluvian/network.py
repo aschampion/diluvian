@@ -147,7 +147,7 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape):
 
     # Crop and pass forward to upsampling.
     contraction = (np.array(model.get_shape().as_list()[1:4]) - output_shape) // 2
-    forward = Cropping3D(zip(list(contraction), list(contraction)))(model)
+    forward = Cropping3D(list(zip(list(contraction), list(contraction))))(model)
     if network_config.dropout_probability > 0.0:
         forward = Dropout(network_config.dropout_probability)(forward)
 

@@ -10,6 +10,7 @@ import webbrowser
 
 import neuroglancer
 import numpy as np
+import six
 from six.moves import input as raw_input
 
 
@@ -122,7 +123,7 @@ def get_nonzero_aabb(a):
     return mask_min, mask_max
 
 
-class Roundrobin:
+class Roundrobin(six.Iterator):
     """Iterate over a collection of iterables, pulling one item from each in
     a cycle.
 
@@ -138,7 +139,7 @@ class Roundrobin:
     def __init__(self, *iterables):
         self.iterables = iterables
         self.pending = len(self.iterables)
-        self.nexts = itertools.cycle(iter(it).next for it in self.iterables)
+        self.nexts = itertools.cycle(self.iterables)
 
     def __iter__(self):
         return self
@@ -147,13 +148,13 @@ class Roundrobin:
         for it in self.iterables:
             iter(it).reset()
         self.pending = len(self.iterables)
-        self.nexts = itertools.cycle(iter(it).next for it in self.iterables)
+        self.nexts = itertools.cycle(self.iterables)
 
-    def next(self):
+    def __next__(self):
         while self.pending:
             try:
                 for nextgen in self.nexts:
-                    return nextgen()
+                    return six.next(nextgen)
             except StopIteration:
                 self.pending -= 1
                 self.nexts = itertools.cycle(itertools.islice(self.nexts, self.pending))

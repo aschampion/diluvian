@@ -16,6 +16,7 @@ import matplotlib as mpl
 mpl.use('Agg')  # noqa
 import matplotlib.pyplot as plt
 import numpy as np
+import six
 from six.moves import range as xrange
 
 from keras.callbacks import (
@@ -274,7 +275,7 @@ def moving_training_generator(subvolumes, batch_size, training_size, callback_kl
 
         for r, region in enumerate(regions):
             if region is None or region.queue.empty():
-                subvolume = subvolumes.next()
+                subvolume = six.next(subvolumes)
 
                 regions[r] = Region.from_subvolume(subvolume)
                 region = regions[r]
@@ -376,7 +377,7 @@ def train_network(
         callbacks.append(PredictionCopy(validation_kludge, 'Validation'))
     validation_gens = [
             augment_subvolume_generator(v.subvolume_generator(shape=validation_shape))
-            for v in validation_volumes.itervalues()]
+            for v in six.itervalues(validation_volumes)]
     validation_data = moving_training_generator(
             Roundrobin(*validation_gens),
             CONFIG.training.batch_size,
@@ -391,7 +392,7 @@ def train_network(
     # Pre-train
     training_gens = [
             augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.input_fov_shape))
-            for v in training_volumes.itervalues()]
+            for v in six.itervalues(training_volumes)]
     random.shuffle(training_gens)
     # Divide training generators up for workers.
     worker_gens = [
@@ -428,7 +429,7 @@ def train_network(
 
     training_gens = [
             augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.training_subv_shape))
-            for v in training_volumes.itervalues()]
+            for v in six.itervalues(training_volumes)]
     random.shuffle(training_gens)
     worker_gens = [
             training_gens[i::CONFIG.training.num_workers]

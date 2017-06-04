@@ -237,7 +237,7 @@ class TrainingConfig(BaseConfig):
         self.patience = int(np.array(settings.get('patience', 10)))
         self.early_abort_epoch = settings.get('early_abort_epoch', None)
         self.early_abort_loss = settings.get('early_abort_loss', None)
-        self.augment_mirrors = map(int, np.array(settings.get('augment_mirrors', [0, 1, 2])))
+        self.augment_mirrors = [int(x) for x in settings.get('augment_mirrors', [0, 1, 2])]
         self.augment_permute_axes = settings.get('augment_permute_axes', [[0, 2, 1]])
         self.augment_missing_data = settings.get('augment_missing_data', [{'axis': 0, 'prob': 0.01}])
         self.augment_noise = settings.get('augment_noise', [{'axis': 0, 'mul': 0.1, 'add': 0.1}])
@@ -322,7 +322,7 @@ class Config(object):
         return self.__init__(settings)
 
     def to_toml(self, filename):
-        with open(filename, 'wb') as tomlfile:
+        with open(filename, 'w') as tomlfile:
             tomlfile.write(str(self))
 
 

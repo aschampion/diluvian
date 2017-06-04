@@ -112,7 +112,7 @@ class Subvolume(object):
         return np.all(seed_region)
 
 
-class SubvolumeGenerator(object):
+class SubvolumeGenerator(six.Iterator):
     """Combines a volume and a subvolume bounds generator into a generator.
 
     Parameters
@@ -134,11 +134,11 @@ class SubvolumeGenerator(object):
     def reset(self):
         self.bounds_generator.reset()
 
-    def next(self):
-        return self.volume.get_subvolume(next(self.bounds_generator))
+    def __next__(self):
+        return self.volume.get_subvolume(six.next(self.bounds_generator))
 
 
-class MirrorAugmentGenerator(object):
+class MirrorAugmentGenerator(six.Iterator):
     """Repeats subvolumes from a subvolume generator mirrored along an axis.
 
     For each subvolume in the original generator, this generator will yield two
@@ -166,9 +166,9 @@ class MirrorAugmentGenerator(object):
         self.subvolume = None
         self.subvolume_generator.reset()
 
-    def next(self):
+    def __next__(self):
         if self.subvolume is None:
-            self.subvolume = next(self.subvolume_generator)
+            self.subvolume = six.next(self.subvolume_generator)
             return self.subvolume
         else:
             subv = self.subvolume
@@ -183,7 +183,7 @@ class MirrorAugmentGenerator(object):
             return subv
 
 
-class PermuteAxesAugmentGenerator(object):
+class PermuteAxesAugmentGenerator(six.Iterator):
     """Repeats subvolumes from a subvolume generator with an axes permutation.
 
     For each subvolume in the original generator, this generator will yield two
@@ -212,9 +212,9 @@ class PermuteAxesAugmentGenerator(object):
         self.subvolume = None
         self.subvolume_generator.reset()
 
-    def next(self):
+    def __next__(self):
         if self.subvolume is None:
-            self.subvolume = next(self.subvolume_generator)
+            self.subvolume = six.next(self.subvolume_generator)
             return self.subvolume
         else:
             subv = self.subvolume
@@ -226,7 +226,7 @@ class PermuteAxesAugmentGenerator(object):
             return subv
 
 
-class MissingDataAugmentGenerator(object):
+class MissingDataAugmentGenerator(six.Iterator):
     """Repeats subvolumes from a subvolume generator with missing data planes.
 
     For each subvolume in the original generator, this generator will yield the
@@ -257,7 +257,7 @@ class MissingDataAugmentGenerator(object):
         self.subvolume = None
         self.subvolume_generator.reset()
 
-    def next(self):
+    def __next__(self):
         if self.subvolume is not None:
             rolls = np.random.sample(self.shape[self.axis])
             # Remove the seed plane from possibilities.
@@ -277,11 +277,11 @@ class MissingDataAugmentGenerator(object):
                 self.subvolume = None
                 return subv
 
-        self.subvolume = next(self.subvolume_generator)
+        self.subvolume = six.next(self.subvolume_generator)
         return self.subvolume
 
 
-class GaussianNoiseAugmentGenerator(object):
+class GaussianNoiseAugmentGenerator(six.Iterator):
     """Repeats subvolumes from a subvolume generator with Gaussian noise.
 
     For each subvolume in the original generator, this generator will yield two
@@ -318,9 +318,9 @@ class GaussianNoiseAugmentGenerator(object):
         self.subvolume = None
         self.subvolume_generator.reset()
 
-    def next(self):
+    def __next__(self):
         if self.subvolume is None:
-            self.subvolume = next(self.subvolume_generator)
+            self.subvolume = six.next(self.subvolume_generator)
             return self.subvolume
         else:
             subv = self.subvolume
@@ -342,7 +342,7 @@ class GaussianNoiseAugmentGenerator(object):
             return subv
 
 
-class ContrastAugmentGenerator(object):
+class ContrastAugmentGenerator(six.Iterator):
     """Repeats subvolumes from a subvolume generator with altered contrast.
 
     For each subvolume in the original generator, this generator will yield the
@@ -385,7 +385,7 @@ class ContrastAugmentGenerator(object):
         self.subvolume = None
         self.subvolume_generator.reset()
 
-    def next(self):
+    def __next__(self):
         if self.subvolume is not None:
             rolls = np.random.sample(self.shape[self.axis])
             sections = np.where(rolls < self.probability)
@@ -408,7 +408,7 @@ class ContrastAugmentGenerator(object):
                 self.subvolume = None
                 return subv
 
-        self.subvolume = next(self.subvolume_generator)
+        self.subvolume = six.next(self.subvolume_generator)
         return self.subvolume
 
 
@@ -505,7 +505,7 @@ class Volume(object):
 
         return Subvolume(image_subvol, label_mask, seed, label_id)
 
-    class SubvolumeBoundsGenerator(object):
+    class SubvolumeBoundsGenerator(six.Iterator):
         def __init__(self, volume, shape):
             self.volume = volume
             self.shape = shape
@@ -535,7 +535,7 @@ class Volume(object):
         def reset(self):
             self.random.seed(0)
 
-        def next(self):
+        def __next__(self):
             while True:
                 ctr = np.array([self.random.randint(self.ctr_min[n], self.ctr_max[n])
                                 for n in range(3)]).astype(np.int64)
@@ -698,7 +698,7 @@ class DownsampledVolume(VolumeView):
                 mask_data=parent.mask_data)
 
     def parent_coord_to_world(self, a):
-        return np.divide(a, self.scale)
+        return np.floor_divide(a, self.scale)
 
     def world_coord_to_parent(self, a):
         return np.multiply(a, self.scale)
@@ -1047,7 +1047,7 @@ class ImageStackVolume(Volume):
 
         return image_subvol
 
-    class SparseSubvolumeBoundsGenerator(object):
+    class SparseSubvolumeBoundsGenerator(six.Iterator):
         def __init__(self, volume, margin):
             self.volume = volume
             self.margin = np.asarray(margin).astype(np.int64)
@@ -1065,7 +1065,7 @@ class ImageStackVolume(Volume):
         def reset(self):
             self.random.seed(0)
 
-        def next(self):
+        def __next__(self):
             ctr = np.array([self.random.randint(self.ctr_min[n], self.ctr_max[n])
                             for n in range(3)]).astype(np.int64)
             return SubvolumeBounds(seed=ctr)
