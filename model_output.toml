@@ -1,0 +1,77 @@
+random_seed = 1
+
+[training]
+validation_size = 128
+total_epochs = 2
+#early_abort_epoch = null  # To use: uncomment and replace null with value
+num_gpus = 1
+num_workers = 4
+augment_permute_axes = [[0, 2, 1]]
+static_train_epochs = 1
+augment_mirrors = [0, 1, 2]
+batch_size = 32
+#fill_factor_bins = null  # To use: uncomment and replace null with value
+patience = 20
+gpu_batch_size = 32
+#early_abort_loss = null  # To use: uncomment and replace null with value
+training_size = 1024
+reset_generators = false
+
+[[training.augment_contrast]]
+scaling_std = 0.10000000000000001
+scaling_mean = 0.50000000000000000
+center_mean = 1.19999999999999996
+center_std = 0.20000000000000001
+prob = 0.05000000000000000
+axis = 0
+
+[training.training_partition]
+".*" = [0, 0, 0]
+
+[training.validation_partition]
+".*" = [1, 0, 0]
+
+[[training.augment_noise]]
+mul = 0.10000000000000001
+add = 0.10000000000000001
+axis = 0
+
+[[training.augment_missing_data]]
+prob = 0.01000000000000000
+axis = 0
+
+[training.partitions]
+".*" = [2, 1, 1]
+
+[network]
+convolution_dim = [3, 3, 3]
+convolution_filters = 32
+initialization = "glorot_uniform"
+transpose = false
+factory = "diluvian.network.make_flood_fill_unet"
+dropout_probability = 0.05000000000000000
+output_activation = "sigmoid"
+num_modules = 8
+
+[volume]
+resolution = [40, 16, 16]
+
+[postprocessing]
+#closing_shape = null  # To use: uncomment and replace null with value
+
+[optimizer]
+nesterov = true
+lr = 0.00100000000000000
+klass = "SGD"
+momentum = 0.50000000000000000
+
+[model]
+input_fov_shape = [13, 33, 33]
+move_check_thickness = 1
+output_fov_shape = [13, 33, 33]
+v_true = 0.94999999999999996
+training_subv_shape = [19, 49, 49]
+t_final = 0.90000000000000002
+t_move = 0.90000000000000002
+output_fov_move_fraction = 4
+v_false = 0.05000000000000000

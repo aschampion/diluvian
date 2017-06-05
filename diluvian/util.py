@@ -146,7 +146,7 @@ class Roundrobin:
     def __init__(self, *iterables):
         self.iterables = iterables
         self.pending = len(self.iterables)
-        self.nexts = itertools.cycle(next(iter(it)) for it in self.iterables)
+        self.nexts = itertools.cycle(six.next(iter(it)) for it in self.iterables)
 
     def __iter__(self):
         return self
@@ -155,7 +155,7 @@ class Roundrobin:
         for it in self.iterables:
             iter(it).reset()
         self.pending = len(self.iterables)
-        self.nexts = itertools.cycle(next(iter(it)) for it in self.iterables)
+        self.nexts = itertools.cycle(six.next(iter(it)) for it in self.iterables)
 
     def next(self):
         return self.__next__()
