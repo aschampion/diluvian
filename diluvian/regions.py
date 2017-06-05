@@ -265,7 +265,7 @@ class Region(object):
             move_check_block = mask_block
         else:
             move_check_block = current_mask
-        pad_width = zip(list(pad_pre), list(pad_post))
+        pad_width = list(zip(list(pad_pre), list(pad_post)))
         move_check_block = np.pad(move_check_block, pad_width, 'constant')
 
         new_moves = self.get_moves(move_check_block)
@@ -297,7 +297,7 @@ class Region(object):
         if np.any(pad_pre) or np.any(pad_post):
             assert self.block_padding is not None, \
                 'Position block extends out of region bounds, but padding is not enabled: {}'.format(next_pos)
-            pad_width = zip(list(pad_pre), list(pad_post))
+            pad_width = list(zip(list(pad_pre), list(pad_post)))
             image_block = np.pad(image_block, pad_width, self.block_padding)
             mask_block = np.pad(mask_block, pad_width, self.block_padding)
 
@@ -307,7 +307,7 @@ class Region(object):
                                        block_min[1]:block_max[1],
                                        block_min[2]:block_max[2]]
             if np.any(pad_pre) or np.any(pad_post):
-                pad_width = zip(list(pad_pre), list(pad_post))
+                pad_width = list(zip(list(pad_pre), list(pad_post)))
                 target_block = np.pad(target_block, pad_width, self.block_padding)
         else:
             target_block = None

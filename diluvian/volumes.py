@@ -16,6 +16,7 @@ import pytoml as toml
 import requests
 import six
 from six.moves import range as xrange
+from builtins import object
 
 from .config import CONFIG
 from .octrees import OctreeVolume
@@ -134,7 +135,7 @@ class SubvolumeGenerator(object):
     def reset(self):
         self.bounds_generator.reset()
 
-    def next(self):
+    def __next__(self):
         return self.volume.get_subvolume(next(self.bounds_generator))
 
 
@@ -166,7 +167,7 @@ class MirrorAugmentGenerator(object):
         self.subvolume = None
         self.subvolume_generator.reset()
 
-    def next(self):
+    def __next__(self):
         if self.subvolume is None:
             self.subvolume = next(self.subvolume_generator)
             return self.subvolume
@@ -212,7 +213,7 @@ class PermuteAxesAugmentGenerator(object):
         self.subvolume = None
         self.subvolume_generator.reset()
 
-    def next(self):
+    def __next__(self):
         if self.subvolume is None:
             self.subvolume = next(self.subvolume_generator)
             return self.subvolume
@@ -257,7 +258,7 @@ class MissingDataAugmentGenerator(object):
         self.subvolume = None
         self.subvolume_generator.reset()
 
-    def next(self):
+    def __next__(self):
         if self.subvolume is not None:
             rolls = np.random.sample(self.shape[self.axis])
             # Remove the seed plane from possibilities.
@@ -318,7 +319,7 @@ class GaussianNoiseAugmentGenerator(object):
         self.subvolume = None
         self.subvolume_generator.reset()
 
-    def next(self):
+    def __next__(self):
         if self.subvolume is None:
             self.subvolume = next(self.subvolume_generator)
             return self.subvolume
@@ -385,7 +386,7 @@ class ContrastAugmentGenerator(object):
         self.subvolume = None
         self.subvolume_generator.reset()
 
-    def next(self):
+    def __next__(self):
         if self.subvolume is not None:
             rolls = np.random.sample(self.shape[self.axis])
             sections = np.where(rolls < self.probability)
@@ -535,7 +536,7 @@ class Volume(object):
         def reset(self):
             self.random.seed(0)
 
-        def next(self):
+        def __next__(self):
             while True:
                 ctr = np.array([self.random.randint(self.ctr_min[n], self.ctr_max[n])
                                 for n in range(3)]).astype(np.int64)
@@ -1065,7 +1066,7 @@ class ImageStackVolume(Volume):
         def reset(self):
             self.random.seed(0)
 
-        def next(self):
+        def __next__(self):
             ctr = np.array([self.random.randint(self.ctr_min[n], self.ctr_max[n])
                             for n in range(3)]).astype(np.int64)
             return SubvolumeBounds(seed=ctr)

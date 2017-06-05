@@ -11,6 +11,7 @@ import webbrowser
 import neuroglancer
 import numpy as np
 from six.moves import input as raw_input
+import six
 
 
 class WrappedViewer(neuroglancer.Viewer):
@@ -60,13 +61,20 @@ def write_keras_history_to_csv(history, filename):
     history : keras.callbacks.History
     filename : str
     """
-    with open(filename, 'wb') as csvfile:
+    if six.PY2:
+        csv_params = 'wb'
+    else:
+        csv_params = 'w'
+    with open(filename, csv_params) as csvfile:
         writer = csv.writer(csvfile)
         metric_cols = history.history.keys()
         indices = [i[0] for i in sorted(enumerate(metric_cols), key=lambda x: x[1])]
-        metric_cols.sort()
+        if six.PY2:
+            metric_cols.sort()
+        else:
+            metric_cols = sorted(metric_cols)
         cols = ['epoch'] + metric_cols
-        sorted_metrics = history.history.values()
+        sorted_metrics = list(history.history.values())
         sorted_metrics = [sorted_metrics[i] for i in indices]
         writer.writerow(cols)
         for row in zip(history.epoch, *sorted_metrics):
@@ -138,7 +146,7 @@ class Roundrobin:
     def __init__(self, *iterables):
         self.iterables = iterables
         self.pending = len(self.iterables)
-        self.nexts = itertools.cycle(iter(it).next for it in self.iterables)
+        self.nexts = itertools.cycle(next(iter(it)) for it in self.iterables)
 
     def __iter__(self):
         return self
@@ -147,13 +155,16 @@ class Roundrobin:
         for it in self.iterables:
             iter(it).reset()
         self.pending = len(self.iterables)
-        self.nexts = itertools.cycle(iter(it).next for it in self.iterables)
+        self.nexts = itertools.cycle(next(iter(it)) for it in self.iterables)
 
     def next(self):
+        return self.__next__()
+
+    def __next__(self):
         while self.pending:
             try:
                 for nextgen in self.nexts:
-                    return nextgen()
+                    return nextgen
             except StopIteration:
                 self.pending -= 1
                 self.nexts = itertools.cycle(itertools.islice(self.nexts, self.pending))

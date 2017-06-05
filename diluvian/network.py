@@ -52,12 +52,12 @@ def make_flood_fill_network(input_fov_shape, output_fov_shape, network_config):
         ffn = add_convolution_module(ffn, network_config)
         contraction_dims = np.floor(i * contraction_step - contraction_cumu).astype(np.int32)
         if np.count_nonzero(contraction_dims):
-            ffn = Cropping3D(zip(list(contraction_dims), list(contraction_dims)))(ffn)
+            ffn = Cropping3D(list(zip(list(contraction_dims), list(contraction_dims))))(ffn)
             contraction_cumu += contraction_dims
 
     if np.any(np.less(contraction_cumu, contraction)):
         remainder = contraction - contraction_cumu
-        ffn = Cropping3D(zip(list(remainder), list(remainder)))(ffn)
+        ffn = Cropping3D(list(zip(list(remainder), list(remainder))))(ffn)
 
     mask_output = Conv3D(
             1,
@@ -147,7 +147,7 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape):
 
     # Crop and pass forward to upsampling.
     contraction = (np.array(model.get_shape().as_list()[1:4]) - output_shape) // 2
-    forward = Cropping3D(zip(list(contraction), list(contraction)))(model)
+    forward = Cropping3D(list(zip(list(contraction), list(contraction))))(model)
     if network_config.dropout_probability > 0.0:
         forward = Dropout(network_config.dropout_probability)(forward)
 
