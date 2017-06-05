@@ -87,7 +87,7 @@ class Region(object):
         self.queue = queue.PriorityQueue()
         self.visited = set()
         self.image = image
-        self.bounds = image.shape
+        self.bounds = np.array(image.shape, dtype=np.int64)
         if seed_vox is None:
             self.MOVE_GRID_OFFSET = np.array([0, 0, 0], dtype=np.int64)
         else:
@@ -122,7 +122,8 @@ class Region(object):
         self.queue.put((None, seed_pos))
         seed_vox = self.pos_to_vox(seed_pos)
         if self.target is not None:
-            np.testing.assert_almost_equal(self.target[tuple(seed_vox)], CONFIG.model.v_true,
+            self.target_offset = (self.bounds - self.target.shape) // 2
+            np.testing.assert_almost_equal(self.target[tuple(seed_vox - self.target_offset)], CONFIG.model.v_true,
                                            err_msg='Seed position should be in target body.')
         self.mask[tuple(seed_vox)] = CONFIG.model.v_true
 
@@ -163,7 +164,7 @@ class Region(object):
         else:
             return np.all(np.less(self.pos_to_vox(pos), self.bounds)) and np.all(pos >= 0)
 
-    def get_block_bounds(self, vox, shape):
+    def get_block_bounds(self, vox, shape, offset=None):
         """Get the bounds of a block by center and shape, accounting padding.
 
         Returns the voxel bounds of a block specified by shape and center in
@@ -176,6 +177,11 @@ class Region(object):
             Center of the block in voxel coordinates.
         shape : ndarray
             Shape of the block.
+        offset : ndarray, optional
+            If provided, offset of coordinates from the volume where these
+            bounds where be used. This is needed if the volume has a margin
+            (i.e., is smaller than the main region volume), such as the target
+            volume for contracted output shapes.
 
         Returns
         -------
@@ -185,14 +191,16 @@ class Region(object):
         padding_pre, padding_post : ndarray
             How much the block extends outside the region bounds.
         """
+        if offset is None:
+            offset = np.zeros(3, dtype=vox.dtype)
         margin = (shape - 1) // 2
         block_min = vox - margin
         block_max = vox + margin + 1
         padding_pre = np.maximum(0, -block_min)
-        padding_post = np.maximum(0, block_max - self.bounds)
+        padding_post = np.maximum(0, block_max - self.bounds + offset + offset)
 
         block_min = np.maximum(0, block_min)
-        block_max = np.minimum(block_max, self.bounds)
+        block_max = np.minimum(block_max, self.bounds - offset - offset)
 
         return block_min, block_max, padding_pre, padding_post
 
@@ -302,7 +310,8 @@ class Region(object):
             mask_block = np.pad(mask_block, pad_width, self.block_padding)
 
         if self.target is not None:
-            block_min, block_max, pad_pre, pad_post = self.get_block_bounds(next_vox, CONFIG.model.output_fov_shape)
+            block_min, block_max, pad_pre, pad_post = self.get_block_bounds(
+                    next_vox - self.target_offset, CONFIG.model.output_fov_shape, self.target_offset)
             target_block = self.target[block_min[0]:block_max[0],
                                        block_min[1]:block_max[1],
                                        block_min[2]:block_max[2]]

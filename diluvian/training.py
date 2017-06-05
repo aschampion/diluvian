@@ -370,13 +370,15 @@ def train_network(
                                     threshold_value=CONFIG.training.early_abort_loss))
 
     validation_kludge = {'inputs': None, 'outputs': None}
+    output_margin = np.floor_divide(CONFIG.model.input_fov_shape - CONFIG.model.output_fov_shape, 2)
     if static_validation:
         validation_shape = CONFIG.model.input_fov_shape
     else:
         validation_shape = CONFIG.model.training_subv_shape
         callbacks.append(PredictionCopy(validation_kludge, 'Validation'))
     validation_gens = [
-            augment_subvolume_generator(v.subvolume_generator(shape=validation_shape))
+            augment_subvolume_generator(v.subvolume_generator(shape=validation_shape,
+                                                              label_margin=output_margin))
             for v in six.itervalues(validation_volumes)]
     validation_data = moving_training_generator(
             Roundrobin(*validation_gens),
@@ -391,7 +393,8 @@ def train_network(
 
     # Pre-train
     training_gens = [
-            augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.input_fov_shape))
+            augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.input_fov_shape,
+                                                              label_margin=output_margin))
             for v in six.itervalues(training_volumes)]
     random.shuffle(training_gens)
     # Divide training generators up for workers.
@@ -428,7 +431,8 @@ def train_network(
         callbacks.append(TensorBoard())
 
     training_gens = [
-            augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.training_subv_shape))
+            augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.training_subv_shape,
+                                                              label_margin=output_margin))
             for v in six.itervalues(training_volumes)]
     random.shuffle(training_gens)
     worker_gens = [
@@ -457,7 +461,8 @@ def train_network(
 
     if viewer:
         dupe_data = static_training_generator(
-                validation_volumes.values()[0].subvolume_generator(shape=CONFIG.model.input_fov_shape),
+                validation_volumes.values()[0].subvolume_generator(shape=CONFIG.model.input_fov_shape,
+                                                                   label_margin=output_margin),
                 CONFIG.training.batch_size,
                 CONFIG.training.training_size)
         viz_ex = itertools.islice(dupe_data, 1)

@@ -27,14 +27,17 @@ DimOrder = namedtuple('DimOrder', ('X', 'Y', 'Z'))
 
 class SubvolumeBounds(object):
     """Sufficient parameters to extract a subvolume from a volume."""
-    __slots__ = ('start', 'stop', 'seed', 'label_id',)
+    __slots__ = ('start', 'stop', 'seed', 'label_id', 'label_margin',)
 
-    def __init__(self, start=None, stop=None, seed=None, label_id=None):
+    def __init__(self, start=None, stop=None, seed=None, label_id=None, label_margin=None):
         assert (start is not None and stop is not None) or seed is not None, "Bounds or seed must be provided"
         self.start = start
         self.stop = stop
         self.seed = seed
         self.label_id = label_id
+        if label_margin is None:
+            label_margin = np.zeros(3, dtype=np.int64)
+        self.label_margin = label_margin
 
     @classmethod
     def iterable_from_csv(cls, filename):
@@ -104,7 +107,8 @@ class Subvolume(object):
         # If data is unlabeled, can not test so always succeed.
         if mask_target is None:
             return True
-        ctr = self.seed
+        # Seed location in the mask accounting for offset of label from image.
+        ctr = self.seed - (np.asarray(self.image.shape) - np.asarray(mask_target.shape)) // 2
         seed_fov = (ctr - margin, ctr + margin + 1)
         seed_region = mask_target[seed_fov[0][0]:seed_fov[1][0],
                                   seed_fov[0][1]:seed_fov[1][1],
@@ -273,6 +277,11 @@ class MissingDataAugmentGenerator(six.Iterator):
                 slices = [slice(None), slice(None), slice(None)]
                 slices[self.axis] = missing_sections
                 subv.image[slices] = 0
+                label_axis_margin = (subv.image.shape[self.axis] - subv.label_mask.shape[self.axis]) // 2
+                label_sections = missing_sections[0] - label_axis_margin
+                label_sections = label_sections[(label_sections >= 0) &
+                                                (label_sections < subv.label_mask.shape[self.axis])]
+                slices[self.axis] = (label_sections,)
                 subv.label_mask[slices] = False
                 self.subvolume = None
                 return subv
@@ -465,8 +474,8 @@ class Volume(object):
     def sparse_wrapper(self, *args):
         return SparseWrappedVolume(self, *args)
 
-    def subvolume_bounds_generator(self, shape=None):
-        return self.SubvolumeBoundsGenerator(self, shape)
+    def subvolume_bounds_generator(self, shape=None, label_margin=None):
+        return self.SubvolumeBoundsGenerator(self, shape, label_margin)
 
     def subvolume_generator(self, bounds_generator=None, **kwargs):
         if bounds_generator is None:
@@ -483,10 +492,12 @@ class Volume(object):
                 bounds.start[0]:bounds.stop[0],
                 bounds.start[1]:bounds.stop[1],
                 bounds.start[2]:bounds.stop[2]]
+        label_start = bounds.start + bounds.label_margin
+        label_stop = bounds.stop - bounds.label_margin
         label_subvol = self.label_data[
-                bounds.start[0]:bounds.stop[0],
-                bounds.start[1]:bounds.stop[1],
-                bounds.start[2]:bounds.stop[2]]
+                label_start[0]:label_stop[0],
+                label_start[1]:label_stop[1],
+                label_start[2]:label_stop[2]]
 
         image_subvol = self.world_mat_to_local(image_subvol)
         if np.issubdtype(image_subvol.dtype, np.integer):
@@ -496,20 +507,23 @@ class Volume(object):
 
         seed = bounds.seed
         if seed is None:
-            seed = np.array(label_subvol.shape, dtype=np.int64) // 2
+            seed = np.array(image_subvol.shape, dtype=np.int64) // 2
 
         label_id = bounds.label_id
         if label_id is None:
-            label_id = label_subvol[tuple(seed)]
+            label_id = label_subvol[tuple(seed - bounds.label_margin)]
         label_mask = label_subvol == label_id
 
         return Subvolume(image_subvol, label_mask, seed, label_id)
 
     class SubvolumeBoundsGenerator(six.Iterator):
-        def __init__(self, volume, shape):
+        def __init__(self, volume, shape, label_margin=None):
             self.volume = volume
             self.shape = shape
             self.margin = np.floor_divide(self.shape, 2).astype(np.int64)
+            if label_margin is None:
+                label_margin = np.zeros(3, dtype=np.int64)
+            self.label_margin = label_margin
             self.ctr_min = self.margin
             self.ctr_max = (np.array(self.volume.shape) - self.margin - 1).astype(np.int64)
             self.random = np.random.RandomState(CONFIG.random_seed)
@@ -522,8 +536,8 @@ class Volume(object):
                 mask_min = self.volume.local_coord_to_world(mask_min)
                 mask_max = self.volume.local_coord_to_world(mask_max)
 
-                self.ctr_min = np.maximum(self.ctr_min, mask_min + self.margin)
-                self.ctr_max = np.minimum(self.ctr_max, mask_max - self.margin - 1)
+                self.ctr_min = np.maximum(self.ctr_min, mask_min + self.label_margin)
+                self.ctr_max = np.minimum(self.ctr_max, mask_max - self.label_margin - 1)
 
             if np.any(self.ctr_min >= self.ctr_max - self.shape):
                 raise ValueError('Cannot generate subvolume bounds: bounds ({}, {}) too small for shape ({})'.format(
@@ -545,8 +559,8 @@ class Volume(object):
                 # If the volume has a mask channel, only accept subvolumes
                 # entirely contained in it.
                 if self.volume.mask_data is not None:
-                    start_local = self.volume.world_coord_to_local(start)
-                    stop_local = self.volume.world_coord_to_local(stop)
+                    start_local = self.volume.world_coord_to_local(start + self.label_margin)
+                    stop_local = self.volume.world_coord_to_local(stop - self.label_margin)
                     mask = self.volume.mask_data[
                             start_local[0]:stop_local[0],
                             start_local[1]:stop_local[1],
@@ -571,7 +585,7 @@ class Volume(object):
                     label_id = label_ids.item(0)
                     break
 
-            return SubvolumeBounds(start, stop, label_id=label_id)
+            return SubvolumeBounds(start, stop, label_id=label_id, label_margin=self.label_margin)
 
 
 class NdarrayVolume(Volume):
@@ -622,7 +636,8 @@ class VolumeView(Volume):
         parent_bounds = SubvolumeBounds(start=parent_start,
                                         stop=parent_stop,
                                         seed=parent_seed,
-                                        label_id=bounds.label_id)
+                                        label_id=bounds.label_id,
+                                        label_margin=bounds.label_margin)
         return self.parent.get_subvolume(parent_bounds)
 
 
@@ -709,8 +724,10 @@ class DownsampledVolume(VolumeView):
 
     def get_subvolume(self, bounds):
         subvol_shape = bounds.stop - bounds.start
+        label_shape = subvol_shape - 2 * bounds.label_margin
         parent_bounds = SubvolumeBounds(self.world_coord_to_parent(bounds.start),
-                                        self.world_coord_to_parent(bounds.stop))
+                                        self.world_coord_to_parent(bounds.stop),
+                                        label_margin=self.world_coord_to_parent(bounds.label_margin))
         subvol = self.parent.get_subvolume(parent_bounds)
         subvol.image = subvol.image.reshape(
                 [subvol_shape[0], self.scale[0],
@@ -722,9 +739,9 @@ class DownsampledVolume(VolumeView):
         # - Disjunction (tends to overdilate and merge)
         # - Mode label (computationally expensive)
         subvol.label_mask = subvol.label_mask.reshape(
-                [subvol_shape[0], self.scale[0],
-                 subvol_shape[1], self.scale[1],
-                 subvol_shape[2], self.scale[2]]).mean(5).mean(3).mean(1) > 0.5
+                [label_shape[0], self.scale[0],
+                 label_shape[1], self.scale[1],
+                 label_shape[2], self.scale[2]]).mean(5).mean(3).mean(1) > 0.5
 
         # Note that this is not a coordinate xform to parent in the typical
         # sense, just a rescaling of the coordinate in the subvolume-local
