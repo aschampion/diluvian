@@ -20,6 +20,8 @@ convolution_filters = 32
 output_activation = "sigmoid"
 initialization = "glorot_uniform"
 dropout_probability = 0.05
+unet_num_layers = 4
+unet_downsample_rate = [0, 1, 1]
 
 [optimizer]
 klass = "SGD"

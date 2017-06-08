@@ -120,6 +120,14 @@ class NetworkConfig(BaseConfig):
     dropout_probability : float
         Probability for dropout layers. If zero, no dropout layers will be
         included.
+    unet_depth : int
+        For U-Net models, the total number of downsampled levels in the network.
+    unet_downsample_rate : sequence or ndarray of int
+        The frequency in levels to downsample each axis. For example, a standard
+        U-Net downsamples all axes at each level, so this value would be all
+        ones. If data is anisotropic and Z should only be downsampled every
+        other level, this value could be [2, 1, 1]. Axes set to 0 are never
+        downsampled.
     """
     def __init__(self, settings):
         self.factory = str(settings.get('factory'))
@@ -130,6 +138,8 @@ class NetworkConfig(BaseConfig):
         self.initialization = str(settings.get('initialization', 'glorot_uniform'))
         self.output_activation = str(settings.get('output_activation', 'sigmoid'))
         self.dropout_probability = float(settings.get('dropout_probability', 0.0))
+        self.unet_depth = int(settings.get('unet_depth', 4))
+        self.unet_downsample_rate = np.array(settings.get('unet_downsample_rate', [1, 1, 1]))
 
 
 class OptimizerConfig(BaseConfig):

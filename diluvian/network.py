@@ -15,7 +15,6 @@ from keras.layers import (
         Dropout,
         Input,
         Permute,
-        UpSampling3D
         )
 from keras.layers.merge import (
         add,
@@ -24,6 +23,7 @@ from keras.layers.merge import (
 from keras.layers.core import Activation
 from keras.models import load_model as keras_load_model, Model
 import keras.optimizers
+from keras_contrib.layers import Deconvolution3D
 
 
 def make_flood_fill_network(input_fov_shape, output_fov_shape, network_config):
@@ -112,7 +112,7 @@ def make_flood_fill_unet(input_fov_shape, output_fov_shape, network_config):
 
     # Note that since the Keras 2 upgrade strangely models with depth > 3 are
     # rejected by TF.
-    ffn = add_unet_layer(ffn, network_config, 3, output_fov_shape)
+    ffn = add_unet_layer(ffn, network_config, network_config.unet_depth - 1, output_fov_shape)
 
     mask_output = Conv3D(
             1,
@@ -129,7 +129,7 @@ def make_flood_fill_unet(input_fov_shape, output_fov_shape, network_config):
 def add_unet_layer(model, network_config, remaining_layers, output_shape):
     # Double number of channels at each layer.
     n_channels = 2 * model.get_shape().as_list()[-1]
-    downsample = np.array([0, 1, 1])
+    downsample = np.array([x != 0 and remaining_layers % x == 0 for x in network_config.unet_downsample_rate])
 
     # First U convolution module.
     model = Conv3D(
@@ -169,13 +169,13 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape):
                            np.ceil(np.divide(output_shape, downsample.astype('float32') + 1.0)).astype(np.int32))
 
     # Upsample output of previous layer and merge with forward link.
-    model = UpSampling3D(tuple(downsample + 1))(model)
-    model = Conv3D(
+    model = Deconvolution3D(
             n_channels,
-            tuple(downsample + 1),
-            kernel_initializer=network_config.initialization,
+            tuple(network_config.convolution_dim),
+            (None,) + tuple(output_shape) + (n_channels,),
+            strides=list(downsample + 1),
             activation='relu',
-            padding='valid')(model)
+            padding='same')(model)
 
     model = concatenate([forward, model])
 
