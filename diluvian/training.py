@@ -106,7 +106,7 @@ class EarlyAbort(Callback):
         if epoch == self.threshold_epoch:
             current = logs.get(self.monitor)
             if current >= self.threshold_value:
-                raise EarlyAbortException('Aborted after epoch {} because {} was {} < {}'.format(
+                raise EarlyAbortException('Aborted after epoch {} because {} was {} >= {}'.format(
                     self.threshold_epoch, self.monitor, current, self.threshold_value))
 
 
