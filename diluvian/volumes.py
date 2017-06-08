@@ -539,7 +539,7 @@ class Volume(object):
                 self.ctr_min = np.maximum(self.ctr_min, mask_min + self.label_margin)
                 self.ctr_max = np.minimum(self.ctr_max, mask_max - self.label_margin - 1)
 
-            if np.any(self.ctr_min >= self.ctr_max - self.shape):
+            if np.any(self.ctr_min >= self.ctr_max):
                 raise ValueError('Cannot generate subvolume bounds: bounds ({}, {}) too small for shape ({})'.format(
                                  np.array_str(self.ctr_min), np.array_str(self.ctr_max), np.array_str(self.shape)))
 
