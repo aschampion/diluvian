@@ -106,7 +106,12 @@ class NetworkConfig(BaseConfig):
         networks.
     num_modules : int
         Number of convolution modules to use, each module consisting of a skip
-        link in parallel with two convolution layers.
+        link in parallel with ``num_layers_per_module`` convolution layers.
+    num_layers_per_module : int
+        Number of layers to use in each organizational module, e.g., the
+        number of convolution layers in each convolution module or the number
+        of convolution layers before and after each down- and up-sampling
+        respectively in a U-Net level.
     convolution_dim : sequence or ndarray of int
         Shape of the convolution for each layer.
     convolution_filters : int
@@ -133,6 +138,7 @@ class NetworkConfig(BaseConfig):
         self.factory = str(settings.get('factory'))
         self.transpose = bool(settings.get('transpose', False))
         self.num_modules = int(settings.get('num_modules', 8))
+        self.num_layers_per_module = int(settings.get('num_layers_per_module', 2))
         self.convolution_dim = np.array(settings.get('convolution_dim', [3, 3, 3]))
         self.convolution_filters = int(settings.get('convolution_filters', 32))
         self.initialization = str(settings.get('initialization', 'glorot_uniform'))

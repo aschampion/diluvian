@@ -72,17 +72,16 @@ def make_flood_fill_network(input_fov_shape, output_fov_shape, network_config):
 
 
 def add_convolution_module(model, network_config):
-    model2 = Conv3D(
-            network_config.convolution_filters,
-            tuple(network_config.convolution_dim),
-            kernel_initializer=network_config.initialization,
-            activation='relu',
-            padding='same')(model)
-    model2 = Conv3D(
-            network_config.convolution_filters,
-            tuple(network_config.convolution_dim),
-            kernel_initializer=network_config.initialization,
-            padding='same')(model2)
+    model2 = model
+
+    for _ in range(network_config.num_layers_per_module):
+        model2 = Conv3D(
+                network_config.convolution_filters,
+                tuple(network_config.convolution_dim),
+                kernel_initializer=network_config.initialization,
+                activation='relu',
+                padding='same')(model2)
+
     model = add([model, model2])
     # Note that the activation here differs from He et al 2016, as that
     # activation is not on the skip connection path. However, this is not
@@ -132,18 +131,13 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape):
     downsample = np.array([x != 0 and remaining_layers % x == 0 for x in network_config.unet_downsample_rate])
 
     # First U convolution module.
-    model = Conv3D(
-            n_channels,
-            tuple(network_config.convolution_dim),
-            kernel_initializer=network_config.initialization,
-            activation='relu',
-            padding='same')(model)
-    model = Conv3D(
-            n_channels,
-            tuple(network_config.convolution_dim),
-            kernel_initializer=network_config.initialization,
-            activation='relu',
-            padding='same')(model)
+    for _ in range(network_config.num_layers_per_module):
+        model = Conv3D(
+                n_channels,
+                tuple(network_config.convolution_dim),
+                kernel_initializer=network_config.initialization,
+                activation='relu',
+                padding='same')(model)
 
     # Crop and pass forward to upsampling.
     contraction = (np.array(model.get_shape().as_list()[1:4]) - output_shape) // 2
@@ -180,18 +174,13 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape):
     model = concatenate([forward, model])
 
     # Second U convolution module.
-    model = Conv3D(
-            n_channels,
-            tuple(network_config.convolution_dim),
-            kernel_initializer=network_config.initialization,
-            activation='relu',
-            padding='same')(model)
-    model = Conv3D(
-            n_channels,
-            tuple(network_config.convolution_dim),
-            kernel_initializer=network_config.initialization,
-            activation='relu',
-            padding='same')(model)
+    for _ in range(network_config.num_layers_per_module):
+        model = Conv3D(
+                n_channels,
+                tuple(network_config.convolution_dim),
+                kernel_initializer=network_config.initialization,
+                activation='relu',
+                padding='same')(model)
 
     return model
 
