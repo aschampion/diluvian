@@ -442,21 +442,24 @@ class MaskedArtifactAugmentGenerator(six.Iterator):
         as an alpha for blending image data from this artifact file with
         the original subvolume image data.
     """
-    def __init__(self, subvolume_generator, axis, probability, artifact_volume_file):
+    def __init__(self, subvolume_generator, axis, probability, artifact_volume_file, cache):
         self.subvolume_generator = subvolume_generator
         self.axis = axis
         self.probability = probability
-        vol = HDF5Volume.from_toml(artifact_volume_file)['Artifacts']
-        # Most subvolume functions assume label data exists, so pay the cost
-        # for empty data to avoid refactoring.
-        empty_labels = np.zeros(vol.shape, dtype=np.int32)
-        self.mask = NdarrayVolume(
-                vol.world_coord_to_local(vol.resolution),
-                image_data=vol.world_mat_to_local(vol.mask_data[:]),
-                label_data=empty_labels)
-        vol.label_data = empty_labels
-        vol.mask_data = None
-        self.artifacts = vol.to_memory_volume()
+        if 'artifacts' not in cache:
+            vol = HDF5Volume.from_toml(artifact_volume_file)['Artifacts']
+            # Most subvolume functions assume label data exists, so pay the cost
+            # for empty data to avoid refactoring.
+            empty_labels = np.zeros(vol.shape, dtype=np.int32)
+            cache['mask'] = NdarrayVolume(
+                    vol.world_coord_to_local(vol.resolution),
+                    image_data=vol.world_mat_to_local(vol.mask_data[:]),
+                    label_data=empty_labels)
+            vol.label_data = empty_labels
+            vol.mask_data = None
+            cache['artifacts'] = vol.to_memory_volume()
+        self.mask = cache['mask']
+        self.artifacts = cache['artifacts']
         artifact_shape = self.shape.copy()
         artifact_shape[self.axis] = 1
         self.art_bounds_gen = self.artifacts.subvolume_bounds_generator(shape=artifact_shape)

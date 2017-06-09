@@ -130,7 +130,9 @@ def augment_subvolume_generator(subvolume_generator):
     for v in CONFIG.training.augment_noise:
         gen = GaussianNoiseAugmentGenerator(gen, v['axis'], v['mul'], v['add'])
     for v in CONFIG.training.augment_artifacts:
-        gen = MaskedArtifactAugmentGenerator(gen, v['axis'], v['prob'], v['volume_file'])
+        if 'cache' not in v:
+            v['cache'] = {}
+        gen = MaskedArtifactAugmentGenerator(gen, v['axis'], v['prob'], v['volume_file'], v['cache'])
     for v in CONFIG.training.augment_missing_data:
         gen = MissingDataAugmentGenerator(gen, v['axis'], v['prob'])
     for v in CONFIG.training.augment_contrast:
