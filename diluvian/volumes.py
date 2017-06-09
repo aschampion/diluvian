@@ -421,6 +421,91 @@ class ContrastAugmentGenerator(six.Iterator):
         return self.subvolume
 
 
+class MaskedArtifactAugmentGenerator(six.Iterator):
+    """Repeats subvolumes from a subvolume generator with artifact data added.
+
+    For each subvolume in the original generator, this generator will yield the
+    original subvolume and may yield a subvolume with planes of image mixed
+    with artifact data from a separate volume.
+
+    Parameters
+    ----------
+    subvolume_generator : SubvolumeGenerator
+    axis : int
+    probability : float
+        Independent probability that each plane of data along axis has
+        artifacts.
+    artifact_volume_file : string
+        Filename of an TOML descriptor of an HDF5 dataset with image and mask
+        data channels. Only the dataset named 'Artifacts' from this descriptor
+        will be used. Mask data should be a float that will be interpreted
+        as an alpha for blending image data from this artifact file with
+        the original subvolume image data.
+    """
+    def __init__(self, subvolume_generator, axis, probability, artifact_volume_file):
+        self.subvolume_generator = subvolume_generator
+        self.axis = axis
+        self.probability = probability
+        vol = HDF5Volume.from_toml(artifact_volume_file)['Artifacts']
+        # Most subvolume functions assume label data exists, so pay the cost
+        # for empty data to avoid refactoring.
+        empty_labels = np.zeros(vol.shape, dtype=np.int32)
+        self.mask = NdarrayVolume(
+                vol.world_coord_to_local(vol.resolution),
+                image_data=vol.world_mat_to_local(vol.mask_data[:]),
+                label_data=empty_labels)
+        vol.label_data = empty_labels
+        vol.mask_data = None
+        self.artifacts = vol.to_memory_volume()
+        artifact_shape = self.shape.copy()
+        artifact_shape[self.axis] = 1
+        self.art_bounds_gen = self.artifacts.subvolume_bounds_generator(shape=artifact_shape)
+        self.subvolume = None
+
+    @property
+    def shape(self):
+        return self.subvolume_generator.shape
+
+    def __iter__(self):
+        return self
+
+    def reset(self):
+        self.subvolume = None
+        self.subvolume_generator.reset()
+
+    def __next__(self):
+        if self.subvolume is not None:
+            rolls = np.random.sample(self.shape[self.axis])
+            artifact_sections = np.where(rolls < self.probability)
+
+            if artifact_sections and artifact_sections[0].size:
+                subv = self.subvolume
+                subv = Subvolume(subv.image.copy(),
+                                 subv.label_mask.copy(),
+                                 subv.seed,
+                                 subv.label_id)
+                slices = [slice(None), slice(None), slice(None)]
+                for z in artifact_sections[0]:
+                    slices[self.axis] = z
+                    mask_found = False
+                    # Since artifact data is usually sparse, reject patches
+                    # that have all zero mask.
+                    while not mask_found:
+                        art_bounds = six.next(self.art_bounds_gen)
+                        mask = self.mask.get_subvolume(art_bounds).image
+                        if mask.max() == 0.0:
+                            continue
+                        mask_found = True
+                        art = self.artifacts.get_subvolume(art_bounds).image
+                    raw = subv.image[slices]
+                    subv.image[slices] = raw * (1.0 - mask) + art * mask
+                self.subvolume = None
+                return subv
+
+        self.subvolume = six.next(self.subvolume_generator)
+        return self.subvolume
+
+
 class Volume(object):
     DIM = DimOrder(Z=0, Y=1, X=2)
 

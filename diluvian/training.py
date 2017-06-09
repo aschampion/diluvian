@@ -41,6 +41,7 @@ from .util import (
 from .volumes import (
         ContrastAugmentGenerator,
         GaussianNoiseAugmentGenerator,
+        MaskedArtifactAugmentGenerator,
         MirrorAugmentGenerator,
         MissingDataAugmentGenerator,
         PermuteAxesAugmentGenerator,
@@ -128,6 +129,8 @@ def augment_subvolume_generator(subvolume_generator):
         gen = MirrorAugmentGenerator(gen, axis)
     for v in CONFIG.training.augment_noise:
         gen = GaussianNoiseAugmentGenerator(gen, v['axis'], v['mul'], v['add'])
+    for v in CONFIG.training.augment_artifacts:
+        gen = MaskedArtifactAugmentGenerator(gen, v['axis'], v['prob'], v['volume_file'])
     for v in CONFIG.training.augment_missing_data:
         gen = MissingDataAugmentGenerator(gen, v['axis'], v['prob'])
     for v in CONFIG.training.augment_contrast:

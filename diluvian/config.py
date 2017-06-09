@@ -233,6 +233,11 @@ class TrainingConfig(BaseConfig):
         and standard deviation to draw from a normal distribution to scale
         contrast, and the mean and standard deviation to draw from a normal
         distribution to move the intensity center multiplicatively.
+    augment_missing_data : list of dict
+        List of dictionaries with ``axis``, ``prob`` and ``volume_file``
+        keys, indicating an axis to perform data artifacting along, the
+        probability to add artifacts to each plane in the axis, and the
+        volume configuration file from which to draw artifacts, respectively.
     """
     def __init__(self, settings):
         self.num_gpus = int(settings.get('num_gpus', 1))
@@ -261,6 +266,7 @@ class TrainingConfig(BaseConfig):
                 'augment_contrast',
                 [{'axis': 0, 'prob': 0.05, 'scaling_mean': 0.5, 'scaling_std': 0.1,
                   'center_mean': 1.2, 'center_std': 0.2}])
+        self.augment_artifacts = settings.get('augment_artifacts', [])
 
 
 class PostprocessingConfig(BaseConfig):
