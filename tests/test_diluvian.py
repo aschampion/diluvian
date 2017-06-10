@@ -9,6 +9,8 @@ Tests for `diluvian` module.
 """
 
 
+from __future__ import division
+
 import numpy as np
 
 from diluvian import octrees
@@ -76,7 +78,7 @@ def test_region_moves():
     mock_image = np.zeros(tuple(CONFIG.model.training_subv_shape), dtype=np.float32)
     region = regions.Region(mock_image)
     mock_mask = np.zeros(tuple(CONFIG.model.output_fov_shape), dtype=np.float32)
-    ctr = np.array(mock_mask.shape) / 2 + 1
+    ctr = np.array(mock_mask.shape) // 2
     expected_moves = {}
     for i, move in enumerate(map(np.array, [(1, 0, 0), (-1, 0, 0),
                                             (0, 1, 0), (0, -1, 0),

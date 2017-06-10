@@ -232,7 +232,7 @@ class Region(object):
             in the move plane in that direction.
         """
         moves = []
-        ctr = (np.asarray(mask.shape) - 1) // 2 + 1
+        ctr = np.asarray(mask.shape) // 2
         for move in map(np.array, [(1, 0, 0), (-1, 0, 0),
                                    (0, 1, 0), (0, -1, 0),
                                    (0, 0, 1), (0, 0, -1)]):
