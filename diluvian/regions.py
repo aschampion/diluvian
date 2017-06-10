@@ -104,7 +104,7 @@ class Region(object):
             elif sparse_mask:
                 self.mask = OctreeVolume(CONFIG.model.training_subv_shape, (np.zeros(3), self.bounds), 'float32')
             else:
-                self.mask = np.empty(self.bounds, dtype='float32')
+                self.mask = np.empty(self.bounds, dtype=np.float32)
             self.mask[:] = np.NAN
         else:
             self.mask = mask
@@ -152,10 +152,10 @@ class Region(object):
         return Body(hard_mask, self.pos_to_vox(self.seed_pos))
 
     def vox_to_pos(self, vox):
-        return np.floor_divide(vox - self.MOVE_GRID_OFFSET, self.MOVE_DELTA).astype('int64')
+        return np.floor_divide(vox - self.MOVE_GRID_OFFSET, self.MOVE_DELTA).astype(np.int64)
 
     def pos_to_vox(self, pos):
-        return (pos * self.MOVE_DELTA).astype('int64') + self.MOVE_GRID_OFFSET
+        return (pos * self.MOVE_DELTA).astype(np.int64) + self.MOVE_GRID_OFFSET
 
     def pos_in_bounds(self, pos):
         if self.block_padding is None:
@@ -413,7 +413,7 @@ class Region(object):
                 'xy': lambda a, v: np.transpose(a[:, :, v[2]]),
                 'xz': lambda a, v: np.transpose(a[:, v[1], :]),
                 'zy': lambda a, v: a[v[0], :, :],
-            }[plane](arr, np.round(vox).astype('int64'))
+            }[plane](arr, np.round(vox).astype(np.int64))
 
         def get_hv(vox, plane):
             # rel = np.divide(vox, self.bounds)
@@ -469,7 +469,7 @@ class Region(object):
         plt.tight_layout()
 
         def update_fn(vox):
-            if np.array_equal(np.round(vox).astype('int64'), update_fn.next_pos_vox):
+            if np.array_equal(np.round(vox).astype(np.int64), update_fn.next_pos_vox):
                 if update_fn.block_data is not None:
                     image_input = pad_dims(update_fn.block_data['image'])
                     mask_input = pad_dims(update_fn.block_data['mask'])
@@ -486,7 +486,7 @@ class Region(object):
                     update_fn.block_data = self.get_next_block()
 
                     update_fn.next_pos_vox = self.pos_to_vox(update_fn.block_data['position'])
-                    if not np.array_equal(np.round(vox).astype('int64'), update_fn.next_pos_vox):
+                    if not np.array_equal(np.round(vox).astype(np.int64), update_fn.next_pos_vox):
                         p = update_fn.next_pos_vox - vox
                         steps = np.linspace(0, 1, 16)
                         interp_vox = vox + np.outer(steps, p)
@@ -571,6 +571,6 @@ class Region(object):
 
 
 def mask_to_output_target(mask):
-    target = np.full_like(mask, CONFIG.model.v_false, dtype='float32')
+    target = np.full_like(mask, CONFIG.model.v_false, dtype=np.float32)
     target[mask] = CONFIG.model.v_true
     return target

@@ -164,7 +164,7 @@ def static_training_generator(subvolumes, batch_size, training_size,
         Whether to reset subvolume generators at the end of each epoch. If true
         subvolumes will be sampled in the same order each epoch.
     """
-    mask_input = np.full(np.append(subvolumes.shape, (1,)), CONFIG.model.v_false, dtype='float32')
+    mask_input = np.full(np.append(subvolumes.shape, (1,)), CONFIG.model.v_false, dtype=np.float32)
     mask_input[tuple(np.array(mask_input.shape) // 2)] = CONFIG.model.v_true
     mask_input = np.tile(mask_input, (batch_size, 1, 1, 1, 1))
     f_a_init = False
@@ -206,9 +206,9 @@ def static_training_generator(subvolumes, batch_size, training_size,
             inds, counts = np.unique(f_a_inds, return_counts=True)
             if f_a_init:
                 f_a_counts[inds] += counts.astype(np.int64)
-                sample_weights = np.ones(f_as.size, dtype='float64')
+                sample_weights = np.ones(f_as.size, dtype=np.float64)
             else:
-                sample_weights = np.reciprocal(f_a_counts[f_a_inds], dtype='float64') * float(f_as.size)
+                sample_weights = np.reciprocal(f_a_counts[f_a_inds], dtype=np.float64) * float(f_as.size)
             yield ({'image_input': batch_image_input,
                     'mask_input': mask_input},
                    [batch_mask_target],
@@ -315,9 +315,9 @@ def moving_training_generator(subvolumes, batch_size, training_size, callback_kl
             inds, counts = np.unique(f_a_inds, return_counts=True)
             if f_a_init:
                 f_a_counts[inds] += counts.astype(np.int64)
-                sample_weights = np.ones(f_as.size, dtype='float64')
+                sample_weights = np.ones(f_as.size, dtype=np.float64)
             else:
-                sample_weights = np.reciprocal(f_a_counts[f_a_inds], dtype='float64') * float(f_as.size)
+                sample_weights = np.reciprocal(f_a_counts[f_a_inds], dtype=np.float64) * float(f_as.size)
             yield (inputs,
                    [batch_mask_target],
                    sample_weights)

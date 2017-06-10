@@ -101,7 +101,7 @@ class Subvolume(object):
             True if the rectangular margin around the seed position is uniform.
         """
         margin = np.ceil(np.reciprocal(np.array(CONFIG.volume.resolution),
-                                       dtype='float64') * seed_margin).astype(np.int64)
+                                       dtype=np.float64) * seed_margin).astype(np.int64)
 
         mask_target = self.label_mask
         # If data is unlabeled, can not test so always succeed.
@@ -589,7 +589,7 @@ class Volume(object):
 
         image_subvol = self.world_mat_to_local(image_subvol)
         if np.issubdtype(image_subvol.dtype, np.integer):
-            image_subvol = image_subvol.astype('float32') / 256.0
+            image_subvol = image_subvol.astype(np.float32) / 256.0
 
         label_subvol = self.world_mat_to_local(label_subvol)
 
@@ -1112,12 +1112,12 @@ class ImageStackVolume(Volume):
         return Subvolume(image_subvol, label_subvol, seed, bounds.label_id)
 
     def image_populator(self, bounds):
-        image_subvol = np.zeros(tuple(bounds[1] - bounds[0]), dtype='float32')
+        image_subvol = np.zeros(tuple(bounds[1] - bounds[0]), dtype=np.float32)
         col_range = map(int, (math.floor(bounds[0][self.DIM.X]/self.tile_width),
                               math.ceil(bounds[1][self.DIM.X]/self.tile_width)))
         row_range = map(int, (math.floor(bounds[0][self.DIM.Y]/self.tile_height),
                               math.ceil(bounds[1][self.DIM.Y]/self.tile_height)))
-        tile_size = np.array([1, self.tile_height, self.tile_width]).astype('int64')
+        tile_size = np.array([1, self.tile_height, self.tile_width]).astype(np.int64)
         for z in xrange(bounds[0][self.DIM.Z], bounds[1][self.DIM.Z]):
             if z in self.missing_z:
                 image_subvol[int(z - bounds[0][self.DIM.Z]), :, :] = 0
@@ -1134,8 +1134,8 @@ class ImageStackVolume(Volume):
                         im = im / 256.0
                     except IOError:
                         logging.debug('Failed to load tile: %s', url)
-                        im = np.full((self.tile_height, self.tile_width), 0, dtype='float32')
-                    tile_coord = np.array([z, r, c]).astype('int64')
+                        im = np.full((self.tile_height, self.tile_width), 0, dtype=np.float32)
+                    tile_coord = np.array([z, r, c]).astype(np.int64)
                     tile_loc = np.multiply(tile_coord, tile_size)
 
                     subvol = (np.maximum(np.zeros(3), tile_loc - bounds[0]).astype(np.int64),

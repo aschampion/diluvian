@@ -160,7 +160,7 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape):
     model = add_unet_layer(model,
                            network_config,
                            remaining_layers - 1,
-                           np.ceil(np.divide(output_shape, downsample.astype('float32') + 1.0)).astype(np.int32))
+                           np.ceil(np.divide(output_shape, downsample.astype(np.float32) + 1.0)).astype(np.int32))
 
     # Upsample output of previous layer and merge with forward link.
     model = Deconvolution3D(
