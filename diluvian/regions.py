@@ -4,6 +4,7 @@
 from __future__ import division
 
 import itertools
+import logging
 
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
@@ -246,6 +247,28 @@ class Region(object):
                                     plane_min[2]:plane_max[2]].max()})
         return moves
 
+    def check_move_neighborhood(self, mask):
+        """Given a mask block, check if any central voxels meet move threshold.
+
+        Checks whether a cube one move in each direction from the mask center
+        contains any probabilities greater than the move threshold.
+
+        Parameters
+        ----------
+        mask : ndarray
+            Block of mask probabilities, usually of the shape specified by
+            the configured ``output_fov_shape``.
+
+        Returns
+        -------
+        bool
+        """
+        ctr = np.asarray(mask.shape) // 2
+        neigh_min = ctr - self.MOVE_DELTA
+        neigh_max = ctr + self.MOVE_DELTA + 1
+        neighborhood = mask[map(slice, neigh_min, neigh_max)]
+        return neighborhood.max() >= CONFIG.model.t_move
+
     def add_mask(self, mask_block, mask_pos):
         mask_vox = self.pos_to_vox(mask_pos)
         mask_min, mask_max, pad_pre, pad_post = self.get_block_bounds(mask_vox, np.asarray(mask_block.shape))
@@ -286,21 +309,33 @@ class Region(object):
                 self.queue.put((-move['v'], tuple(new_pos)))
 
     def get_next_block(self):
-        next_pos = np.asarray(self.queue.get()[1])
+        try:
+            queued_move = self.queue.get_nowait()
+        except queue.Empty:
+            return None
+
+        next_pos = np.asarray(queued_move[1])
         next_vox = self.pos_to_vox(next_pos)
         block_min, block_max, pad_pre, pad_post = self.get_block_bounds(next_vox, CONFIG.model.input_fov_shape)
 
         assert self.block_padding is not None or not (np.any(pad_pre) or np.any(pad_post)), \
             'Position block extends out of region bounds, but padding is not enabled: {}'.format(next_pos)
 
-        image_block = self.image[block_min[0]:block_max[0],
-                                 block_min[1]:block_max[1],
-                                 block_min[2]:block_max[2]]
         mask_block = self.mask[block_min[0]:block_max[0],
                                block_min[1]:block_max[1],
                                block_min[2]:block_max[2]].copy()
 
         mask_block[np.isnan(mask_block)] = CONFIG.model.v_false
+
+        # Check that there is still some t_move threshold mask near the move.
+        if CONFIG.model.move_recheck and not (
+           np.array_equal(next_pos, self.seed_pos) or self.check_move_neighborhood(mask_block)):
+            logging.debug('Skpping move: no threshold mask in cube around voxel %s', np.array_str(next_vox))
+            return self.get_next_block()
+
+        image_block = self.image[block_min[0]:block_max[0],
+                                 block_min[1]:block_max[1],
+                                 block_min[2]:block_max[2]]
 
         if np.any(pad_pre) or np.any(pad_post):
             assert self.block_padding is not None, \
@@ -358,7 +393,10 @@ class Region(object):
         while not self.queue.empty():
             batch_block_data = [self.get_next_block() for _ in
                                 itertools.takewhile(lambda _: not self.queue.empty(), range(move_batch_size))]
+            batch_block_data = [b for b in batch_block_data if b is not None]
             batch_moves = len(batch_block_data)
+            if batch_moves == 0:
+                break
             if progress:
                 moves += batch_moves
                 pbar.total = moves + self.queue.qsize()

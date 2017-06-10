@@ -279,17 +279,18 @@ def moving_training_generator(subvolumes, batch_size, training_size, callback_kl
         batch_mask_target = [None] * batch_size
 
         for r, region in enumerate(regions):
-            if region is None or region.queue.empty():
-                subvolume = six.next(subvolumes)
+            block_data = region.get_next_block() if region is not None else None
+            if block_data is None:
+                while block_data is None:
+                    subvolume = six.next(subvolumes)
 
-                regions[r] = Region.from_subvolume(subvolume)
-                region = regions[r]
-                epoch_move_counts.append(move_counts[r])
-                move_counts[r] = 0
+                    regions[r] = Region.from_subvolume(subvolume)
+                    region = regions[r]
+                    epoch_move_counts.append(move_counts[r])
+                    move_counts[r] = 0
+                    block_data = region.get_next_block()
             else:
                 move_counts[r] += 1
-
-            block_data = region.get_next_block()
 
             f_as[r] = subvolume.f_a()
             batch_image_input[r] = pad_dims(block_data['image'])

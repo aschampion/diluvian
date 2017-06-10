@@ -70,6 +70,11 @@ class ModelConfig(BaseConfig):
         Thickness of move check plane in voxels. Setting this greater than 1
         is useful to make moves more robust even if the move grid aligns with
         missing sections or image artifacts.
+    move_recheck : bool
+        If true, when moves are retrieved from the queue a cube in the
+        probability mask will be checked around the move location. If no voxels
+        in this cube are greater than the move threshold, the move will be
+        skipped. The cube size is one move step in each direction.
     training_subv_shape : sequence or ndarray of int, optional
         Shape of the subvolumes used during moving training.
     """
@@ -82,6 +87,7 @@ class ModelConfig(BaseConfig):
         self.t_move = float(settings.get('t_move', 0.9))
         self.t_final = float(settings.get('t_final', self.t_move))
         self.move_check_thickness = int(settings.get('move_check_thickness', 1))
+        self.move_recheck = bool(settings.get('move_recheck', True))
         self.training_subv_shape = np.array(settings.get('training_subv_shape',
                                                          self.input_fov_shape + self.move_step * 2))
 
