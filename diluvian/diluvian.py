@@ -58,7 +58,7 @@ def fill_subvolume_with_model(
         move_batch_size=1,
         max_bodies=None,
         num_workers=CONFIG.training.num_gpus,
-        worker_prequeue=2):
+        worker_prequeue=1):
     # Create an output label volume.
     prediction = np.full_like(subvolume.image, background_label_id, dtype=np.uint64)
     # Create a conflict count volume that tracks locations where segmented
