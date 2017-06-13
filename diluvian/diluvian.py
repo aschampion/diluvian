@@ -111,7 +111,7 @@ def fill_subvolume_with_model(
 
     # Generate seeds from volume.
     generator = preprocessing.SEED_GENERATORS[seed_generator]
-    seeds = generator(subvolume.image)
+    seeds = generator(subvolume.image, CONFIG.volume.resolution)
 
     pbar = tqdm(desc='Seed queue', total=len(seeds), miniters=1, smoothing=0.0)
     num_seeds = len(seeds)

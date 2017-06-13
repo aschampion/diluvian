@@ -74,8 +74,9 @@ def write_keras_history_to_csv(history, filename):
             writer.writerow(row)
 
 
-def get_color_shader(channel):
-    value_str = 'toNormalized(getDataValue(0))'
+def get_color_shader(channel, normalized=True):
+    xform = 'toNormalized' if normalized else 'toRaw'
+    value_str = '{}(getDataValue(0))'.format(xform)
     channels = ['0', '0', '0', value_str]
     channels[channel] = '1'
     shader = """

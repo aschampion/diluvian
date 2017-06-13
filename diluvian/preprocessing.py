@@ -10,15 +10,25 @@ import numpy as np
 from scipy import ndimage
 
 from .config import CONFIG
-from .util import WrappedViewer
+from .util import (
+        get_color_shader,
+        WrappedViewer,
+)
 
 
-def intensity_distance_seeds(image_data, visualize=False):
+def intensity_distance_seeds(image_data, resolution, axis=0, erosion_radius=12, visualize=False):
     """Create seed locations maximally distant from a Sobel filter.
 
     Parameters
     ----------
     image_data : ndarray
+    resolution : ndarray
+    axis : int, optional
+        Axis along which to slices volume to generate seeds in 2D. If
+        None volume is processed in 3D.
+    erosion_radius : int, optional
+        L_infinity norm radius of the structuring element for eroding
+        components.
 
     Returns
     -------
@@ -27,18 +37,39 @@ def intensity_distance_seeds(image_data, visualize=False):
     # Late import as this is the only function using Scikit.
     from skimage.morphology import extrema
 
-    logging.debug('Running Sobel filter on image shape %s', image_data.shape)
-    sobel = ndimage.generic_gradient_magnitude(image_data, ndimage.prewitt)
-    logging.debug('Running distance transform on image shape %s', image_data.shape)
+    structure = np.ones(np.floor_divide(erosion_radius, resolution) * 2 + 1)
 
-    # For low res images the sobel histogram is unimodal. For now just
-    # threshold the histogram at the mean.
-    thresh = sobel < np.mean(sobel)
-    transform = ndimage.distance_transform_cdt(thresh)
-    # Remove missing sections from distance transform.
-    transform[image_data == 0] = 0
-    logging.debug('Finding local maxima of image shape %s', image_data.shape)
-    skmax = extrema.local_maxima(transform)
+    if axis is None:
+        def slices():
+            yield [slice(None), slice(None), slice(None)]
+    else:
+        structure = structure[axis]
+
+        def slices():
+            for i in xrange(image_data.shape[axis]):
+                s = map(slice, [None] * 3)
+                s[axis] = i
+                yield s
+
+    sobel = np.zeros_like(image_data)
+    thresh = np.zeros_like(image_data)
+    transform = np.zeros_like(image_data)
+    skmax = np.zeros_like(image_data)
+    for s in slices():
+        logging.debug('Running Sobel filter on image shape %s', image_data.shape)
+        sobel[s] = ndimage.generic_gradient_magnitude(image_data[s], ndimage.prewitt)
+        # sobel = ndimage.grey_dilation(sobel, size=(5,5,3))
+        logging.debug('Running distance transform on image shape %s', image_data.shape)
+
+        # For low res images the sobel histogram is unimodal. For now just
+        # threshold the histogram at the mean.
+        thresh[s] = sobel[s] < np.mean(sobel[s])
+        thresh[s] = ndimage.binary_erosion(thresh[s], structure=structure)
+        transform[s] = ndimage.distance_transform_cdt(thresh[s])
+        # Remove missing sections from distance transform.
+        transform[s][image_data[s] == 0] = 0
+        logging.debug('Finding local maxima of image shape %s', image_data.shape)
+        skmax[s] = extrema.local_maxima(transform[s])
 
     if visualize:
         viewer = WrappedViewer()
@@ -46,7 +77,7 @@ def intensity_distance_seeds(image_data, visualize=False):
         viewer.add(sobel, name='Filtered')
         viewer.add(thresh.astype(np.float), name='Thresholded')
         viewer.add(transform.astype(np.float), name='Distance')
-        viewer.add(skmax, name='Seeds')
+        viewer.add(skmax, name='Seeds', shader=get_color_shader(0, normalized=False))
         viewer.print_view_prompt()
 
     seeds = np.transpose(np.nonzero(skmax))
@@ -54,7 +85,7 @@ def intensity_distance_seeds(image_data, visualize=False):
     return seeds
 
 
-def grid_seeds(image_data):
+def grid_seeds(image_data, _):
     """Create seed locations in a volume on a uniform grid.
 
     Parameters
