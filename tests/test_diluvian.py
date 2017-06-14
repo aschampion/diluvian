@@ -92,6 +92,20 @@ def test_region_moves():
     for move in moves:
         np.testing.assert_allclose(expected_moves[tuple(move['move'])], move['v'])
 
+    # Test thick move check planes.
+    for i, move in enumerate(map(np.array, [(1, 0, 0), (-1, 0, 0),
+                                            (0, 1, 0), (0, -1, 0),
+                                            (0, 0, 1), (0, 0, -1)])):
+        val = 0.15 * (i + 1)
+        coord = ctr + ((region.MOVE_DELTA + 1) * move) + np.array([2, 2, 2]) * (np.ones(3) - np.abs(move))
+        mock_mask[tuple(coord.astype(np.int64))] = val
+        expected_moves[tuple(move)] = val
+
+    region.move_check_thickness = 2
+    moves = region.get_moves(mock_mask)
+    for move in moves:
+        np.testing.assert_allclose(expected_moves[tuple(move['move'])], move['v'])
+
 
 def test_volume_transforms():
     mock_image = np.arange(64 * 64 * 64, dtype=np.uint8).reshape((64, 64, 64))
