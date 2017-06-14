@@ -365,7 +365,7 @@ class Region(object):
                 'target': target_block,
                 'position': next_pos}
 
-    def fill(self, model, progress=False, move_batch_size=1, max_moves=None, multi_gpu_pad_kludge=None):
+    def fill(self, model, progress=False, move_batch_size=1, max_moves=None, stopping_callback=None):
         """Flood fill this region.
 
         Parameters
@@ -383,11 +383,15 @@ class Region(object):
         max_moves : int, optional
             Terminate filling after this many moves even if the queue is not
             empty.
-        multi_gpu_pad_kludge : int, optional
-            Kludge to support legacy broken models saves. See code for details.
-            You do not need this.
+        stopping_callback : function, optional
+            Function periodical called that will terminate filling if it returns
+            true.
         """
         moves = 0
+        last_check = 0
+        STOP_CHECK_INTERVAL = 100
+        seed_vox = self.pos_to_vox(self.seed_pos)
+
         if progress:
             pbar = tqdm(desc='Move queue', position=progress)
         while not self.queue.empty():
@@ -397,25 +401,19 @@ class Region(object):
             batch_moves = len(batch_block_data)
             if batch_moves == 0:
                 break
+            moves += batch_moves
             if progress:
-                moves += batch_moves
                 pbar.total = moves + self.queue.qsize()
-                pbar.set_description('Move ' + str(batch_block_data[-1]['position']))
+                pbar.set_description(str(seed_vox) + ' Move ' + str(batch_block_data[-1]['position']))
                 pbar.update(batch_moves)
+
+            if stopping_callback is not None and moves - last_check >= STOP_CHECK_INTERVAL:
+                last_check = moves
+                if stopping_callback():
+                    break
 
             image_input = np.concatenate([pad_dims(b['image']) for b in batch_block_data])
             mask_input = np.concatenate([pad_dims(b['mask']) for b in batch_block_data])
-
-            # For models generated with make_parallel that saved the parallel
-            # model, not the original model, some kludge is necessary so that
-            # the batch size is large enough to give each GPU in the parallel
-            # model an equal number of samples.
-            if multi_gpu_pad_kludge is not None and image_input.shape[0] % multi_gpu_pad_kludge != 0:
-                missing_samples = multi_gpu_pad_kludge - (image_input.shape[0] % multi_gpu_pad_kludge)
-                fill_dim = list(image_input.shape)
-                fill_dim[0] = missing_samples
-                image_input = np.concatenate((image_input, np.zeros(fill_dim, dtype=image_input.dtype)))
-                mask_input = np.concatenate((mask_input, np.zeros(fill_dim, dtype=mask_input.dtype)))
 
             output = model.predict({'image_input': image_input,
                                     'mask_input': mask_input})

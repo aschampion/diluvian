@@ -8,9 +8,8 @@ from collections import deque
 import itertools
 import logging
 from multiprocessing import (
-        Lock,
+        Manager,
         Process,
-        Queue,
         )
 import os
 import re
@@ -66,7 +65,7 @@ def fill_subvolume_with_model(
     # predicted labels.
     conflict_count = np.full_like(prediction, 0, dtype=np.uint32)
 
-    def worker(worker_id, model_file, image, seeds, results, lock):
+    def worker(worker_id, model_file, image, seeds, results, lock, revoked):
         lock.acquire()
         import tensorflow as tf
 
@@ -91,6 +90,15 @@ def fill_subvolume_with_model(
                 logging.debug('Worker %s: got DONE', worker_id)
                 break
 
+            def stopping_callback():
+                stop = False
+                lock.acquire()
+                if tuple(seed) in revoked:
+                    revoked.remove(tuple(seed))
+                    stop = True
+                lock.release()
+                return stop
+
             logging.debug('Worker %s: got seed %s', worker_id, np.array_str(seed))
 
             # Flood-fill and get resulting mask.
@@ -100,14 +108,12 @@ def fill_subvolume_with_model(
             region.bias_against_merge = bias
             region.fill(model,
                         move_batch_size=move_batch_size,
-                        progress=1 + worker_id)
+                        progress=1 + worker_id,
+                        stopping_callback=stopping_callback)
             body = region.to_body()
             logging.debug('Worker %s: seed %s filled', worker_id, np.array_str(seed))
 
             results.put((seed, body))
-
-        seed_queue.close()
-        results_queue.close()
 
     # Generate seeds from volume.
     generator = preprocessing.SEED_GENERATORS[seed_generator]
@@ -116,19 +122,32 @@ def fill_subvolume_with_model(
     pbar = tqdm(desc='Seed queue', total=len(seeds), miniters=1, smoothing=0.0)
     num_seeds = len(seeds)
     seeds = iter(seeds)
-    seed_queue = Queue()
-    results_queue = Queue()
+
+    manager = Manager()
+    # Queue of seeds to be picked up by workers.
+    seed_queue = manager.Queue()
+    # Queue of results from workers.
+    results_queue = manager.Queue()
+    # Dequeue of seeds that were put in seed_queue but have not yet been
+    # combined by the main process.
     dispatched_seeds = deque()
+    # Seeds that were placed in seed_queue but subsequently covered by other
+    # results before their results have been processed. This allows workers to
+    # abort working on these seeds by checking this list.
+    revoked_seeds = manager.list()
+    # Results that have been received by the main process but have not yet
+    # been combined because they were not received in the dispatch order.
     unordered_results = {}
+
     for seed in itertools.islice(seeds, min(num_seeds, num_workers * worker_prequeue)):
         dispatched_seeds.append(seed)
         seed_queue.put(seed)
 
     workers = []
-    loading_lock = Lock()
+    loading_lock = manager.Lock()
     for worker_id in range(num_workers):
         w = Process(target=worker, args=(worker_id, model_file, subvolume.image,
-                                         seed_queue, results_queue, loading_lock))
+                                         seed_queue, results_queue, loading_lock, revoked_seeds))
         w.start()
         workers.append(w)
 
@@ -178,6 +197,10 @@ def fill_subvolume_with_model(
             # This seed has already been filled.
             logging.debug('Seed (%s) was filled but has been covered in the meantime.',
                           np.array_str(seed))
+            loading_lock.acquire()
+            if tuple(seed) in revoked_seeds:
+                revoked_seeds.remove(tuple(seed))
+            loading_lock.release()
             continue
 
         mask, bounds = body._get_bounded_mask()
@@ -195,6 +218,12 @@ def fill_subvolume_with_model(
         logging.debug('Adding body to prediction label volume.')
         bounds_shape = map(slice, bounds[0], bounds[1])
         prediction_mask = prediction[bounds_shape] == background_label_id
+        for seed in dispatched_seeds:
+            if np.all(bounds[0] <= seed) and np.all(bounds[1] > seed) and mask[tuple(seed - bounds[0])]:
+                loading_lock.acquire()
+                if tuple(seed) not in revoked_seeds:
+                    revoked_seeds.append(tuple(seed))
+                loading_lock.release()
         conflict_count[bounds_shape][np.logical_and(np.logical_not(prediction_mask), mask)] += 1
         prediction[bounds_shape][np.logical_and(prediction_mask, mask)] = label_id
         logging.info('Filled seed (%s) with %s voxels labeled %s.',
@@ -208,10 +237,9 @@ def fill_subvolume_with_model(
 
     for _ in range(num_workers):
         seed_queue.put('DONE')
-    seed_queue.close()
-    results_queue.close()
     for wid, worker in enumerate(workers):
         worker.join()
+    manager.shutdown()
 
     return prediction, conflict_count
 
@@ -256,7 +284,6 @@ def fill_region_with_model(
         bias=True,
         move_batch_size=1,
         max_moves=None,
-        multi_gpu_model_kludge=None,
         sparse=False):
     # Late import to avoid Keras import until TF bindings are set.
     from .network import load_model
@@ -290,8 +317,7 @@ def fill_region_with_model(
         region.fill(model,
                     progress=True,
                     move_batch_size=move_batch_size,
-                    max_moves=max_moves,
-                    multi_gpu_pad_kludge=multi_gpu_model_kludge)
+                    max_moves=max_moves)
         viewer = region.get_viewer()
         print(viewer)
         while True:
