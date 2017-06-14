@@ -330,7 +330,7 @@ class Region(object):
         # Check that there is still some t_move threshold mask near the move.
         if CONFIG.model.move_recheck and not (
            np.array_equal(next_pos, self.seed_pos) or self.check_move_neighborhood(mask_block)):
-            logging.debug('Skpping move: no threshold mask in cube around voxel %s', np.array_str(next_vox))
+            logging.debug('Skipping move: no threshold mask in cube around voxel %s', np.array_str(next_vox))
             return self.get_next_block()
 
         image_block = self.image[block_min[0]:block_max[0],
