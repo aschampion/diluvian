@@ -35,7 +35,7 @@ def intensity_distance_seeds(image_data, resolution, axis=0, erosion_radius=12, 
     list of ndarray
     """
     # Late import as this is the only function using Scikit.
-    from skimage.morphology import extrema
+    from skimage import morphology
 
     structure = np.ones(np.floor_divide(erosion_radius, resolution) * 2 + 1)
 
@@ -56,8 +56,12 @@ def intensity_distance_seeds(image_data, resolution, axis=0, erosion_radius=12, 
     transform = np.zeros_like(image_data)
     skmax = np.zeros_like(image_data)
     for s in slices():
+        image_slice = image_data[s]
+        if axis is not None and not np.any(image_slice):
+            logging.debug('Skipping blank slice.')
+            continue
         logging.debug('Running Sobel filter on image shape %s', image_data.shape)
-        sobel[s] = ndimage.generic_gradient_magnitude(image_data[s], ndimage.prewitt)
+        sobel[s] = ndimage.generic_gradient_magnitude(image_slice, ndimage.prewitt)
         # sobel = ndimage.grey_dilation(sobel, size=(5,5,3))
         logging.debug('Running distance transform on image shape %s', image_data.shape)
 
@@ -67,9 +71,9 @@ def intensity_distance_seeds(image_data, resolution, axis=0, erosion_radius=12, 
         thresh[s] = ndimage.binary_erosion(thresh[s], structure=structure)
         transform[s] = ndimage.distance_transform_cdt(thresh[s])
         # Remove missing sections from distance transform.
-        transform[s][image_data[s] == 0] = 0
+        transform[s][image_slice == 0] = 0
         logging.debug('Finding local maxima of image shape %s', image_data.shape)
-        skmax[s] = extrema.local_maxima(transform[s])
+        skmax[s] = morphology.thin(morphology.extrema.local_maxima(transform[s]))
 
     if visualize:
         viewer = WrappedViewer()
