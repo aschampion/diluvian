@@ -8,6 +8,7 @@ import logging
 
 import numpy as np
 from scipy import ndimage
+from six.moves import range as xrange
 
 from .config import CONFIG
 from .util import (
