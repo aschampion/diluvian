@@ -93,6 +93,7 @@ def test_region_moves():
         np.testing.assert_allclose(expected_moves[tuple(move['move'])], move['v'])
 
     # Test thick move check planes.
+    mock_mask[:] = 0
     for i, move in enumerate(map(np.array, [(1, 0, 0), (-1, 0, 0),
                                             (0, 1, 0), (0, -1, 0),
                                             (0, 0, 1), (0, 0, -1)])):
