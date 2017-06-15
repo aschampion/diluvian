@@ -60,7 +60,7 @@ def plot_history(history):
     fig.suptitle('model loss')
     ax.set_ylabel('loss')
     ax.set_xlabel('epoch')
-    ax.legend(['train', 'test'], loc='upper right')
+    ax.legend(['train', 'validation'], loc='upper right')
 
     return fig
 
