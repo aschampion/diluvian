@@ -475,6 +475,8 @@ def train_network(
 
         for inputs, targets in viz_ex:
             viewer = WrappedViewer(voxel_size=list(np.flipud(CONFIG.volume.resolution)))
+            output_offset = np.array(inputs['image_input'].shape[1:4]) - np.array(targets[0].shape[1:4])
+            output_offset = np.flipud(output_offset // 2)
             viewer.add(inputs['image_input'][0, :, :, :, 0],
                        name='Image')
             viewer.add(inputs['mask_input'][0, :, :, :, 0],
@@ -482,11 +484,13 @@ def train_network(
                        shader=get_color_shader(2))
             viewer.add(targets[0][0, :, :, :, 0],
                        name='Mask Target',
-                       shader=get_color_shader(0))
+                       shader=get_color_shader(0),
+                       voxel_offset=output_offset)
             output = ffn.predict(inputs)
             viewer.add(output[0, :, :, :, 0],
                        name='Mask Output',
-                       shader=get_color_shader(1))
+                       shader=get_color_shader(1),
+                       voxel_offset=output_offset)
 
             viewer.print_view_prompt()
 
