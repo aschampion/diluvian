@@ -72,14 +72,22 @@ class PredictionCopy(Callback):
     using a custom Keras training function to copy model predictions at the
     same time as gradient updates.
     """
-    def __init__(self, kludge, name=None):
+    def __init__(self, kludge, name=None, epoch_reset=False):
         self.kludge = kludge
         self.name = name if name is not None else ''
+        self.epoch_reset = epoch_reset
+        self._diluvian_model = None
 
-    def on_batch_end(self, batch, logs={}):
+    def on_batch_end(self, batch, logs=None):
+        if hasattr(self, 'model'):
+            self._diluvian_model = self.model
         if self.kludge['inputs'] and self.kludge['outputs'] is None:
             logging.debug('Running prediction kludge {}'.format(self.name))
             self.kludge['outputs'] = self.model.predict(self.kludge['inputs'])
+
+    def on_epoch_end(self, epoch, logs=None):
+        if self.epoch_reset:
+            self.kludge['inputs'] = None
 
 
 class EarlyAbortException(Exception):
@@ -381,7 +389,8 @@ def train_network(
         validation_shape = CONFIG.model.input_fov_shape
     else:
         validation_shape = CONFIG.model.training_subv_shape
-        callbacks.append(PredictionCopy(validation_kludge, 'Validation'))
+        validation_callback = PredictionCopy(validation_kludge, 'Validation', epoch_reset=True)
+        callbacks.append(validation_callback)
     validation_gens = [
             augment_subvolume_generator(v.subvolume_generator(shape=validation_shape,
                                                               label_margin=output_margin))
@@ -393,6 +402,13 @@ def train_network(
             validation_kludge,
             f_a_bins=f_a_bins,
             reset_generators=True)
+
+    # Keras does not call batch end callbacks during validation batches, so this
+    # wrapper is necessary to generate moves for moving validation.
+    def validation_wrapper():
+        while True:
+            validation_callback.on_batch_end(None)
+            yield six.next(validation_data)
 
     TRAINING_STEPS_PER_EPOCH = CONFIG.training.training_size // CONFIG.training.batch_size
     VALIDATION_STEPS = CONFIG.training.validation_size // CONFIG.training.batch_size
@@ -423,12 +439,14 @@ def train_network(
             max_q_size=CONFIG.training.num_workers,
             workers=1,
             callbacks=callbacks,
-            validation_data=validation_data,
+            validation_data=validation_wrapper(),
             validation_steps=VALIDATION_STEPS)
 
     # Moving training
     kludges = [{'inputs': None, 'outputs': None} for _ in range(CONFIG.training.num_workers)]
-    callbacks.extend([PredictionCopy(kludge, 'Training {}'.format(n)) for n, kludge in enumerate(kludges)])
+    callbacks.extend([
+            PredictionCopy(kludge, 'Training {}'.format(n), epoch_reset=CONFIG.training.reset_generators)
+            for n, kludge in enumerate(kludges)])
     callbacks.append(ModelCheckpoint(model_output_filebase + '.hdf5', save_best_only=True))
     if model_checkpoint_file:
         callbacks.append(ModelCheckpoint(model_checkpoint_file))
@@ -459,7 +477,7 @@ def train_network(
             max_q_size=CONFIG.training.num_workers,
             workers=1,
             callbacks=callbacks,
-            validation_data=validation_data,
+            validation_data=validation_wrapper(),
             validation_steps=VALIDATION_STEPS)
     extend_keras_history(history, moving_history)
 
