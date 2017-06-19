@@ -17,7 +17,7 @@ from .util import (
 )
 
 
-def intensity_distance_seeds(image_data, resolution, axis=0, erosion_radius=12, visualize=False):
+def intensity_distance_seeds(image_data, resolution, axis=0, erosion_radius=12, min_sep=12, visualize=False):
     """Create seed locations maximally distant from a Sobel filter.
 
     Parameters
@@ -30,6 +30,8 @@ def intensity_distance_seeds(image_data, resolution, axis=0, erosion_radius=12, 
     erosion_radius : int, optional
         L_infinity norm radius of the structuring element for eroding
         components.
+    min_sep : int, optional
+        L_infinity minimum separation of seeds in nanometers.
 
     Returns
     -------
@@ -84,6 +86,14 @@ def intensity_distance_seeds(image_data, resolution, axis=0, erosion_radius=12, 
         viewer.add(transform.astype(np.float), name='Distance')
         viewer.add(skmax, name='Seeds', shader=get_color_shader(0, normalized=False))
         viewer.print_view_prompt()
+
+    mask = np.zeros(np.floor_divide(erosion_radius, resolution) + 1)
+    mask[0, 0, 0] = 1
+    seeds = np.transpose(np.nonzero(skmax))
+    for seed in seeds:
+        if skmax[tuple(seed)]:
+            lim = np.minimum(mask.shape, skmax.shape - seed)
+            skmax[map(slice, seed, seed + lim)] = mask[map(slice, lim)]
 
     seeds = np.transpose(np.nonzero(skmax))
 
