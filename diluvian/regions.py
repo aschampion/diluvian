@@ -121,12 +121,12 @@ class Region(object):
                 (seed_vox, self.move_bounds[0], self.move_bounds[1])
         self.seed_pos = seed_pos
         self.queue.put((None, seed_pos))
-        seed_vox = self.pos_to_vox(seed_pos)
+        self.seed_vox = self.pos_to_vox(seed_pos)
         if self.target is not None:
             self.target_offset = (self.bounds - self.target.shape) // 2
-            np.testing.assert_almost_equal(self.target[tuple(seed_vox - self.target_offset)], CONFIG.model.v_true,
+            np.testing.assert_almost_equal(self.target[tuple(self.seed_vox - self.target_offset)], CONFIG.model.v_true,
                                            err_msg='Seed position should be in target body.')
-        self.mask[tuple(seed_vox)] = CONFIG.model.v_true
+        self.mask[tuple(self.seed_vox)] = CONFIG.model.v_true
 
     def unfilled_copy(self):
         """Clone this region in an initial state without any filling.
@@ -390,7 +390,6 @@ class Region(object):
         moves = 0
         last_check = 0
         STOP_CHECK_INTERVAL = 100
-        seed_vox = self.pos_to_vox(self.seed_pos)
 
         if progress:
             pbar = tqdm(desc='Move queue', position=progress)
@@ -404,12 +403,12 @@ class Region(object):
             moves += batch_moves
             if progress:
                 pbar.total = moves + self.queue.qsize()
-                pbar.set_description(str(seed_vox) + ' Move ' + str(batch_block_data[-1]['position']))
+                pbar.set_description(str(self.seed_vox) + ' Move ' + str(batch_block_data[-1]['position']))
                 pbar.update(batch_moves)
 
             if stopping_callback is not None and moves - last_check >= STOP_CHECK_INTERVAL:
                 last_check = moves
-                if stopping_callback():
+                if stopping_callback(self):
                     break
 
             image_input = np.concatenate([pad_dims(b['image']) for b in batch_block_data])

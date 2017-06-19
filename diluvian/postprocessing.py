@@ -21,6 +21,9 @@ class Body(object):
         self.mask = mask
         self.seed = seed
 
+    def is_seed_in_mask(self):
+        return self.mask[tuple(self.seed)]
+
     def _get_bounded_mask(self, closing_shape=None):
         if isinstance(self.mask, OctreeVolume):
             # If this is a sparse volume, materialize it to memory.
@@ -38,7 +41,7 @@ class Body(object):
             mask = self.mask
 
         if closing_shape is not None:
-            mask = ndimage.grey_closing(mask, size=closing_shape, mode='nearest')
+            mask = ndimage.binary_closing(mask, size=np.ones(closing_shape))
 
         return mask, bounds
 

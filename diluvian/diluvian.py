@@ -57,7 +57,8 @@ def fill_subvolume_with_model(
         move_batch_size=1,
         max_bodies=None,
         num_workers=CONFIG.training.num_gpus,
-        worker_prequeue=1):
+        worker_prequeue=1,
+        reject_non_seed_components=True):
     # Create an output label volume.
     prediction = np.full_like(subvolume.image, background_label_id, dtype=np.uint64)
     # Create a conflict count volume that tracks locations where segmented
@@ -90,13 +91,17 @@ def fill_subvolume_with_model(
                 logging.debug('Worker %s: got DONE', worker_id)
                 break
 
-            def stopping_callback():
+            def stopping_callback(region):
                 stop = False
                 lock.acquire()
                 if tuple(seed) in revoked:
                     revoked.remove(tuple(seed))
                     stop = True
                 lock.release()
+                if reject_non_seed_components and \
+                   region.bias_against_merge and \
+                   region.mask[tuple(region.seed_vox)] < 0.5:
+                    stop = True
                 return stop
 
             logging.debug('Worker %s: got seed %s', worker_id, np.array_str(seed))
@@ -203,7 +208,15 @@ def fill_subvolume_with_model(
             loading_lock.release()
             continue
 
-        mask, bounds = body._get_bounded_mask()
+        if reject_non_seed_components and not body.is_seed_in_mask():
+            logging.debug('Seed (%s) is not in its body.', np.array_str(seed))
+            continue
+
+        if reject_non_seed_components:
+            mask, bounds = body.get_seeded_component(CONFIG.postprocessing.closing_shape)
+        else:
+            mask, bounds = body._get_bounded_mask()
+
         body_size = np.count_nonzero(mask)
 
         if body_size == 0:
