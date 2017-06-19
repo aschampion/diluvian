@@ -826,10 +826,16 @@ class DownsampledVolume(VolumeView):
         # - Conjunction (tends to introduce false splits)
         # - Disjunction (tends to overdilate and merge)
         # - Mode label (computationally expensive)
-        subvol.label_mask = subvol.label_mask.reshape(
-                [label_shape[0], self.scale[0],
-                 label_shape[1], self.scale[1],
-                 label_shape[2], self.scale[2]]).mean(5).mean(3).mean(1) > 0.5
+        if CONFIG.volume.label_downsampling == 'conjunction':
+            subvol.label_mask = subvol.label_mask.reshape(
+                    [label_shape[0], self.scale[0],
+                     label_shape[1], self.scale[1],
+                     label_shape[2], self.scale[2]]).all(5).all(3).all(1)
+        else:
+            subvol.label_mask = subvol.label_mask.reshape(
+                    [label_shape[0], self.scale[0],
+                     label_shape[1], self.scale[1],
+                     label_shape[2], self.scale[2]]).mean(5).mean(3).mean(1) > 0.5
 
         # Note that this is not a coordinate xform to parent in the typical
         # sense, just a rescaling of the coordinate in the subvolume-local

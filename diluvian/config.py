@@ -40,9 +40,12 @@ class VolumeConfig(BaseConfig):
     ----------
     resolution : sequence or ndarray of float
         Resolution to which volumes will be downsampled before processing.
+    label_downsampling : str
+        Method for downsampling label masks. One of 'majority' or 'conjunction'.
     """
     def __init__(self, settings):
         self.resolution = np.array(settings.get('resolution', [1, 1, 1]))
+        self.label_downsampling = str(settings.get('label_downsampling', 'majority'))
 
 
 class ModelConfig(BaseConfig):
