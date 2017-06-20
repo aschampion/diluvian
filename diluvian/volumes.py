@@ -14,6 +14,7 @@ import numpy as np
 from PIL import Image
 import pytoml as toml
 import requests
+from scipy import ndimage
 import six
 from six.moves import range as xrange
 
@@ -86,6 +87,10 @@ class Subvolume(object):
         """
         return np.count_nonzero(self.label_mask) / float(self.label_mask.size)
 
+    def has_seed_in_mask(self):
+        ctr = self.seed - (np.asarray(self.image.shape) - np.asarray(self.label_mask.shape)) // 2
+        return self.label_mask[tuple(ctr)]
+
     def has_uniform_seed_margin(self, seed_margin=20.0):
         """Test if a subvolume has a margin of uniform label around its seed.
 
@@ -140,6 +145,31 @@ class SubvolumeGenerator(six.Iterator):
 
     def __next__(self):
         return self.volume.get_subvolume(six.next(self.bounds_generator))
+
+
+class ErodedMaskGenerator(six.Iterator):
+    def __init__(self, subvolume_generator, erosion_px):
+        self.subvolume_generator = subvolume_generator
+        self.sel = np.ones(erosion_px * 2 + 1)
+
+    @property
+    def shape(self):
+        return self.subvolume_generator.shape
+
+    def __iter__(self):
+        return self
+
+    def reset(self):
+        self.subvolume_generator.reset()
+
+    def __next__(self):
+        while True:
+            subv = six.next(self.subvolume_generator)
+
+            subv.label_mask = ndimage.binary_erosion(subv.label_mask, structure=self.sel, border_value=1)
+
+            if subv.has_seed_in_mask():
+                return subv
 
 
 class MirrorAugmentGenerator(six.Iterator):

@@ -40,6 +40,7 @@ from .util import (
         )
 from .volumes import (
         ContrastAugmentGenerator,
+        ErodedMaskGenerator,
         GaussianNoiseAugmentGenerator,
         MaskedArtifactAugmentGenerator,
         MirrorAugmentGenerator,
@@ -131,6 +132,8 @@ def augment_subvolume_generator(subvolume_generator):
     diluvian.volumes.SubvolumeGenerator
     """
     gen = subvolume_generator
+    if np.any(CONFIG.training.label_erosion):
+        gen = ErodedMaskGenerator(gen, CONFIG.training.label_erosion)
     for axes in CONFIG.training.augment_permute_axes:
         gen = PermuteAxesAugmentGenerator(gen, axes)
     for axis in CONFIG.training.augment_mirrors:
@@ -485,8 +488,9 @@ def train_network(
 
     if viewer:
         dupe_data = static_training_generator(
-                validation_volumes.values()[0].subvolume_generator(shape=CONFIG.model.input_fov_shape,
-                                                                   label_margin=output_margin),
+                augment_subvolume_generator(validation_volumes.values()[0].subvolume_generator(
+                        shape=CONFIG.model.input_fov_shape,
+                        label_margin=output_margin)),
                 CONFIG.training.batch_size,
                 CONFIG.training.training_size)
         viz_ex = itertools.islice(dupe_data, 1)
