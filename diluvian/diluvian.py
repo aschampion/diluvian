@@ -76,7 +76,7 @@ def fill_subvolume_with_model(
         os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
         os.environ['CUDA_VISIBLE_DEVICES'] = str(worker_id)
 
-        with tf.device('/gpu:0'.format(worker_id)):
+        with tf.device('/gpu:0'):
             # Late import to avoid Keras import until TF bindings are set.
             from .network import load_model
 
