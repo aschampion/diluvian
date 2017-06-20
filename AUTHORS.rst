@@ -9,8 +9,8 @@ Acknowledgements
 ----------------
 
 This library is an implementation and extension of the flood-filling network
-algorithm first described in [Januszewski2016]_ and network architecture in
-[He2016]_.
+algorithm first described in [Januszewski2016]_ and network architectures in
+[He2016]_ and [Ronneberger2015]_.
 
 This library is built on the wonderful
 `Keras library <https://github.com/fchollet/keras>`_ by François Chollet and
@@ -33,6 +33,11 @@ Diluvian uses a packaging and build harness
    Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun.
    Identity mappings in deep residual networks. *arXiv preprint*
    *arXiv:1603.05027*, 2016.
+
+.. [Ronneberger2015]
+   Olaf Ronneberger, Philipp Fischer, and Thomas Brox.
+   U-net: convolutional networks for biomedical image segmentation.
+   MICCAI 2015. 2015.
 
 .. [Sato2000]
    Mie Sato, Ingmar Bitter, Michael A. Bender, Arie E. Kaufman,
