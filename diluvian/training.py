@@ -77,11 +77,8 @@ class PredictionCopy(Callback):
         self.kludge = kludge
         self.name = name if name is not None else ''
         self.epoch_reset = epoch_reset
-        self._diluvian_model = None
 
     def on_batch_end(self, batch, logs=None):
-        if hasattr(self, 'model'):
-            self._diluvian_model = self.model
         if self.kludge['inputs'] and self.kludge['outputs'] is None:
             logging.debug('Running prediction kludge {}'.format(self.name))
             self.kludge['outputs'] = self.model.predict(self.kludge['inputs'])
