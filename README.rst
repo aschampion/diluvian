@@ -76,6 +76,11 @@ Limitations, Differences, and Caveats
 Diluvian may differ from the original FFN algorithm or make implementation
 choices in ways pertinent to your use:
 
+* By default diluvian uses a U-Net architecture rather than stacked convolution
+  modules with skip links. The authors of the original FFN paper also now use
+  both architectures (personal communication). To use a different architecture,
+  change the ``factory`` setting in the ``[network]`` section of your config
+  file.
 * Rather than resampling training data based on the filling fraction
   :math:`f_a`, sample loss is (optionally) weighted based on the filling
   fraction.
