@@ -205,7 +205,10 @@ class BranchNode(Node):
              np.greater(key[1], self.midpoint))
 
         # TODO must be some way to do combinatorial ops like this with numpy.
-        return np.where([[[p[i][0] and p[j][1] and p[k][2] for k in range(2)] for j in range(2)] for i in range(2)])
+        return zip(*np.where([[[p[i][0] and p[j][1] and p[k][2]
+                                for k in range(2)]
+                               for j in range(2)]
+                              for i in range(2)]))
 
     def get_child_bounds(self, i, j, k):
         mins = (self.bounds[0], self.midpoint)
@@ -224,12 +227,16 @@ class BranchNode(Node):
     def __getitem__(self, key):
         inds = self.get_children_mask(key)
 
-        for i, j, k in zip(*inds):
+        for i, j, k in inds:
             if self.children[i][j][k] is None:
                 self.populate_child(i, j, k)
 
+        if len(inds) == 1:
+            i, j, k = inds[0]
+            return self.children[i][j][k][key]
+
         chunk = np.empty(tuple(key[1] - key[0]), self.get_volume().dtype)
-        for i, j, k in zip(*inds):
+        for i, j, k in inds:
             child = self.children[i][j][k]
             subchunk = child.get_intersection(key)
             ind = (subchunk[0] - key[0], subchunk[1] - key[0])
@@ -249,11 +256,11 @@ class BranchNode(Node):
 
         inds = self.get_children_mask(key)
 
-        for i, j, k in zip(*inds):
+        for i, j, k in inds:
             if self.children[i][j][k] is None:
                 self.populate_child(i, j, k)
 
-        for i, j, k in zip(*inds):
+        for i, j, k in inds:
             child = self.children[i][j][k]
             subchunk = child.get_intersection(key)
             ind = (subchunk[0] - key[0], subchunk[1] - key[0])
