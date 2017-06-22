@@ -67,8 +67,8 @@ def test_octree_map_copy():
 
     cot = ot.map_copy(np.float32, leaf_map, uniform_map)
     for orig, copy in zip(ot.iter_leaves(), cot.iter_leaves()):
-        np.testing.assert_almost_equal(copy.bounds[0], orig.bounds[0], err_msg='Copy leaves should have same boundss.')
-        np.testing.assert_almost_equal(copy.bounds[1], orig.bounds[1], err_msg='Copy leaves should have same boundss.')
+        np.testing.assert_almost_equal(copy.bounds[0], orig.bounds[0], err_msg='Copy leaves should have same bounds.')
+        np.testing.assert_almost_equal(copy.bounds[1], orig.bounds[1], err_msg='Copy leaves should have same bounds.')
         np.testing.assert_almost_equal(copy.data, leaf_map(orig.data), err_msg='Copy leaves should be mapped.')
     expected_mat = np.array([[[9.], [-6.]], [[9.], [-5.]]], dtype=np.float32)
     assert np.array_equal(cot[7:9, 4:6, 4], expected_mat), 'Copy should have same uniformity.'
