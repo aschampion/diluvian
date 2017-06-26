@@ -41,7 +41,7 @@ class Body(object):
             mask = self.mask
 
         if closing_shape is not None:
-            mask = ndimage.binary_closing(mask, size=np.ones(closing_shape))
+            mask = ndimage.binary_closing(mask, structure=np.ones(closing_shape))
 
         return mask, bounds
 
