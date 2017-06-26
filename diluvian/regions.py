@@ -110,8 +110,12 @@ class Region(object):
         else:
             self.mask = mask
         self.target = target
+
         self.bias_against_merge = False
         self.move_based_on_new_mask = False
+        self.prioritize_proximity = False
+        self.proximity = {}
+
         if seed_vox is None:
             seed_pos = np.floor_divide(self.move_bounds[0] + self.move_bounds[1], 2)
         else:
@@ -121,6 +125,7 @@ class Region(object):
                 (seed_vox, self.move_bounds[0], self.move_bounds[1])
         self.seed_pos = seed_pos
         self.queue.put((None, seed_pos))
+        self.proximity[tuple(seed_pos)] = 1
         self.seed_vox = self.pos_to_vox(seed_pos)
         if self.target is not None:
             self.target_offset = (self.bounds - self.target.shape) // 2
@@ -300,13 +305,20 @@ class Region(object):
         move_check_block = np.pad(move_check_block, pad_width, 'constant')
 
         new_moves = self.get_moves(move_check_block)
+        if self.prioritize_proximity:
+            proximity = self.proximity[tuple(mask_pos)] + 1
+            del self.proximity[tuple(mask_pos)]
         for move in new_moves:
             new_pos = mask_pos + move['move']
             if not self.pos_in_bounds(new_pos):
                 continue
             if tuple(new_pos) not in self.visited and move['v'] >= CONFIG.model.t_move:
                 self.visited.add(tuple(new_pos))
-                self.queue.put((-move['v'], tuple(new_pos)))
+                priority = -move['v']
+                if self.prioritize_proximity:
+                    self.proximity[tuple(new_pos)] = min(self.proximity.get(tuple(new_pos), proximity), proximity)
+                    priority /= proximity
+                self.queue.put((priority, tuple(new_pos)))
 
     def get_next_block(self):
         try:
