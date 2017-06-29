@@ -205,10 +205,10 @@ class BranchNode(Node):
              np.greater(key[1], self.midpoint))
 
         # TODO must be some way to do combinatorial ops like this with numpy.
-        return zip(*np.where([[[p[i][0] and p[j][1] and p[k][2]
-                                for k in range(2)]
-                               for j in range(2)]
-                              for i in range(2)]))
+        return list(zip(*np.where([[[p[i][0] and p[j][1] and p[k][2]
+                                     for k in range(2)]
+                                    for j in range(2)]
+                                   for i in range(2)])))
 
     def get_child_bounds(self, i, j, k):
         mins = (self.bounds[0], self.midpoint)
