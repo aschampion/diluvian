@@ -127,11 +127,15 @@ def make_flood_fill_unet(input_fov_shape, output_fov_shape, network_config):
 
 def add_unet_layer(model, network_config, remaining_layers, output_shape):
     # Double number of channels at each layer.
-    n_channels = 2 * model.get_shape().as_list()[-1]
+    n_channels = model.get_shape().as_list()[-1]
     downsample = np.array([x != 0 and remaining_layers % x == 0 for x in network_config.unet_downsample_rate])
 
     # First U convolution module.
-    for _ in range(network_config.num_layers_per_module):
+    for i in range(network_config.num_layers_per_module):
+        if i == network_config.num_layers_per_module - 1:
+            # Increase the number of channels before downsampling to avoid
+            # bottleneck (identical to 3D U-Net paper).
+            n_channels = 2 * n_channels
         model = Conv3D(
                 n_channels,
                 tuple(network_config.convolution_dim),
@@ -164,9 +168,9 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape):
 
     # Upsample output of previous layer and merge with forward link.
     model = Deconvolution3D(
-            n_channels,
+            n_channels * 2,
             tuple(network_config.convolution_dim),
-            (None,) + tuple(output_shape) + (n_channels,),
+            (None,) + tuple(output_shape) + (n_channels * 2,),
             strides=list(downsample + 1),
             activation='relu',
             padding='same')(model)
