@@ -11,6 +11,7 @@ import six
 
 from keras.layers import (
         Conv3D,
+        Conv3DTranspose,
         Cropping3D,
         Dropout,
         Input,
@@ -23,7 +24,6 @@ from keras.layers.merge import (
 from keras.layers.core import Activation
 from keras.models import load_model as keras_load_model, Model
 import keras.optimizers
-from keras_contrib.layers import Deconvolution3D
 
 
 def make_flood_fill_network(input_fov_shape, output_fov_shape, network_config):
@@ -167,13 +167,17 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape):
                            np.ceil(np.divide(output_shape, downsample.astype(np.float32) + 1.0)).astype(np.int32))
 
     # Upsample output of previous layer and merge with forward link.
-    model = Deconvolution3D(
+    model = Conv3DTranspose(
             n_channels * 2,
             tuple(network_config.convolution_dim),
-            (None,) + tuple(output_shape) + (n_channels * 2,),
             strides=list(downsample + 1),
+            kernel_initializer=network_config.initialization,
             activation='relu',
             padding='same')(model)
+    # Must crop output because Keras wrongly pads the output shape.
+    stride_pad = (network_config.convolution_dim // 2) * np.array(downsample)
+    tf_pad_start = stride_pad // 2  # Tensorflow puts odd padding at end.
+    model = Cropping3D(list(zip(list(tf_pad_start), list(stride_pad - tf_pad_start))))(model)
 
     model = concatenate([forward, model])
 
@@ -199,6 +203,9 @@ def compile_network(model, optimizer_config):
 
 
 def load_model(model_file, network_config):
+    # Import for loading legacy models.
+    from keras_contrib.layers import Deconvolution3D  # noqa
+
     model = keras_load_model(model_file)
 
     # If necessary, wrap the loaded model to transpose the axes for both
