@@ -125,6 +125,8 @@ class NetworkConfig(BaseConfig):
         Shape of the convolution for each layer.
     convolution_filters : int
         Number of convolution filters for each layer.
+    convolution_activation : str
+        Name of the Keras activation function to apply after convolution layers.
     initialization : str
         Name of the Keras initialization function to use for weight
         initialization of all layers.
@@ -150,6 +152,7 @@ class NetworkConfig(BaseConfig):
         self.num_layers_per_module = int(settings.get('num_layers_per_module', 2))
         self.convolution_dim = np.array(settings.get('convolution_dim', [3, 3, 3]))
         self.convolution_filters = int(settings.get('convolution_filters', 32))
+        self.convolution_activation = str(settings.get('convolution_activation', 'relu'))
         self.initialization = str(settings.get('initialization', 'glorot_uniform'))
         self.output_activation = str(settings.get('output_activation', 'sigmoid'))
         self.dropout_probability = float(settings.get('dropout_probability', 0.0))

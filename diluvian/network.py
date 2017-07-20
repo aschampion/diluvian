@@ -39,7 +39,7 @@ def make_flood_fill_network(input_fov_shape, output_fov_shape, network_config):
             network_config.convolution_filters,
             tuple(network_config.convolution_dim),
             kernel_initializer=network_config.initialization,
-            activation='relu',
+            activation=network_config.convolution_activation,
             padding='same')(ffn)
 
     contraction = (input_fov_shape - output_fov_shape) // 2
@@ -79,7 +79,7 @@ def add_convolution_module(model, network_config):
                 network_config.convolution_filters,
                 tuple(network_config.convolution_dim),
                 kernel_initializer=network_config.initialization,
-                activation='relu',
+                activation=network_config.convolution_activation,
                 padding='same')(model2)
 
     model = add([model, model2])
@@ -88,7 +88,7 @@ def add_convolution_module(model, network_config):
     # likely to be important, see:
     # http://torch.ch/blog/2016/02/04/resnets.html
     # https://github.com/gcr/torch-residual-networks
-    model = Activation('relu')(model)
+    model = Activation(network_config.convolution_activation)(model)
     if network_config.dropout_probability > 0.0:
         model = Dropout(network_config.dropout_probability)(model)
 
@@ -106,7 +106,7 @@ def make_flood_fill_unet(input_fov_shape, output_fov_shape, network_config):
             network_config.convolution_filters,
             tuple(network_config.convolution_dim),
             kernel_initializer=network_config.initialization,
-            activation='relu',
+            activation=network_config.convolution_activation,
             padding='same')(ffn)
 
     # Note that since the Keras 2 upgrade strangely models with depth > 3 are
@@ -140,7 +140,7 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape):
                 n_channels,
                 tuple(network_config.convolution_dim),
                 kernel_initializer=network_config.initialization,
-                activation='relu',
+                activation=network_config.convolution_activation,
                 padding='same')(model)
 
     # Crop and pass forward to upsampling.
@@ -159,7 +159,7 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape):
             tuple(network_config.convolution_dim),
             strides=list(downsample + 1),
             kernel_initializer=network_config.initialization,
-            activation='relu',
+            activation=network_config.convolution_activation,
             padding='same')(model)
     model = add_unet_layer(model,
                            network_config,
@@ -172,7 +172,7 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape):
             tuple(network_config.convolution_dim),
             strides=list(downsample + 1),
             kernel_initializer=network_config.initialization,
-            activation='relu',
+            activation=network_config.convolution_activation,
             padding='same')(model)
     # Must crop output because Keras wrongly pads the output shape.
     stride_pad = (network_config.convolution_dim // 2) * np.array(downsample)
@@ -187,7 +187,7 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape):
                 n_channels,
                 tuple(network_config.convolution_dim),
                 kernel_initializer=network_config.initialization,
-                activation='relu',
+                activation=network_config.convolution_activation,
                 padding='same')(model)
 
     return model
