@@ -101,6 +101,9 @@ def _make_main_parser():
             choices=['grid', 'sobel'],
             help='Method to generate seed locations for flood filling.')
     fill_parser.add_argument(
+            '--ignore-mask', dest='ignore_mask', default=False,
+            help='Ignore the mask channel when generating seeds.')
+    fill_parser.add_argument(
             '--background-label-id', dest='background_label_id', default=0, type=int,
             help='Label ID to output for voxels not belonging to any filled body.')
     fill_parser.add_argument(
@@ -223,7 +226,8 @@ def main():
                                 background_label_id=args.background_label_id,
                                 bias=args.bias,
                                 move_batch_size=args.move_batch_size,
-                                max_bodies=args.max_bodies)
+                                max_bodies=args.max_bodies,
+                                filter_seeds_by_mask=not args.ignore_mask)
 
     elif args.command == 'sparse-fill':
         # Late import to prevent loading large modules for short CLI commands.

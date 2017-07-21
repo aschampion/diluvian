@@ -48,9 +48,9 @@ def generate_subvolume_bounds(filename, volumes, num_bounds, sparse=False):
         SubvolumeBounds.iterable_to_csv(bounds, filename.format(volume=k))
 
 
-def fill_subvolume_with_model(
+def fill_volume_with_model(
         model_file,
-        subvolume,
+        volume,
         seed_generator='sobel',
         background_label_id=0,
         bias=True,
@@ -58,7 +58,9 @@ def fill_subvolume_with_model(
         max_bodies=None,
         num_workers=CONFIG.training.num_gpus,
         worker_prequeue=1,
+        filter_seeds_by_mask=True,
         reject_non_seed_components=True):
+    subvolume = volume.get_subvolume(SubvolumeBounds(start=np.zeros(3, dtype=np.int64), stop=volume.shape))
     # Create an output label volume.
     prediction = np.full_like(subvolume.image, background_label_id, dtype=np.uint64)
     # Create a conflict count volume that tracks locations where segmented
@@ -124,6 +126,9 @@ def fill_subvolume_with_model(
     # Generate seeds from volume.
     generator = preprocessing.SEED_GENERATORS[seed_generator]
     seeds = generator(subvolume.image, CONFIG.volume.resolution)
+
+    if filter_seeds_by_mask and volume.mask_data is not None:
+        seeds = [s for s in seeds if volume.mask_data[tuple(volume.world_coord_to_local(s))]]
 
     pbar = tqdm(desc='Seed queue', total=len(seeds), miniters=1, smoothing=0.0)
     num_seeds = len(seeds)
@@ -278,8 +283,7 @@ def fill_volumes_with_model(
     for volume_name, volume in six.iteritems(volumes):
         logging.info('Filling volume %s...', volume_name)
         volume = volume.downsample(CONFIG.volume.resolution)
-        volume = volume.get_subvolume(SubvolumeBounds(start=np.zeros(3, dtype=np.int64), stop=volume.shape))
-        prediction, conflict_count = fill_subvolume_with_model(model_file, volume, **kwargs)
+        prediction, conflict_count = fill_volume_with_model(model_file, volume, **kwargs)
 
         volume_filename = filename.format(volume=volume_name)
         config = HDF5Volume.write_file(
@@ -292,7 +296,8 @@ def fill_volumes_with_model(
 
         if viewer:
             viewer = WrappedViewer(voxel_size=list(np.flipud(CONFIG.volume.resolution)))
-            viewer.add(volume.image, name='Image')
+            subvolume = volume.get_subvolume(SubvolumeBounds(start=np.zeros(3, dtype=np.int64), stop=volume.shape))
+            viewer.add(subvolume.image, name='Image')
             viewer.add(prediction, name='Labels')
             viewer.add(conflict_count, name='Conflicts')
 
