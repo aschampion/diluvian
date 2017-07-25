@@ -12,7 +12,7 @@ want to install the version of ``tensorflow-gpu`` diluvian requires:
 
 .. code-block:: console
 
-    pip install 'tensorflow-gpu==1.1'
+    pip install 'tensorflow-gpu==1.2.1'
 
 You should install diluvian
 `in a virtualenv <http://docs.python-guide.org/en/latest/dev/virtualenvs/>`_
