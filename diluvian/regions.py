@@ -102,11 +102,12 @@ class Region(object):
         if mask is None:
             if isinstance(self.image, OctreeVolume):
                 self.mask = OctreeVolume(self.image.leaf_shape, (np.zeros(3), self.bounds), 'float32')
+                self.mask[:] = np.NAN
             elif sparse_mask:
                 self.mask = OctreeVolume(CONFIG.model.training_subv_shape, (np.zeros(3), self.bounds), 'float32')
+                self.mask[:] = np.NAN
             else:
-                self.mask = np.empty(self.bounds, dtype=np.float32)
-            self.mask[:] = np.NAN
+                self.mask = np.full(self.bounds, np.NAN, dtype=np.float32)
         else:
             self.mask = mask
         self.target = target
@@ -129,8 +130,8 @@ class Region(object):
         self.seed_vox = self.pos_to_vox(seed_pos)
         if self.target is not None:
             self.target_offset = (self.bounds - self.target.shape) // 2
-            np.testing.assert_almost_equal(self.target[tuple(self.seed_vox - self.target_offset)], CONFIG.model.v_true,
-                                           err_msg='Seed position should be in target body.')
+            assert np.isclose(self.target[tuple(self.seed_vox - self.target_offset)], CONFIG.model.v_true), \
+                'Seed position should be in target body.'
         self.mask[tuple(self.seed_vox)] = CONFIG.model.v_true
 
     def unfilled_copy(self):
