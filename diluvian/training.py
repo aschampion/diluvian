@@ -451,6 +451,9 @@ def train_network(
     if model_checkpoint_file:
         callbacks.append(ModelCheckpoint(model_checkpoint_file))
     callbacks.append(EarlyStopping(patience=CONFIG.training.patience))
+    # Activation histograms and weight images for TensorBoard will not work
+    # because the Keras callback does not currently support validation data
+    # generators.
     if tensorboard:
         callbacks.append(TensorBoard())
 

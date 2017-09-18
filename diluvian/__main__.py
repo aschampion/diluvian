@@ -73,7 +73,7 @@ def _make_main_parser():
                  'criteria, restart training with a new random seed.')
     train_parser.add_argument(
             '--tensorboard', action='store_true', dest='tensorboard', default=False,
-            help='Output tensorboard log files while training.')
+            help='Output tensorboard log files while training (limited to network graph).')
     train_parser.add_argument(
             '--viewer', action='store_true', dest='viewer', default=False,
             help='Create a neuroglancer viewer for a training sample at the end of training.')
