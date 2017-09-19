@@ -73,6 +73,11 @@ class ModelConfig(BaseConfig):
         Thickness of move check plane in voxels. Setting this greater than 1
         is useful to make moves more robust even if the move grid aligns with
         missing sections or image artifacts.
+    move_priority : str
+        How to prioritize the move queue. Either 'descending' to order by
+        descending mask probability in the move check plane (default) or
+        'proximity' to prioritize moves minimizing L1 path distance from the
+        seed.
     move_recheck : bool
         If true, when moves are retrieved from the queue a cube in the
         probability mask will be checked around the move location. If no voxels
@@ -90,6 +95,7 @@ class ModelConfig(BaseConfig):
         self.t_move = float(settings.get('t_move', 0.9))
         self.t_final = float(settings.get('t_final', self.t_move))
         self.move_check_thickness = int(settings.get('move_check_thickness', 1))
+        self.move_priority = str(settings.get('move_priority', 'descending'))
         self.move_recheck = bool(settings.get('move_recheck', True))
         self.training_subv_shape = np.array(settings.get('training_subv_shape',
                                                          self.input_fov_shape + self.move_step * 2))

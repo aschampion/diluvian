@@ -114,7 +114,7 @@ class Region(object):
 
         self.bias_against_merge = False
         self.move_based_on_new_mask = False
-        self.prioritize_proximity = False
+        self.prioritize_proximity = CONFIG.model.move_priority == 'proximity'
         self.proximity = {}
 
         if seed_vox is None:
