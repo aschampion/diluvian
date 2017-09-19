@@ -56,6 +56,7 @@ def fill_volume_with_model(
         background_label_id=0,
         bias=True,
         move_batch_size=1,
+        max_moves=None,
         max_bodies=None,
         num_workers=CONFIG.training.num_gpus,
         worker_prequeue=1,
@@ -118,6 +119,7 @@ def fill_volume_with_model(
             region.bias_against_merge = bias
             region.fill(model,
                         move_batch_size=move_batch_size,
+                        max_moves=max_moves,
                         progress=1 + worker_id,
                         stopping_callback=stopping_callback)
             body = region.to_body()

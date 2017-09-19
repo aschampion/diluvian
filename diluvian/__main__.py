@@ -91,6 +91,9 @@ def _make_main_parser():
     fill_common_parser.add_argument(
             '--move-batch-size', dest='move_batch_size', default=1, type=int,
             help='Maximum number of fill moves to process in each prediction batch.')
+    fill_common_parser.add_argument(
+            '--max-moves', dest='max_moves', default=None, type=int,
+            help='Cancel filling after this many moves.')
 
     fill_parser = commandparsers.add_parser(
             'fill', parents=[common_parser, fill_common_parser],
@@ -131,9 +134,6 @@ def _make_main_parser():
             '-bi', '--bounds-input-file', dest='bounds_input_file', default=None,
             help='Filename for bounds CSV input. Should contain "{volume}", which will be '
                  'substituted with the volume name for each respective volume\'s bounds.')
-    sparse_fill_parser.add_argument(
-            '--max-moves', dest='max_moves', default=None, type=int,
-            help='Cancel filling after this many moves.')
 
     view_parser = commandparsers.add_parser(
             'view', parents=[common_parser],
@@ -231,6 +231,7 @@ def main():
                                 background_label_id=args.background_label_id,
                                 bias=args.bias,
                                 move_batch_size=args.move_batch_size,
+                                max_moves=args.max_moves,
                                 max_bodies=args.max_bodies,
                                 filter_seeds_by_mask=not args.ignore_mask,
                                 shuffle_seeds=args.shuffle_seeds)
