@@ -7,6 +7,7 @@ from __future__ import print_function
 import argparse
 import logging
 import os
+import random
 import re
 
 import six
@@ -101,6 +102,9 @@ def _make_main_parser():
             choices=['grid', 'sobel'],
             help='Method to generate seed locations for flood filling.')
     fill_parser.add_argument(
+            '--ordered-seeds', action='store_false', dest='shuffle_seeds', default=True,
+            help='Do not shuffle order in which seeds are processed.')
+    fill_parser.add_argument(
             '--ignore-mask', dest='ignore_mask', default=False,
             help='Ignore the mask channel when generating seeds.')
     fill_parser.add_argument(
@@ -176,6 +180,7 @@ def main():
         CONFIG.random_seed = args.random_seed
 
     def init_seeds():
+        random.seed(CONFIG.random_seed)
         import numpy as np
         np.random.seed(CONFIG.random_seed)
         import tensorflow as tf
@@ -227,7 +232,8 @@ def main():
                                 bias=args.bias,
                                 move_batch_size=args.move_batch_size,
                                 max_bodies=args.max_bodies,
-                                filter_seeds_by_mask=not args.ignore_mask)
+                                filter_seeds_by_mask=not args.ignore_mask,
+                                shuffle_seeds=args.shuffle_seeds)
 
     elif args.command == 'sparse-fill':
         # Late import to prevent loading large modules for short CLI commands.

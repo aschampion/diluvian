@@ -12,6 +12,7 @@ from multiprocessing import (
         Process,
         )
 import os
+import random
 import re
 
 import numpy as np
@@ -59,7 +60,8 @@ def fill_volume_with_model(
         num_workers=CONFIG.training.num_gpus,
         worker_prequeue=1,
         filter_seeds_by_mask=True,
-        reject_non_seed_components=True):
+        reject_non_seed_components=True,
+        shuffle_seeds=True):
     subvolume = volume.get_subvolume(SubvolumeBounds(start=np.zeros(3, dtype=np.int64), stop=volume.shape))
     # Create an output label volume.
     prediction = np.full_like(subvolume.image, background_label_id, dtype=np.uint64)
@@ -132,6 +134,8 @@ def fill_volume_with_model(
 
     pbar = tqdm(desc='Seed queue', total=len(seeds), miniters=1, smoothing=0.0)
     num_seeds = len(seeds)
+    if shuffle_seeds:
+        random.shuffle(seeds)
     seeds = iter(seeds)
 
     manager = Manager()
