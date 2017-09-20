@@ -133,6 +133,9 @@ class NetworkConfig(BaseConfig):
         Number of convolution filters for each layer.
     convolution_activation : str
         Name of the Keras activation function to apply after convolution layers.
+    convolution_padding : str
+        Name of the padding mode for convolutions, either 'same' (default) or
+        'valid'.
     initialization : str
         Name of the Keras initialization function to use for weight
         initialization of all layers.
@@ -159,6 +162,7 @@ class NetworkConfig(BaseConfig):
         self.convolution_dim = np.array(settings.get('convolution_dim', [3, 3, 3]))
         self.convolution_filters = int(settings.get('convolution_filters', 32))
         self.convolution_activation = str(settings.get('convolution_activation', 'relu'))
+        self.convolution_padding = str(settings.get('convolution_padding', 'same'))
         self.initialization = str(settings.get('initialization', 'glorot_uniform'))
         self.output_activation = str(settings.get('output_activation', 'sigmoid'))
         self.dropout_probability = float(settings.get('dropout_probability', 0.0))

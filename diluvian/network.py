@@ -29,6 +29,9 @@ import keras.optimizers
 def make_flood_fill_network(input_fov_shape, output_fov_shape, network_config):
     """Construct a stacked convolution module flood filling network.
     """
+    if network_config.convolution_padding != 'same':
+        raise ValueError('ResNet implementation only supports same padding.')
+
     image_input = Input(shape=tuple(input_fov_shape) + (1,), dtype='float32', name='image_input')
     mask_input = Input(shape=tuple(input_fov_shape) + (1,), dtype='float32', name='mask_input')
     ffn = concatenate([image_input, mask_input])
@@ -102,22 +105,15 @@ def make_flood_fill_unet(input_fov_shape, output_fov_shape, network_config):
     mask_input = Input(shape=tuple(input_fov_shape) + (1,), dtype='float32', name='mask_input')
     ffn = concatenate([image_input, mask_input])
 
-    ffn = Conv3D(
-            network_config.convolution_filters,
-            tuple(network_config.convolution_dim),
-            kernel_initializer=network_config.initialization,
-            activation=network_config.convolution_activation,
-            padding='same')(ffn)
-
     # Note that since the Keras 2 upgrade strangely models with depth > 3 are
     # rejected by TF.
     ffn = add_unet_layer(ffn, network_config, network_config.unet_depth - 1, output_fov_shape)
 
     mask_output = Conv3D(
             1,
-            tuple(network_config.convolution_dim),
+            (1, 1, 1),
             kernel_initializer=network_config.initialization,
-            padding='same',
+            padding=network_config.convolution_padding,
             name='mask_output',
             activation=network_config.output_activation)(ffn)
     ffn = Model(inputs=[image_input, mask_input], outputs=[mask_output])
@@ -130,6 +126,11 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape):
     n_channels = model.get_shape().as_list()[-1]
     downsample = np.array([x != 0 and remaining_layers % x == 0 for x in network_config.unet_downsample_rate])
 
+    if network_config.convolution_padding == 'same':
+        conv_contract = np.zeros(3, dtype=np.int32)
+    else:
+        conv_contract = network_config.convolution_dim - 1
+
     # First U convolution module.
     for i in range(network_config.num_layers_per_module):
         if i == network_config.num_layers_per_module - 1:
@@ -141,10 +142,14 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape):
                 tuple(network_config.convolution_dim),
                 kernel_initializer=network_config.initialization,
                 activation=network_config.convolution_activation,
-                padding='same')(model)
+                padding=network_config.convolution_padding)(model)
 
     # Crop and pass forward to upsampling.
-    contraction = (np.array(model.get_shape().as_list()[1:4]) - output_shape) // 2
+    if remaining_layers > 0:
+        forward_link_shape = output_shape + network_config.num_layers_per_module * conv_contract
+    else:
+        forward_link_shape = output_shape
+    contraction = (np.array(model.get_shape().as_list()[1:4]) - forward_link_shape) // 2
     forward = Cropping3D(list(zip(list(contraction), list(contraction))))(model)
     if network_config.dropout_probability > 0.0:
         forward = Dropout(network_config.dropout_probability)(forward)
@@ -161,10 +166,11 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape):
             kernel_initializer=network_config.initialization,
             activation=network_config.convolution_activation,
             padding='same')(model)
+    next_output_shape = np.ceil(np.divide(forward_link_shape, downsample.astype(np.float32) + 1.0)).astype(np.int32)
     model = add_unet_layer(model,
                            network_config,
                            remaining_layers - 1,
-                           np.ceil(np.divide(output_shape, downsample.astype(np.float32) + 1.0)).astype(np.int32))
+                           next_output_shape.astype(np.int32))
 
     # Upsample output of previous layer and merge with forward link.
     model = Conv3DTranspose(
@@ -174,8 +180,8 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape):
             kernel_initializer=network_config.initialization,
             activation=network_config.convolution_activation,
             padding='same')(model)
-    # Must crop output because Keras wrongly pads the output shape.
-    stride_pad = (network_config.convolution_dim // 2) * np.array(downsample)
+    # Must crop output because Keras wrongly pads the output shape for odd array sizes.
+    stride_pad = (network_config.convolution_dim // 2) * np.array(downsample) + (1 - np.mod(forward_link_shape, 2))
     tf_pad_start = stride_pad // 2  # Tensorflow puts odd padding at end.
     model = Cropping3D(list(zip(list(tf_pad_start), list(stride_pad - tf_pad_start))))(model)
 
@@ -188,7 +194,7 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape):
                 tuple(network_config.convolution_dim),
                 kernel_initializer=network_config.initialization,
                 activation=network_config.convolution_activation,
-                padding='same')(model)
+                padding=network_config.convolution_padding)(model)
 
     return model
 
