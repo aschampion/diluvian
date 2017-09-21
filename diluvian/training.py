@@ -117,8 +117,8 @@ class EarlyAbort(Callback):
                     self.threshold_epoch, self.monitor, current, self.threshold_value))
 
 
-def augment_subvolume_generator(subvolume_generator):
-    """Apply data augmentations to a subvolume generator.
+def preprocess_subvolume_generator(subvolume_generator):
+    """Apply non-augmentation preprocessing to a subvolume generator.
 
     Parameters
     ----------
@@ -131,6 +131,22 @@ def augment_subvolume_generator(subvolume_generator):
     gen = subvolume_generator
     if np.any(CONFIG.training.label_erosion):
         gen = ErodedMaskGenerator(gen, CONFIG.training.label_erosion)
+
+    return gen
+
+
+def augment_subvolume_generator(subvolume_generator):
+    """Apply data augmentations to a subvolume generator.
+
+    Parameters
+    ----------
+    subvolume_generator : diluvian.volumes.SubvolumeGenerator
+
+    Returns
+    -------
+    diluvian.volumes.SubvolumeGenerator
+    """
+    gen = subvolume_generator
     for axes in CONFIG.training.augment_permute_axes:
         gen = PermuteAxesAugmentGenerator(gen, axes)
     for axis in CONFIG.training.augment_mirrors:
@@ -392,9 +408,12 @@ def train_network(
         validation_callback = PredictionCopy(validation_kludge, 'Validation', epoch_reset=True)
         callbacks.append(validation_callback)
     validation_gens = [
-            augment_subvolume_generator(v.subvolume_generator(shape=validation_shape,
-                                                              label_margin=output_margin))
+            preprocess_subvolume_generator(
+                    v.subvolume_generator(shape=validation_shape,
+                                          label_margin=output_margin))
             for v in six.itervalues(validation_volumes)]
+    if CONFIG.training.augment_validation:
+        validation_gens = map(augment_subvolume_generator, validation_gens)
     validation_data = moving_training_generator(
             Roundrobin(*validation_gens),
             CONFIG.training.batch_size,
@@ -415,8 +434,10 @@ def train_network(
 
     # Pre-train
     training_gens = [
-            augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.input_fov_shape,
-                                                              label_margin=output_margin))
+            augment_subvolume_generator(
+                    preprocess_subvolume_generator(
+                            v.subvolume_generator(shape=CONFIG.model.input_fov_shape,
+                                                  label_margin=output_margin)))
             for v in six.itervalues(training_volumes)]
     random.shuffle(training_gens)
     # Divide training generators up for workers.
@@ -461,8 +482,10 @@ def train_network(
         callbacks.append(TensorBoard())
 
     training_gens = [
-            augment_subvolume_generator(v.subvolume_generator(shape=CONFIG.model.training_subv_shape,
-                                                              label_margin=output_margin))
+            augment_subvolume_generator(
+                    preprocess_subvolume_generator(
+                            v.subvolume_generator(shape=CONFIG.model.training_subv_shape,
+                                                  label_margin=output_margin)))
             for v in six.itervalues(training_volumes)]
     random.shuffle(training_gens)
     worker_gens = [
@@ -491,9 +514,11 @@ def train_network(
 
     if viewer:
         dupe_data = static_training_generator(
-                augment_subvolume_generator(validation_volumes.values()[0].subvolume_generator(
-                        shape=CONFIG.model.input_fov_shape,
-                        label_margin=output_margin)),
+                augment_subvolume_generator(
+                        preprocess_subvolume_generator(
+                                validation_volumes.values()[0].subvolume_generator(
+                                        shape=CONFIG.model.input_fov_shape,
+                                        label_margin=output_margin))),
                 CONFIG.training.batch_size,
                 CONFIG.training.training_size)
         viz_ex = itertools.islice(dupe_data, 1)

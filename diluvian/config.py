@@ -244,6 +244,8 @@ class TrainingConfig(BaseConfig):
         Amount to erode label mask for each training subvolume in each
         dimension, in pixels. For example, a value of [0, 1, 1] will result
         in erosion with a structuring element of size [1, 3, 3].
+    augment_validation : bool
+        Whether validation data should also be augmented.
     augment_mirrors : sequence of int
         Axes along which to mirror for data augmentation.
     augment_permute_axes : sequence of sequence of int
@@ -290,6 +292,7 @@ class TrainingConfig(BaseConfig):
         self.early_abort_epoch = settings.get('early_abort_epoch', None)
         self.early_abort_loss = settings.get('early_abort_loss', None)
         self.label_erosion = np.array(settings.get('label_erosion', [0, 1, 1]), dtype=np.int64)
+        self.augment_validation = bool(settings.get('augment_validation', True))
         self.augment_mirrors = [int(x) for x in settings.get('augment_mirrors', [0, 1, 2])]
         self.augment_permute_axes = settings.get('augment_permute_axes', [[0, 2, 1]])
         self.augment_missing_data = settings.get('augment_missing_data', [{'axis': 0, 'prob': 0.01}])
