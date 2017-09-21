@@ -10,6 +10,7 @@ import numpy as np
 import six
 
 from keras.layers import (
+        BatchNormalization,
         Conv3D,
         Conv3DTranspose,
         Cropping3D,
@@ -44,6 +45,8 @@ def make_flood_fill_network(input_fov_shape, output_fov_shape, network_config):
             kernel_initializer=network_config.initialization,
             activation=network_config.convolution_activation,
             padding='same')(ffn)
+    if network_config.batch_normalization:
+        ffn = BatchNormalization()(ffn)
 
     contraction = (input_fov_shape - output_fov_shape) // 2
     if np.any(np.less(contraction, 0)):
@@ -84,6 +87,8 @@ def add_convolution_module(model, network_config):
                 kernel_initializer=network_config.initialization,
                 activation=network_config.convolution_activation,
                 padding='same')(model2)
+        if network_config.batch_normalization:
+            model2 = BatchNormalization()(model2)
 
     model = add([model, model2])
     # Note that the activation here differs from He et al 2016, as that
@@ -92,6 +97,8 @@ def add_convolution_module(model, network_config):
     # http://torch.ch/blog/2016/02/04/resnets.html
     # https://github.com/gcr/torch-residual-networks
     model = Activation(network_config.convolution_activation)(model)
+    if network_config.batch_normalization:
+        model = BatchNormalization()(model)
     if network_config.dropout_probability > 0.0:
         model = Dropout(network_config.dropout_probability)(model)
 
@@ -143,6 +150,8 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape):
                 kernel_initializer=network_config.initialization,
                 activation=network_config.convolution_activation,
                 padding=network_config.convolution_padding)(model)
+        if network_config.batch_normalization:
+            model = BatchNormalization()(model)
 
     # Crop and pass forward to upsampling.
     if remaining_layers > 0:
@@ -166,6 +175,8 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape):
             kernel_initializer=network_config.initialization,
             activation=network_config.convolution_activation,
             padding='same')(model)
+    if network_config.batch_normalization:
+        model = BatchNormalization()(model)
     next_output_shape = np.ceil(np.divide(forward_link_shape, downsample.astype(np.float32) + 1.0)).astype(np.int32)
     model = add_unet_layer(model,
                            network_config,
@@ -180,6 +191,8 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape):
             kernel_initializer=network_config.initialization,
             activation=network_config.convolution_activation,
             padding='same')(model)
+    if network_config.batch_normalization:
+        model = BatchNormalization()(model)
     # Must crop output because Keras wrongly pads the output shape for odd array sizes.
     stride_pad = (network_config.convolution_dim // 2) * np.array(downsample) + (1 - np.mod(forward_link_shape, 2))
     tf_pad_start = stride_pad // 2  # Tensorflow puts odd padding at end.
@@ -195,6 +208,8 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape):
                 kernel_initializer=network_config.initialization,
                 activation=network_config.convolution_activation,
                 padding=network_config.convolution_padding)(model)
+        if network_config.batch_normalization:
+            model = BatchNormalization()(model)
 
     return model
 

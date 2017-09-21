@@ -145,6 +145,10 @@ class NetworkConfig(BaseConfig):
     dropout_probability : float
         Probability for dropout layers. If zero, no dropout layers will be
         included.
+    batch_normalization : bool
+        Whether to apply batch normalization. Note that in included networks
+        normalization is applied after activation, rather than before as in the
+        original paper, because this is now more common practice.
     unet_depth : int
         For U-Net models, the total number of downsampled levels in the network.
     unet_downsample_rate : sequence or ndarray of int
@@ -166,6 +170,7 @@ class NetworkConfig(BaseConfig):
         self.initialization = str(settings.get('initialization', 'glorot_uniform'))
         self.output_activation = str(settings.get('output_activation', 'sigmoid'))
         self.dropout_probability = float(settings.get('dropout_probability', 0.0))
+        self.batch_normalization = bool(settings.get('batch_normalization', False))
         self.unet_depth = int(settings.get('unet_depth', 4))
         self.unet_downsample_rate = np.array(settings.get('unet_downsample_rate', [1, 1, 1]))
 
