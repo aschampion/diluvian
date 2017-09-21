@@ -423,7 +423,10 @@ def train_network(
     worker_gens = [
             training_gens[i::CONFIG.training.num_workers]
             for i in xrange(CONFIG.training.num_workers)]
-    worker_training_size = CONFIG.training.training_size // CONFIG.training.num_workers
+    # Some workers may not receive any generators, so account for this when
+    # determining per-worker training size.
+    num_active_workers = sum(len(g) > 0 for g in worker_gens)
+    worker_training_size = CONFIG.training.training_size // num_active_workers
     # Create a training data generator for each worker.
     training_data = [moving_training_generator(
             Roundrobin(*gen),
