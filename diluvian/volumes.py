@@ -265,7 +265,7 @@ class MissingDataAugmentGenerator(six.Iterator):
 
     For each subvolume in the original generator, this generator will yield the
     original subvolume and may yield a subvolume with missing planes of image
-    and label mask data.
+    and/or label mask data.
 
     Parameters
     ----------
@@ -273,11 +273,14 @@ class MissingDataAugmentGenerator(six.Iterator):
     axis : int
     probability : float
         Independent probability that each plane of data along axis is missing.
+    remove_label : bool
+        Whether to also remove label mask data.
     """
-    def __init__(self, subvolume_generator, axis, probability):
+    def __init__(self, subvolume_generator, axis, probability, remove_label=False):
         self.subvolume_generator = subvolume_generator
         self.axis = axis
         self.probability = probability
+        self.remove_label = remove_label
         self.subvolume = None
 
     @property
@@ -307,12 +310,13 @@ class MissingDataAugmentGenerator(six.Iterator):
                 slices = [slice(None), slice(None), slice(None)]
                 slices[self.axis] = missing_sections
                 subv.image[slices] = 0
-                label_axis_margin = (subv.image.shape[self.axis] - subv.label_mask.shape[self.axis]) // 2
-                label_sections = missing_sections[0] - label_axis_margin
-                label_sections = label_sections[(label_sections >= 0) &
-                                                (label_sections < subv.label_mask.shape[self.axis])]
-                slices[self.axis] = (label_sections,)
-                subv.label_mask[slices] = False
+                if self.remove_label:
+                    label_axis_margin = (subv.image.shape[self.axis] - subv.label_mask.shape[self.axis]) // 2
+                    label_sections = missing_sections[0] - label_axis_margin
+                    label_sections = label_sections[(label_sections >= 0) &
+                                                    (label_sections < subv.label_mask.shape[self.axis])]
+                    slices[self.axis] = (label_sections,)
+                    subv.label_mask[slices] = False
                 self.subvolume = None
                 return subv
 
