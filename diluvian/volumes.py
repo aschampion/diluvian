@@ -642,6 +642,7 @@ class Volume(object):
             if label_margin is None:
                 label_margin = np.zeros(3, dtype=np.int64)
             self.label_margin = label_margin
+            self.skip_blank_sections = True
             self.ctr_min = self.margin
             self.ctr_max = (np.array(self.volume.shape) - self.margin - 1).astype(np.int64)
             self.random = np.random.RandomState(CONFIG.random_seed)
@@ -685,6 +686,12 @@ class Volume(object):
                             start_local[2]:stop_local[2]]
                     if not mask.all():
                         logging.debug('Skipping subvolume not entirely in mask.')
+                        continue
+
+                # Skip subvolumes with seeds in blank sections.
+                if self.skip_blank_sections and self.volume.image_data is not None:
+                    if self.volume.image_data[tuple(self.volume.world_coord_to_local(ctr))] == 0:
+                        logging.debug('Skipping subvolume with seed in blank section.')
                         continue
 
                 # Only accept subvolumes where the central seed voxel will be
