@@ -94,8 +94,8 @@ class Region(object):
         else:
             self.MOVE_GRID_OFFSET = np.mod(seed_vox, self.MOVE_DELTA).astype(np.int64)
         self.move_bounds = (
-            np.ceil(np.divide((CONFIG.model.input_fov_shape - 1) // 2 - self.MOVE_GRID_OFFSET,
-                              self.MOVE_DELTA)).astype(np.int64),
+            np.ceil(np.true_divide((CONFIG.model.input_fov_shape - 1) // 2 - self.MOVE_GRID_OFFSET,
+                                   self.MOVE_DELTA)).astype(np.int64),
             self.vox_to_pos(np.array(self.bounds) - 1 - (CONFIG.model.input_fov_shape - 1) // 2),
             )
         self.move_check_thickness = CONFIG.model.move_check_thickness
