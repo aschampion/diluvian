@@ -62,6 +62,7 @@ def fill_volume_with_model(
         worker_prequeue=1,
         filter_seeds_by_mask=True,
         reject_non_seed_components=True,
+        reject_early_termination=False,
         shuffle_seeds=True):
     subvolume = volume.get_subvolume(SubvolumeBounds(start=np.zeros(3, dtype=np.int64), stop=volume.shape))
     # Create an output label volume.
@@ -117,12 +118,16 @@ def fill_volume_with_model(
             # to fill all the way to the boundary.
             region = Region(image, seed_vox=seed, sparse_mask=True, block_padding='reflect')
             region.bias_against_merge = bias
-            region.fill(model,
-                        move_batch_size=move_batch_size,
-                        max_moves=max_moves,
-                        progress=1 + worker_id,
-                        stopping_callback=stopping_callback)
-            body = region.to_body()
+            early_termination = region.fill(
+                    model,
+                    move_batch_size=move_batch_size,
+                    max_moves=max_moves,
+                    progress=1 + worker_id,
+                    stopping_callback=stopping_callback)
+            if reject_early_termination and early_termination:
+                body = None
+            else:
+                body = region.to_body()
             logging.debug('Worker %s: seed %s filled', worker_id, np.array_str(seed))
 
             results.put((seed, body))
@@ -226,6 +231,10 @@ def fill_volume_with_model(
             if tuple(seed) in revoked_seeds:
                 revoked_seeds.remove(tuple(seed))
             loading_lock.release()
+            continue
+
+        if body is None:
+            logging.debug('Body was None.')
             continue
 
         if reject_non_seed_components and not body.is_seed_in_mask():

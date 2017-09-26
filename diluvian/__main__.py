@@ -121,6 +121,11 @@ def _make_main_parser():
             help='Cancel filling after this many bodies (only useful for '
                  'diagnostics).')
     fill_parser.add_argument(
+            '--reject-early-termination', action='store_true',
+            dest='reject_early_termination', default=False,
+            help='Reject seeds that terminate early, e.g., due to maximum '
+                 'move limits.')
+    fill_parser.add_argument(
             'segmentation_output_file', default=None,
             help='Filename for the HDF5 segmentation output, without '
                  'extension. Should contain "{volume}", which will be '
@@ -234,6 +239,7 @@ def main():
                                 max_moves=args.max_moves,
                                 max_bodies=args.max_bodies,
                                 filter_seeds_by_mask=not args.ignore_mask,
+                                reject_early_termination=args.reject_early_termination,
                                 shuffle_seeds=args.shuffle_seeds)
 
     elif args.command == 'sparse-fill':

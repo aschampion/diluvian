@@ -399,10 +399,17 @@ class Region(object):
         stopping_callback : function, optional
             Function periodical called that will terminate filling if it returns
             true.
+
+        Returns
+        -------
+        bool
+            Whether filling was terminated early due to either exceedind the
+            maximum number of moves or the stopping callback.
         """
         moves = 0
         last_check = 0
         STOP_CHECK_INTERVAL = 100
+        early_termination = False
 
         if progress:
             pbar = tqdm(desc='Move queue', position=progress)
@@ -422,6 +429,7 @@ class Region(object):
             if stopping_callback is not None and moves - last_check >= STOP_CHECK_INTERVAL:
                 last_check = moves
                 if stopping_callback(self):
+                    early_termination = True
                     break
 
             image_input = np.concatenate([pad_dims(b['image']) for b in batch_block_data])
@@ -434,10 +442,13 @@ class Region(object):
                 self.add_mask(output[ind, :, :, :, 0], block_data['position'])
 
             if max_moves is not None and moves > max_moves:
+                early_termination = True
                 break
 
         if progress:
             pbar.close()
+
+        return early_termination
 
     def fill_animation(self, model, movie_filename, verbose=False):
         """Create an animated movie of the filling process for this region.
