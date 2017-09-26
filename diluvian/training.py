@@ -518,15 +518,7 @@ def train_network(
     write_keras_history_to_csv(history, model_output_filebase + '.csv')
 
     if viewer:
-        dupe_data = static_training_generator(
-                augment_subvolume_generator(
-                        preprocess_subvolume_generator(
-                                validation_volumes.values()[0].subvolume_generator(
-                                        shape=CONFIG.model.input_fov_shape,
-                                        label_margin=output_margin))),
-                CONFIG.training.batch_size,
-                CONFIG.training.training_size)
-        viz_ex = itertools.islice(dupe_data, 1)
+        viz_ex = itertools.islice(validation_data, 1)
 
         for inputs, targets in viz_ex:
             viewer = WrappedViewer(voxel_size=list(np.flipud(CONFIG.volume.resolution)))
