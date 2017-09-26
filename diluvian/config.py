@@ -186,12 +186,15 @@ class OptimizerConfig(BaseConfig):
     ----------
     klass : str
         Class name of the Keras optimizer to use.
+    loss : str
+        Name of the Keras loss function to use.
     """
     def __init__(self, settings):
         for k, v in six.iteritems(settings):
-            if k != 'klass':
+            if k != 'klass' and k != 'loss':
                 setattr(self, k, v)
         self.klass = str(settings.get('klass', 'SGD'))
+        self.loss = str(settings.get('loss', 'binary_crossentropy'))
 
 
 class TrainingConfig(BaseConfig):

@@ -219,7 +219,7 @@ def compile_network(model, optimizer_config):
     optimizer_kwargs = inspect.getargspec(optimizer_klass.__init__)[0]
     optimizer_kwargs = {k: v for k, v in six.iteritems(optimizer_config.__dict__) if k in optimizer_kwargs}
     optimizer = optimizer_klass(**optimizer_kwargs)
-    model.compile(loss='binary_crossentropy',
+    model.compile(loss=optimizer_config.loss,
                   optimizer=optimizer)
 
 
