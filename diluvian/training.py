@@ -46,6 +46,7 @@ from .volumes import (
         MirrorAugmentGenerator,
         MissingDataAugmentGenerator,
         PermuteAxesAugmentGenerator,
+        RelabelSeedComponentGenerator,
         )
 from .regions import (
         Region,
@@ -131,6 +132,8 @@ def preprocess_subvolume_generator(subvolume_generator):
     gen = subvolume_generator
     if np.any(CONFIG.training.label_erosion):
         gen = ErodedMaskGenerator(gen, CONFIG.training.label_erosion)
+    if CONFIG.training.relabel_seed_component:
+        gen = RelabelSeedComponentGenerator(gen)
 
     return gen
 

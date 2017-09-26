@@ -247,6 +247,9 @@ class TrainingConfig(BaseConfig):
         Amount to erode label mask for each training subvolume in each
         dimension, in pixels. For example, a value of [0, 1, 1] will result
         in erosion with a structuring element of size [1, 3, 3].
+    relabel_seed_component : bool
+        Relabel training subvolumes to only include the seeded connected
+        component.
     augment_validation : bool
         Whether validation data should also be augmented.
     augment_use_both : bool
@@ -298,6 +301,7 @@ class TrainingConfig(BaseConfig):
         self.early_abort_epoch = settings.get('early_abort_epoch', None)
         self.early_abort_loss = settings.get('early_abort_loss', None)
         self.label_erosion = np.array(settings.get('label_erosion', [0, 1, 1]), dtype=np.int64)
+        self.relabel_seed_component = bool(settings.get('relabel_seed_component', False))
         self.augment_validation = bool(settings.get('augment_validation', True))
         self.augment_use_both = bool(settings.get('augment_use_both', True))
         self.augment_mirrors = [int(x) for x in settings.get('augment_mirrors', [0, 1, 2])]

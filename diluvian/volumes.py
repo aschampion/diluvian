@@ -163,13 +163,39 @@ class ErodedMaskGenerator(six.Iterator):
         self.subvolume_generator.reset()
 
     def __next__(self):
-        while True:
-            subv = six.next(self.subvolume_generator)
+        subv = six.next(self.subvolume_generator)
 
-            subv.label_mask = ndimage.binary_erosion(subv.label_mask, structure=self.sel, border_value=1)
+        subv.label_mask = ndimage.binary_erosion(subv.label_mask, structure=self.sel, border_value=1)
 
-            if subv.has_seed_in_mask():
-                return subv
+        if subv.has_seed_in_mask():
+            return subv
+
+
+class RelabelSeedComponentGenerator(six.Iterator):
+    def __init__(self, subvolume_generator):
+        self.subvolume_generator = subvolume_generator
+
+    @property
+    def shape(self):
+        return self.subvolume_generator.shape
+
+    def __iter__(self):
+        return self
+
+    def reset(self):
+        self.subvolume_generator.reset()
+
+    def __next__(self):
+        subv = six.next(self.subvolume_generator)
+
+        label_im, _ = ndimage.label(subv.label_mask)
+        label_axis_margin = (np.array(subv.image.shape) - np.array(subv.label_mask.shape)) // 2
+        seed_label = label_im[tuple(subv.seed - label_axis_margin)]
+
+        subv.label_mask = label_im == seed_label
+
+        if subv.has_seed_in_mask():
+            return subv
 
 
 class SubvolumeAugmentGenerator(six.Iterator):
