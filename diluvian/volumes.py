@@ -172,7 +172,61 @@ class ErodedMaskGenerator(six.Iterator):
                 return subv
 
 
-class MirrorAugmentGenerator(six.Iterator):
+class SubvolumeAugmentGenerator(six.Iterator):
+    """Base class for subvolume generator augmenters.
+
+    Parameters
+    ----------
+    subvolume_generator : SubvolumeGenerator
+    return_both : bool
+        If true, return both the original and augmented volume in sequence.
+        If false, return either with equal probability.
+    """
+    def __init__(self, subvolume_generator, return_both):
+        self.subvolume_generator = subvolume_generator
+        self.return_both = return_both
+        self.return_single_p = 0.5
+        self.subvolume = None
+
+    @property
+    def shape(self):
+        return self.subvolume_generator.shape
+
+    def __iter__(self):
+        return self
+
+    def reset(self):
+        self.subvolume = None
+        self.subvolume_generator.reset()
+
+    def __next__(self):
+        if self.return_both:
+            if self.subvolume is None:
+                self.subvolume = six.next(self.subvolume_generator)
+                return self.subvolume
+            else:
+                subv = self.augment_subvolume()
+                self.subvolume = None
+                if subv is None:
+                    return six.next(self)
+                else:
+                    return subv
+        else:
+            self.subvolume = six.next(self.subvolume_generator)
+            if np.random.sample() < self.return_single_p:
+                return self.subvolume
+            else:
+                subv = self.augment_subvolume()
+                if subv is None:
+                    return self.subvolume
+                else:
+                    return subv
+
+    def augment_subvolume(self):
+        raise NotImplementedError('Subclasses must implement this method.')
+
+
+class MirrorAugmentGenerator(SubvolumeAugmentGenerator):
     """Repeats subvolumes from a subvolume generator mirrored along an axis.
 
     For each subvolume in the original generator, this generator will yield two
@@ -182,42 +236,28 @@ class MirrorAugmentGenerator(six.Iterator):
     Parameters
     ----------
     subvolume_generator : SubvolumeGenerator
+    return_both : bool
+        If true, return both the original and augmented volume in sequence.
+        If false, return either with equal probability.
     axis : int
     """
-    def __init__(self, subvolume_generator, axis):
-        self.subvolume_generator = subvolume_generator
+    def __init__(self, subvolume_generator, return_both, axis):
+        super(MirrorAugmentGenerator, self).__init__(subvolume_generator, return_both)
         self.axis = axis
-        self.subvolume = None
 
-    @property
-    def shape(self):
-        return self.subvolume_generator.shape
-
-    def __iter__(self):
-        return self
-
-    def reset(self):
-        self.subvolume = None
-        self.subvolume_generator.reset()
-
-    def __next__(self):
-        if self.subvolume is None:
-            self.subvolume = six.next(self.subvolume_generator)
-            return self.subvolume
-        else:
-            subv = self.subvolume
-            shape = subv.image.shape[self.axis]
-            seed = subv.seed.copy()
-            seed[self.axis] = shape - subv.seed[self.axis] - 1
-            subv = Subvolume(np.flip(subv.image, self.axis),
-                             np.flip(subv.label_mask, self.axis),
-                             seed,
-                             subv.label_id)
-            self.subvolume = None
-            return subv
+    def augment_subvolume(self):
+        subv = self.subvolume
+        shape = subv.image.shape[self.axis]
+        seed = subv.seed.copy()
+        seed[self.axis] = shape - subv.seed[self.axis] - 1
+        subv = Subvolume(np.flip(subv.image, self.axis),
+                         np.flip(subv.label_mask, self.axis),
+                         seed,
+                         subv.label_id)
+        return subv
 
 
-class PermuteAxesAugmentGenerator(six.Iterator):
+class PermuteAxesAugmentGenerator(SubvolumeAugmentGenerator):
     """Repeats subvolumes from a subvolume generator with an axes permutation.
 
     For each subvolume in the original generator, this generator will yield two
@@ -227,40 +267,25 @@ class PermuteAxesAugmentGenerator(six.Iterator):
     Parameters
     ----------
     subvolume_generator : SubvolumeGenerator
+    return_both : bool
+        If true, return both the original and augmented volume in sequence.
+        If false, return either with equal probability.
     axes : sequence of int
     """
-    def __init__(self, subvolume_generator, axes):
-        self.subvolume_generator = subvolume_generator
+    def __init__(self, subvolume_generator, return_both, axes):
+        super(PermuteAxesAugmentGenerator, self).__init__(subvolume_generator, return_both)
         self.axes = list(axes)
-        self.subvolume = None
 
-    @property
-    def shape(self):
-        # This generator actually has two shapes, but not expressed here.
-        return self.subvolume_generator.shape
-
-    def __iter__(self):
-        return self
-
-    def reset(self):
-        self.subvolume = None
-        self.subvolume_generator.reset()
-
-    def __next__(self):
-        if self.subvolume is None:
-            self.subvolume = six.next(self.subvolume_generator)
-            return self.subvolume
-        else:
-            subv = self.subvolume
-            subv = Subvolume(np.transpose(subv.image, self.axes),
-                             np.transpose(subv.label_mask, self.axes),
-                             subv.seed[self.axes],
-                             self.subvolume.label_id)
-            self.subvolume = None
-            return subv
+    def augment_subvolume(self):
+        subv = self.subvolume
+        subv = Subvolume(np.transpose(subv.image, self.axes),
+                         np.transpose(subv.label_mask, self.axes),
+                         subv.seed[self.axes],
+                         self.subvolume.label_id)
+        return subv
 
 
-class MissingDataAugmentGenerator(six.Iterator):
+class MissingDataAugmentGenerator(SubvolumeAugmentGenerator):
     """Repeats subvolumes from a subvolume generator with missing data planes.
 
     For each subvolume in the original generator, this generator will yield the
@@ -270,61 +295,51 @@ class MissingDataAugmentGenerator(six.Iterator):
     Parameters
     ----------
     subvolume_generator : SubvolumeGenerator
+    return_both : bool
+        If true, return both the original and augmented volume in sequence.
+        If false, return either with equal probability.
     axis : int
     probability : float
         Independent probability that each plane of data along axis is missing.
     remove_label : bool
         Whether to also remove label mask data.
     """
-    def __init__(self, subvolume_generator, axis, probability, remove_label=False):
-        self.subvolume_generator = subvolume_generator
+    def __init__(self, subvolume_generator, return_both, axis, probability, remove_label=False):
+        super(MissingDataAugmentGenerator, self).__init__(subvolume_generator, return_both)
         self.axis = axis
         self.probability = probability
         self.remove_label = remove_label
-        self.subvolume = None
 
-    @property
-    def shape(self):
-        return self.subvolume_generator.shape
+    def augment_subvolume(self):
+        rolls = np.random.sample(self.shape[self.axis])
+        # Remove the seed plane from possibilities.
+        rolls[self.subvolume.seed[self.axis]] = 1.1
+        missing_sections = np.where(rolls < self.probability)
 
-    def __iter__(self):
-        return self
-
-    def reset(self):
-        self.subvolume = None
-        self.subvolume_generator.reset()
-
-    def __next__(self):
-        if self.subvolume is not None:
-            rolls = np.random.sample(self.shape[self.axis])
-            # Remove the seed plane from possibilities.
-            rolls[self.subvolume.seed[self.axis]] = 1.1
-            missing_sections = np.where(rolls < self.probability)
-
-            if missing_sections and missing_sections[0].size:
-                subv = self.subvolume
-                subv = Subvolume(subv.image.copy(),
-                                 subv.label_mask.copy(),
-                                 subv.seed,
-                                 subv.label_id)
-                slices = [slice(None), slice(None), slice(None)]
-                slices[self.axis] = missing_sections
-                subv.image[slices] = 0
-                if self.remove_label:
-                    label_axis_margin = (subv.image.shape[self.axis] - subv.label_mask.shape[self.axis]) // 2
-                    label_sections = missing_sections[0] - label_axis_margin
-                    label_sections = label_sections[(label_sections >= 0) &
-                                                    (label_sections < subv.label_mask.shape[self.axis])]
-                    slices[self.axis] = (label_sections,)
-                    subv.label_mask[slices] = False
-                self.subvolume = None
-                return subv
-
-        self.subvolume = six.next(self.subvolume_generator)
-        return self.subvolume
+        if missing_sections and missing_sections[0].size:
+            subv = self.subvolume
+            subv = Subvolume(subv.image.copy(),
+                             subv.label_mask.copy(),
+                             subv.seed,
+                             subv.label_id)
+            slices = [slice(None), slice(None), slice(None)]
+            slices[self.axis] = missing_sections
+            subv.image[slices] = 0
+            if self.remove_label:
+                label_axis_margin = (subv.image.shape[self.axis] - subv.label_mask.shape[self.axis]) // 2
+                label_sections = missing_sections[0] - label_axis_margin
+                label_sections = label_sections[(label_sections >= 0) &
+                                                (label_sections < subv.label_mask.shape[self.axis])]
+                slices[self.axis] = (label_sections,)
+                subv.label_mask[slices] = False
+            return subv
+        else:
+            # No augmentations to be made. Superclass will automatically return
+            # next subvolume.
+            return None
 
 
-class GaussianNoiseAugmentGenerator(six.Iterator):
+class GaussianNoiseAugmentGenerator(SubvolumeAugmentGenerator):
     """Repeats subvolumes from a subvolume generator with Gaussian noise.
 
     For each subvolume in the original generator, this generator will yield two
@@ -334,6 +349,9 @@ class GaussianNoiseAugmentGenerator(six.Iterator):
     Parameters
     ----------
     subvolume_generator : SubvolumeGenerator
+    return_both : bool
+        If true, return both the original and augmented volume in sequence.
+        If false, return either with equal probability.
     axis : int
         Axis along which noise will be applied independently. For example,
         0 will apply different noise to each z-section. -1 will apply
@@ -343,49 +361,32 @@ class GaussianNoiseAugmentGenerator(six.Iterator):
     multiplicative : float
         Standard deviation for 0-mean Gaussian additive noise.
     """
-    def __init__(self, subvolume_generator, axis, multiplicative, additive):
-        self.subvolume_generator = subvolume_generator
+    def __init__(self, subvolume_generator, return_both, axis, multiplicative, additive):
+        super(GaussianNoiseAugmentGenerator, self).__init__(subvolume_generator, return_both)
         self.axis = axis
         self.multiplicative = multiplicative
         self.additive = additive
-        self.subvolume = None
 
-    @property
-    def shape(self):
-        return self.subvolume_generator.shape
+    def augment_subvolume(self):
+        subv = self.subvolume
 
-    def __iter__(self):
-        return self
+        # Generate a transformed shape that will apply vector addition
+        # and multiplication along to correct axis.
+        shape_xform = np.ones((1, 3), dtype=np.int32).ravel()
+        shape_xform[self.axis] = -1
 
-    def reset(self):
-        self.subvolume = None
-        self.subvolume_generator.reset()
+        dim_size = 1 if self.axis == -1 else self.shape[self.axis]
+        mul_noise = np.random.normal(1.0, self.multiplicative, dim_size).astype(subv.image.dtype)
+        add_noise = np.random.normal(0.0, self.additive, dim_size).astype(subv.image.dtype)
 
-    def __next__(self):
-        if self.subvolume is None:
-            self.subvolume = six.next(self.subvolume_generator)
-            return self.subvolume
-        else:
-            subv = self.subvolume
-
-            # Generate a transformed shape that will apply vector addition
-            # and multiplication along to correct axis.
-            shape_xform = np.ones((1, 3), dtype=np.int32).ravel()
-            shape_xform[self.axis] = -1
-
-            dim_size = 1 if self.axis == -1 else self.shape[self.axis]
-            mul_noise = np.random.normal(1.0, self.multiplicative, dim_size).astype(subv.image.dtype)
-            add_noise = np.random.normal(0.0, self.additive, dim_size).astype(subv.image.dtype)
-
-            subv = Subvolume(subv.image * mul_noise.reshape(shape_xform) + add_noise.reshape(shape_xform),
-                             subv.label_mask,
-                             subv.seed,
-                             subv.label_id)
-            self.subvolume = None
-            return subv
+        subv = Subvolume(subv.image * mul_noise.reshape(shape_xform) + add_noise.reshape(shape_xform),
+                         subv.label_mask,
+                         subv.seed,
+                         subv.label_id)
+        return subv
 
 
-class ContrastAugmentGenerator(six.Iterator):
+class ContrastAugmentGenerator(SubvolumeAugmentGenerator):
     """Repeats subvolumes from a subvolume generator with altered contrast.
 
     For each subvolume in the original generator, this generator will yield the
@@ -399,6 +400,9 @@ class ContrastAugmentGenerator(six.Iterator):
     Parameters
     ----------
     subvolume_generator : SubvolumeGenerator
+    return_both : bool
+        If true, return both the original and augmented volume in sequence.
+        If false, return either with equal probability.
     axis : int
         Axis along which contrast may be altered. For example, 0 will alter
         contrast by z-sections.
@@ -407,55 +411,41 @@ class ContrastAugmentGenerator(six.Iterator):
     scaling_mean, scaling_std, center_mean, center_std : float
         Normal distribution parameters for the rescaling of intensity values.
     """
-    def __init__(self, subvolume_generator, axis, probability, scaling_mean, scaling_std, center_mean, center_std):
-        self.subvolume_generator = subvolume_generator
+    def __init__(self, subvolume_generator, return_both, axis, probability,
+                 scaling_mean, scaling_std, center_mean, center_std):
+        super(ContrastAugmentGenerator, self).__init__(subvolume_generator, return_both)
         self.axis = axis
         self.probability = probability
         self.scaling_mean = scaling_mean
         self.scaling_std = scaling_std
         self.center_mean = center_mean
         self.center_std = center_std
-        self.subvolume = None
 
-    @property
-    def shape(self):
-        return self.subvolume_generator.shape
+    def augment_subvolume(self):
+        rolls = np.random.sample(self.shape[self.axis])
+        sections = np.where(rolls < self.probability)
 
-    def __iter__(self):
-        return self
-
-    def reset(self):
-        self.subvolume = None
-        self.subvolume_generator.reset()
-
-    def __next__(self):
-        if self.subvolume is not None:
-            rolls = np.random.sample(self.shape[self.axis])
-            sections = np.where(rolls < self.probability)
-
-            if sections and sections[0].size:
-                subv = self.subvolume
-                subv = Subvolume(subv.image.copy(),
-                                 subv.label_mask,
-                                 subv.seed,
-                                 subv.label_id)
-                slices = [slice(None), slice(None), slice(None)]
-                slices[self.axis] = sections
-                data = subv.image[slices]
-                old_min = data.min()
-                old_max = data.max()
-                scaling = np.random.normal(self.scaling_mean, self.scaling_std)
-                center = np.random.normal(self.center_mean, self.center_std)
-                data = scaling*(data - old_min) + 0.5*scaling*center*(old_max - old_min) + old_min
-                subv.image[slices] = data
-                self.subvolume = None
-                return subv
-
-        self.subvolume = six.next(self.subvolume_generator)
-        return self.subvolume
+        if sections and sections[0].size:
+            subv = self.subvolume
+            subv = Subvolume(subv.image.copy(),
+                             subv.label_mask,
+                             subv.seed,
+                             subv.label_id)
+            slices = [slice(None), slice(None), slice(None)]
+            slices[self.axis] = sections
+            data = subv.image[slices]
+            old_min = data.min()
+            old_max = data.max()
+            scaling = np.random.normal(self.scaling_mean, self.scaling_std)
+            center = np.random.normal(self.center_mean, self.center_std)
+            data = scaling*(data - old_min) + 0.5*scaling*center*(old_max - old_min) + old_min
+            subv.image[slices] = data
+            return subv
+        else:
+            return None
 
 
-class MaskedArtifactAugmentGenerator(six.Iterator):
+class MaskedArtifactAugmentGenerator(SubvolumeAugmentGenerator):
     """Repeats subvolumes from a subvolume generator with artifact data added.
 
     For each subvolume in the original generator, this generator will yield the
@@ -465,6 +455,9 @@ class MaskedArtifactAugmentGenerator(six.Iterator):
     Parameters
     ----------
     subvolume_generator : SubvolumeGenerator
+    return_both : bool
+        If true, return both the original and augmented volume in sequence.
+        If false, return either with equal probability.
     axis : int
     probability : float
         Independent probability that each plane of data along axis has
@@ -476,8 +469,8 @@ class MaskedArtifactAugmentGenerator(six.Iterator):
         as an alpha for blending image data from this artifact file with
         the original subvolume image data.
     """
-    def __init__(self, subvolume_generator, axis, probability, artifact_volume_file, cache):
-        self.subvolume_generator = subvolume_generator
+    def __init__(self, subvolume_generator, return_both, axis, probability, artifact_volume_file, cache):
+        super(MaskedArtifactAugmentGenerator, self).__init__(subvolume_generator, return_both)
         self.axis = axis
         self.probability = probability
         if 'artifacts' not in cache:
@@ -497,50 +490,35 @@ class MaskedArtifactAugmentGenerator(six.Iterator):
         artifact_shape = self.shape.copy()
         artifact_shape[self.axis] = 1
         self.art_bounds_gen = self.artifacts.subvolume_bounds_generator(shape=artifact_shape)
-        self.subvolume = None
 
-    @property
-    def shape(self):
-        return self.subvolume_generator.shape
+    def augment_subvolume(self):
+        rolls = np.random.sample(self.shape[self.axis])
+        artifact_sections = np.where(rolls < self.probability)
 
-    def __iter__(self):
-        return self
-
-    def reset(self):
-        self.subvolume = None
-        self.subvolume_generator.reset()
-
-    def __next__(self):
-        if self.subvolume is not None:
-            rolls = np.random.sample(self.shape[self.axis])
-            artifact_sections = np.where(rolls < self.probability)
-
-            if artifact_sections and artifact_sections[0].size:
-                subv = self.subvolume
-                subv = Subvolume(subv.image.copy(),
-                                 subv.label_mask.copy(),
-                                 subv.seed,
-                                 subv.label_id)
-                slices = [slice(None), slice(None), slice(None)]
-                for z in artifact_sections[0]:
-                    slices[self.axis] = z
-                    mask_found = False
-                    # Since artifact data is usually sparse, reject patches
-                    # that have all zero mask.
-                    while not mask_found:
-                        art_bounds = six.next(self.art_bounds_gen)
-                        mask = self.mask.get_subvolume(art_bounds).image
-                        if mask.max() == 0.0:
-                            continue
-                        mask_found = True
-                        art = self.artifacts.get_subvolume(art_bounds).image
-                    raw = subv.image[slices]
-                    subv.image[slices] = raw * (1.0 - mask) + art * mask
-                self.subvolume = None
-                return subv
-
-        self.subvolume = six.next(self.subvolume_generator)
-        return self.subvolume
+        if artifact_sections and artifact_sections[0].size:
+            subv = self.subvolume
+            subv = Subvolume(subv.image.copy(),
+                             subv.label_mask.copy(),
+                             subv.seed,
+                             subv.label_id)
+            slices = [slice(None), slice(None), slice(None)]
+            for z in artifact_sections[0]:
+                slices[self.axis] = z
+                mask_found = False
+                # Since artifact data is usually sparse, reject patches
+                # that have all zero mask.
+                while not mask_found:
+                    art_bounds = six.next(self.art_bounds_gen)
+                    mask = self.mask.get_subvolume(art_bounds).image
+                    if mask.max() == 0.0:
+                        continue
+                    mask_found = True
+                    art = self.artifacts.get_subvolume(art_bounds).image
+                raw = subv.image[slices]
+                subv.image[slices] = raw * (1.0 - mask) + art * mask
+            return subv
+        else:
+            return None
 
 
 class Volume(object):

@@ -148,19 +148,21 @@ def augment_subvolume_generator(subvolume_generator):
     """
     gen = subvolume_generator
     for axes in CONFIG.training.augment_permute_axes:
-        gen = PermuteAxesAugmentGenerator(gen, axes)
+        gen = PermuteAxesAugmentGenerator(gen, CONFIG.training.augment_use_both, axes)
     for axis in CONFIG.training.augment_mirrors:
-        gen = MirrorAugmentGenerator(gen, axis)
+        gen = MirrorAugmentGenerator(gen, CONFIG.training.augment_use_both, axis)
     for v in CONFIG.training.augment_noise:
-        gen = GaussianNoiseAugmentGenerator(gen, v['axis'], v['mul'], v['add'])
+        gen = GaussianNoiseAugmentGenerator(gen, CONFIG.training.augment_use_both, v['axis'], v['mul'], v['add'])
     for v in CONFIG.training.augment_artifacts:
         if 'cache' not in v:
             v['cache'] = {}
-        gen = MaskedArtifactAugmentGenerator(gen, v['axis'], v['prob'], v['volume_file'], v['cache'])
+        gen = MaskedArtifactAugmentGenerator(gen, CONFIG.training.augment_use_both,
+                                             v['axis'], v['prob'], v['volume_file'], v['cache'])
     for v in CONFIG.training.augment_missing_data:
-        gen = MissingDataAugmentGenerator(gen, v['axis'], v['prob'])
+        gen = MissingDataAugmentGenerator(gen, CONFIG.training.augment_use_both, v['axis'], v['prob'])
     for v in CONFIG.training.augment_contrast:
-        gen = ContrastAugmentGenerator(gen, v['axis'], v['prob'], v['scaling_mean'], v['scaling_std'],
+        gen = ContrastAugmentGenerator(gen, CONFIG.training.augment_use_both, v['axis'], v['prob'],
+                                       v['scaling_mean'], v['scaling_std'],
                                        v['center_mean'], v['center_std'])
 
     return gen
