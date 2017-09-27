@@ -568,6 +568,16 @@ class Volume(object):
 
     @property
     def mask_bounds(self):
+        if self._mask_bounds is not None:
+            return self._mask_bounds
+        if self.mask_data is None:
+            return None
+
+        # Explicitly copy the channel to memory. 3x speedup for np ops.
+        mask_data = self.mask_data[:]
+
+        self._mask_bounds = get_nonzero_aabb(mask_data)
+
         return self._mask_bounds
 
     @property
@@ -1026,20 +1036,6 @@ class HDF5Volume(Volume):
 
         if self.resolution is None:
             self.resolution = np.ones(3)
-
-    @property
-    def mask_bounds(self):
-        if self._mask_bounds is not None:
-            return self._mask_bounds
-        if self.mask_data is None:
-            return None
-
-        # Explicitly copy the channel to memory. 3x speedup for np ops.
-        mask_data = self.mask_data[:]
-
-        self._mask_bounds = get_nonzero_aabb(mask_data)
-
-        return self._mask_bounds
 
     def to_memory_volume(self):
         data = ['image_data', 'label_data', 'mask_data']
