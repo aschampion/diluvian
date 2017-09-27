@@ -503,14 +503,9 @@ class MaskedArtifactAugmentGenerator(SubvolumeAugmentGenerator):
         self.probability = probability
         if 'artifacts' not in cache:
             vol = HDF5Volume.from_toml(artifact_volume_file)['Artifacts']
-            # Most subvolume functions assume label data exists, so pay the cost
-            # for empty data to avoid refactoring.
-            empty_labels = np.zeros(vol.shape, dtype=np.int32)
             cache['mask'] = NdarrayVolume(
                     vol.world_coord_to_local(vol.resolution),
-                    image_data=vol.world_mat_to_local(vol.mask_data[:]),
-                    label_data=empty_labels)
-            vol.label_data = empty_labels
+                    image_data=vol.world_mat_to_local(vol.mask_data[:]))
             vol.mask_data = None
             cache['artifacts'] = vol.to_memory_volume()
         self.mask = cache['mask']
@@ -630,27 +625,33 @@ class Volume(object):
                 bounds.start[0]:bounds.stop[0],
                 bounds.start[1]:bounds.stop[1],
                 bounds.start[2]:bounds.stop[2]]
-        label_start = bounds.start + bounds.label_margin
-        label_stop = bounds.stop - bounds.label_margin
-        label_subvol = self.label_data[
-                label_start[0]:label_stop[0],
-                label_start[1]:label_stop[1],
-                label_start[2]:label_stop[2]]
 
         image_subvol = self.world_mat_to_local(image_subvol)
         if np.issubdtype(image_subvol.dtype, np.integer):
             image_subvol = image_subvol.astype(np.float32) / 256.0
 
-        label_subvol = self.world_mat_to_local(label_subvol)
-
         seed = bounds.seed
         if seed is None:
             seed = np.array(image_subvol.shape, dtype=np.int64) // 2
 
-        label_id = bounds.label_id
-        if label_id is None:
-            label_id = label_subvol[tuple(seed - bounds.label_margin)]
-        label_mask = label_subvol == label_id
+        if self.label_data is not None:
+            label_start = bounds.start + bounds.label_margin
+            label_stop = bounds.stop - bounds.label_margin
+
+            label_subvol = self.label_data[
+                    label_start[0]:label_stop[0],
+                    label_start[1]:label_stop[1],
+                    label_start[2]:label_stop[2]]
+
+            label_subvol = self.world_mat_to_local(label_subvol)
+
+            label_id = bounds.label_id
+            if label_id is None:
+                label_id = label_subvol[tuple(seed - bounds.label_margin)]
+            label_mask = label_subvol == label_id
+        else:
+            label_mask = None
+            label_id = None
 
         return Subvolume(image_subvol, label_mask, seed, label_id)
 
@@ -743,7 +744,8 @@ class NdarrayVolume(Volume):
     def __init__(self, *args, **kwargs):
         super(NdarrayVolume, self).__init__(*args, **kwargs)
         self.image_data.flags.writeable = False
-        self.label_data.flags.writeable = False
+        if self.label_data is not None:
+            self.label_data.flags.writeable = False
 
 
 class VolumeView(Volume):
@@ -878,21 +880,23 @@ class DownsampledVolume(VolumeView):
                 [subvol_shape[0], self.scale[0],
                  subvol_shape[1], self.scale[1],
                  subvol_shape[2], self.scale[2]]).mean(5).mean(3).mean(1)
-        # Downsample body mask by considering blocks where the majority
-        # of voxels are in the body to be in the body. Alternatives are:
-        # - Conjunction (tends to introduce false splits)
-        # - Disjunction (tends to overdilate and merge)
-        # - Mode label (computationally expensive)
-        if CONFIG.volume.label_downsampling == 'conjunction':
-            subvol.label_mask = subvol.label_mask.reshape(
-                    [label_shape[0], self.scale[0],
-                     label_shape[1], self.scale[1],
-                     label_shape[2], self.scale[2]]).all(5).all(3).all(1)
-        else:
-            subvol.label_mask = subvol.label_mask.reshape(
-                    [label_shape[0], self.scale[0],
-                     label_shape[1], self.scale[1],
-                     label_shape[2], self.scale[2]]).mean(5).mean(3).mean(1) > 0.5
+
+        if subvol.label_mask is not None:
+            # Downsample body mask by considering blocks where the majority
+            # of voxels are in the body to be in the body. Alternatives are:
+            # - Conjunction (tends to introduce false splits)
+            # - Disjunction (tends to overdilate and merge)
+            # - Mode label (computationally expensive)
+            if CONFIG.volume.label_downsampling == 'conjunction':
+                subvol.label_mask = subvol.label_mask.reshape(
+                        [label_shape[0], self.scale[0],
+                         label_shape[1], self.scale[1],
+                         label_shape[2], self.scale[2]]).all(5).all(3).all(1)
+            else:
+                subvol.label_mask = subvol.label_mask.reshape(
+                        [label_shape[0], self.scale[0],
+                         label_shape[1], self.scale[1],
+                         label_shape[2], self.scale[2]]).mean(5).mean(3).mean(1) > 0.5
 
         # Note that this is not a coordinate xform to parent in the typical
         # sense, just a rescaling of the coordinate in the subvolume-local
@@ -1026,7 +1030,7 @@ class HDF5Volume(Volume):
                 else:
                     self.resolution = resolution
         else:
-            self.label_data = np.full_like(self.image_data, np.NaN, dtype=np.uint64)
+            self.label_data = None
 
         if mask_dataset is not None:
             self.mask_data = self.file[mask_dataset]
