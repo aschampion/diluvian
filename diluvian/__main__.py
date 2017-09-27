@@ -126,6 +126,11 @@ def _make_main_parser():
             help='Reject seeds that terminate early, e.g., due to maximum '
                  'move limits.')
     fill_parser.add_argument(
+            '--resume-file', dest='resume_filename', default=None,
+            help='Filename for the TOML configuration file of a segmented '
+                 'label volume from which to resume filling. The configuration '
+                 'should only contain one dataset.')
+    fill_parser.add_argument(
             'segmentation_output_file', default=None,
             help='Filename for the HDF5 segmentation output, without '
                  'extension. Should contain "{volume}", which will be '
@@ -231,6 +236,7 @@ def main():
         fill_volumes_with_model(args.model_file,
                                 volumes,
                                 args.segmentation_output_file,
+                                resume_filename=args.resume_filename,
                                 viewer=args.viewer,
                                 seed_generator=args.seed_generator,
                                 background_label_id=args.background_label_id,

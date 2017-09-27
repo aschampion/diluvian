@@ -52,6 +52,7 @@ def generate_subvolume_bounds(filename, volumes, num_bounds, sparse=False):
 def fill_volume_with_model(
         model_file,
         volume,
+        resume_prediction=None,
         seed_generator='sobel',
         background_label_id=0,
         bias=True,
@@ -66,7 +67,15 @@ def fill_volume_with_model(
         shuffle_seeds=True):
     subvolume = volume.get_subvolume(SubvolumeBounds(start=np.zeros(3, dtype=np.int64), stop=volume.shape))
     # Create an output label volume.
-    prediction = np.full_like(subvolume.image, background_label_id, dtype=np.uint64)
+    if resume_prediction is None:
+        prediction = np.full_like(subvolume.image, background_label_id, dtype=np.uint64)
+        label_id = 0
+    else:
+        if resume_prediction.shape != subvolume.image.shape:
+            raise ValueError('Resume volume prediction is wrong shape.')
+        prediction = resume_prediction
+        prediction.flags.writeable = True
+        label_id = prediction.max()
     # Create a conflict count volume that tracks locations where segmented
     # bodies overlap. For now the first body takes precedence in the
     # predicted labels.
@@ -161,9 +170,23 @@ def fill_volume_with_model(
     # been combined because they were not received in the dispatch order.
     unordered_results = {}
 
-    for seed in itertools.islice(seeds, min(num_seeds, num_workers * worker_prequeue)):
-        dispatched_seeds.append(seed)
-        seed_queue.put(seed)
+    def queue_next_seed():
+        total = 0
+        for seed in seeds:
+            if prediction[seed[0], seed[1], seed[2]] != background_label_id:
+                # This seed has already been filled.
+                total += 1
+                continue
+            dispatched_seeds.append(seed)
+            seed_queue.put(seed)
+
+            break
+
+        return total
+
+    processed_seeds = 1
+    for _ in range(min(num_seeds, num_workers * worker_prequeue)):
+        processed_seeds += queue_next_seed()
 
     if 'CUDA_VISIBLE_DEVICES' in os.environ:
         set_devices = False
@@ -181,27 +204,10 @@ def fill_volume_with_model(
         w.start()
         workers.append(w)
 
-    def queue_next_seed():
-        total = 0
-        for seed in seeds:
-            if prediction[seed[0], seed[1], seed[2]] != background_label_id:
-                # This seed has already been filled.
-                total += 1
-                continue
-            dispatched_seeds.append(seed)
-            seed_queue.put(seed)
-
-            break
-
-        return total
-
-    label_id = 0
-
     # For each seed, create region, fill, threshold, and merge to output volume.
     while dispatched_seeds:
         expected_seed = dispatched_seeds.popleft()
         logging.debug('Expecting seed %s', np.array_str(expected_seed))
-        processed_seeds = 1
 
         if tuple(expected_seed) in unordered_results:
             logging.debug('Expected seed %s is in old results', np.array_str(expected_seed))
@@ -290,15 +296,28 @@ def fill_volumes_with_model(
         model_file,
         volumes,
         filename,
+        resume_filename=None,
         viewer=False,
         **kwargs):
     if '{volume}' not in filename:
         raise ValueError('HDF5 filename must contain "{volume}" for volume name replacement.')
+    if resume_filename is not None and '{volume}' not in resume_filename:
+        raise ValueError('TOML resume filename must contain "{volume}" for volume name replacement.')
 
     for volume_name, volume in six.iteritems(volumes):
         logging.info('Filling volume %s...', volume_name)
         volume = volume.downsample(CONFIG.volume.resolution)
-        prediction, conflict_count = fill_volume_with_model(model_file, volume, **kwargs)
+        if resume_filename is not None:
+            resume_volume_filename = resume_filename.format(volume=volume_name)
+            resume_volume = six.next(six.itervalues(HDF5Volume.from_toml(resume_volume_filename)))
+            resume_prediction = resume_volume.to_memory_volume().label_data
+        else:
+            resume_prediction = None
+        prediction, conflict_count = fill_volume_with_model(
+                model_file,
+                volume,
+                resume_prediction=resume_prediction,
+                **kwargs)
 
         volume_filename = filename.format(volume=volume_name)
         config = HDF5Volume.write_file(
