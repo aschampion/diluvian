@@ -137,8 +137,13 @@ def _make_main_parser():
                  'substituted with the volume name for each respective '
                  'volume\'s bounds.')
 
+    bounds_common_parser = argparse.ArgumentParser(add_help=False)
+    bounds_common_parser.add_argument(
+            '--bounds-num-moves', dest='bounds_num_moves', default=None, nargs=3, type=int,
+            help='Number of moves in direction to size the subvolume bounds.')
+
     sparse_fill_parser = commandparsers.add_parser(
-            'sparse-fill', parents=[common_parser, fill_common_parser],
+            'sparse-fill', parents=[common_parser, fill_common_parser, bounds_common_parser],
             help='Use a trained network to fill random regions in a volume.')
     sparse_fill_parser.add_argument(
             '-bi', '--bounds-input-file', dest='bounds_input_file', default=None,
@@ -161,7 +166,7 @@ def _make_main_parser():
             help='Name of the property to show, e.g., `training.batch_size`.')
 
     gen_subv_bounds_parser = commandparsers.add_parser(
-            'gen-subv-bounds', parents=[common_parser],
+            'gen-subv-bounds', parents=[common_parser, bounds_common_parser],
             help='Generate subvolume bounds.')
     gen_subv_bounds_parser.add_argument(
             'bounds_output_file', default=None,
@@ -259,7 +264,8 @@ def main():
                                bounds_input_file=args.bounds_input_file,
                                bias=args.bias,
                                move_batch_size=args.move_batch_size,
-                               max_moves=args.max_moves)
+                               max_moves=args.max_moves,
+                               moves=args.bounds_num_moves)
 
     elif args.command == 'view':
         # Late import to prevent loading large modules for short CLI commands.
@@ -282,7 +288,10 @@ def main():
         from .diluvian import generate_subvolume_bounds
 
         volumes = load_volumes(args.volume_files, args.in_memory)
-        generate_subvolume_bounds(args.bounds_output_file, volumes, args.num_bounds)
+        generate_subvolume_bounds(args.bounds_output_file,
+                                  volumes,
+                                  args.num_bounds,
+                                  moves=args.bounds_num_moves)
 
 
 def load_volumes(volume_files, in_memory, name_regex=None):

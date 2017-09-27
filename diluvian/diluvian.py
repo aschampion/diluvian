@@ -34,14 +34,20 @@ from .volumes import (
 from .regions import Region
 
 
-def generate_subvolume_bounds(filename, volumes, num_bounds, sparse=False):
+def generate_subvolume_bounds(filename, volumes, num_bounds, sparse=False, moves=None):
     if '{volume}' not in filename:
         raise ValueError('CSV filename must contain "{volume}" for volume name replacement.')
 
-    if sparse:
-        gen_kwargs = {'sparse_margin': CONFIG.model.training_subv_shape * 4 - 3}
+    if moves is None:
+        moves = 5
     else:
-        gen_kwargs = {'shape': CONFIG.model.training_subv_shape * 4 - 3}
+        moves = np.asarray(moves)
+    subv_shape = CONFIG.model.input_fov_shape + CONFIG.model.move_step * 2 * moves
+
+    if sparse:
+        gen_kwargs = {'sparse_margin': subv_shape}
+    else:
+        gen_kwargs = {'shape': subv_shape}
     for k, v in six.iteritems(volumes):
         bounds = v.downsample(CONFIG.volume.resolution)\
                   .subvolume_bounds_generator(**gen_kwargs)
@@ -345,7 +351,8 @@ def fill_region_with_model(
         bias=True,
         move_batch_size=1,
         max_moves=None,
-        sparse=False):
+        sparse=False,
+        moves=None):
     # Late import to avoid Keras import until TF bindings are set.
     from .network import load_model
 
@@ -357,13 +364,19 @@ def fill_region_with_model(
                 k: {'bounds_generator': iter(SubvolumeBounds.iterable_from_csv(bounds_input_file.format(volume=k)))}
                 for k in volumes.iterkeys()}
     else:
+        if moves is None:
+            moves = 5
+        else:
+            moves = np.asarray(moves)
+        subv_shape = CONFIG.model.input_fov_shape + CONFIG.model.move_step * 2 * moves
+
         if sparse:
             gen_kwargs = {
-                    k: {'sparse_margin': CONFIG.model.training_subv_shape * 4 - 3}
+                    k: {'sparse_margin': subv_shape}
                     for k in volumes.iterkeys()}
         else:
             gen_kwargs = {
-                    k: {'shape': CONFIG.model.training_subv_shape * 4 - 3}
+                    k: {'shape': subv_shape}
                     for k in volumes.iterkeys()}
     regions = Roundrobin(*[
             Region.from_subvolume_generator(
