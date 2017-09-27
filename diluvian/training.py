@@ -82,7 +82,7 @@ class PredictionCopy(Callback):
     def on_batch_end(self, batch, logs=None):
         if self.kludge['inputs'] and self.kludge['outputs'] is None:
             logging.debug('Running prediction kludge {}'.format(self.name))
-            self.kludge['outputs'] = self.model.predict(self.kludge['inputs'])
+            self.kludge['outputs'] = self.model.predict_on_batch(self.kludge['inputs'])
 
     def on_epoch_end(self, epoch, logs=None):
         if self.epoch_reset:
@@ -533,7 +533,7 @@ def train_network(
                        name='Mask Target',
                        shader=get_color_shader(0),
                        voxel_offset=output_offset)
-            output = ffn.predict(inputs)
+            output = ffn.predict_on_batch(inputs)
             viewer.add(output[0, :, :, :, 0],
                        name='Mask Output',
                        shader=get_color_shader(1),

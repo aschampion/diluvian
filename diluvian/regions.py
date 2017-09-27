@@ -435,8 +435,8 @@ class Region(object):
             image_input = np.concatenate([pad_dims(b['image']) for b in batch_block_data])
             mask_input = np.concatenate([pad_dims(b['mask']) for b in batch_block_data])
 
-            output = model.predict({'image_input': image_input,
-                                    'mask_input': mask_input})
+            output = model.predict_on_batch({'image_input': image_input,
+                                             'mask_input': mask_input})
 
             for ind, block_data in enumerate(batch_block_data):
                 self.add_mask(output[ind, :, :, :, 0], block_data['position'])
