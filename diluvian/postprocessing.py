@@ -37,7 +37,7 @@ class Body(object):
             assert mask.shape == tuple(bounds[1] - bounds[0]), \
                 'Bounds shape ({}) and mask shape ({}) differ.'.format(bounds[1] - bounds[0], mask.shape)
         else:
-            bounds = (np.zeros(3), np.array(self.mask.shape))
+            bounds = (np.zeros(3, dtype=np.int64), np.array(self.mask.shape))
             mask = self.mask
 
         if closing_shape is not None:
