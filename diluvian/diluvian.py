@@ -24,6 +24,7 @@ from tqdm import tqdm
 from .config import CONFIG
 from . import preprocessing
 from .util import (
+        get_color_shader,
         Roundrobin,
         WrappedViewer,
         )
@@ -392,7 +393,13 @@ def fill_region_with_model(
                     progress=True,
                     move_batch_size=move_batch_size,
                     max_moves=max_moves)
+        body = region.to_body()
+        mask, bounds = body.get_seeded_component(CONFIG.postprocessing.closing_shape)
         viewer = region.get_viewer()
+        viewer.add(mask.astype(np.float32),
+                   name='Body Mask',
+                   offset=bounds[0],
+                   shader=get_color_shader(2))
         print(viewer)
         while True:
             s = raw_input("Press Enter to continue, v to open in browser, a to export animation, q to quit...")
