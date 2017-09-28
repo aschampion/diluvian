@@ -71,6 +71,7 @@ def fill_volume_with_model(
         filter_seeds_by_mask=True,
         reject_non_seed_components=True,
         reject_early_termination=False,
+        remask_interval=None,
         shuffle_seeds=True):
     subvolume = volume.get_subvolume(SubvolumeBounds(start=np.zeros(3, dtype=np.int64), stop=volume.shape))
     # Create an output label volume.
@@ -139,7 +140,8 @@ def fill_volume_with_model(
                     move_batch_size=move_batch_size,
                     max_moves=max_moves,
                     progress=1 + worker_id,
-                    stopping_callback=stopping_callback)
+                    stopping_callback=stopping_callback,
+                    remask_interval=remask_interval)
             if reject_early_termination and early_termination:
                 body = None
             else:
@@ -352,6 +354,7 @@ def fill_region_with_model(
         bias=True,
         move_batch_size=1,
         max_moves=None,
+        remask_interval=None,
         sparse=False,
         moves=None):
     # Late import to avoid Keras import until TF bindings are set.
@@ -392,7 +395,8 @@ def fill_region_with_model(
         region.fill(model,
                     progress=True,
                     move_batch_size=move_batch_size,
-                    max_moves=max_moves)
+                    max_moves=max_moves,
+                    remask_interval=remask_interval)
         body = region.to_body()
         mask, bounds = body.get_seeded_component(CONFIG.postprocessing.closing_shape)
         viewer = region.get_viewer()

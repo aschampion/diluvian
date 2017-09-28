@@ -378,7 +378,26 @@ class Region(object):
                 'target': target_block,
                 'position': next_pos}
 
-    def fill(self, model, progress=False, move_batch_size=1, max_moves=None, stopping_callback=None):
+    def remask(self):
+        """Reset the mask based on the seeded connected component.
+        """
+        body = self.to_body()
+        if not body.is_seed_in_mask():
+            return False
+        new_mask_bin, bounds = body.get_seeded_component(CONFIG.postprocessing.closing_shape)
+        new_mask_bin = new_mask_bin.astype(np.bool)
+
+        mask_block = self.mask[map(slice, bounds[0], bounds[1])]
+        # Clip any values not in the seeded connected component so that they
+        # cannot not generate moves when rechecking.
+        mask_block[~new_mask_bin] = np.clip(mask_block[~new_mask_bin], None, 0.9 * CONFIG.model.t_move)
+
+        self.mask[:] = np.NAN
+        self.mask[map(slice, bounds[0], bounds[1])] = mask_block
+        return True
+
+    def fill(self, model, progress=False, move_batch_size=1, max_moves=None, stopping_callback=None,
+             remask_interval=None):
         """Flood fill this region.
 
         Parameters
@@ -399,6 +418,12 @@ class Region(object):
         stopping_callback : function, optional
             Function periodical called that will terminate filling if it returns
             true.
+        remask_interval : int, optional
+            Frequency in moves to reset the mask to be based on the
+            morphological seed connected component. This is useful to discourage
+            long-running fills due to runaway merging. Only sensible when
+            using move rechecking, proximity priority, and rejecting non-seeded
+            connected components.
 
         Returns
         -------
@@ -408,6 +433,7 @@ class Region(object):
         """
         moves = 0
         last_check = 0
+        last_remask = 0
         STOP_CHECK_INTERVAL = 100
         early_termination = False
 
@@ -444,6 +470,12 @@ class Region(object):
             if max_moves is not None and moves > max_moves:
                 early_termination = True
                 break
+
+            if moves - last_remask >= remask_interval:
+                if not self.remask():
+                    early_termination = True
+                    break
+                last_remask = moves
 
         if progress:
             pbar.close()

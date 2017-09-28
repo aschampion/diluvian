@@ -94,6 +94,10 @@ def _make_main_parser():
     fill_common_parser.add_argument(
             '--max-moves', dest='max_moves', default=None, type=int,
             help='Cancel filling after this many moves.')
+    fill_common_parser.add_argument(
+            '--remask-interval', dest='remask_interval', default=None, type=int,
+            help='Interval in moves to reset filling region mask based on '
+                 'the seeded connected component.')
 
     fill_parser = commandparsers.add_parser(
             'fill', parents=[common_parser, fill_common_parser],
@@ -251,6 +255,7 @@ def main():
                                 max_bodies=args.max_bodies,
                                 filter_seeds_by_mask=not args.ignore_mask,
                                 reject_early_termination=args.reject_early_termination,
+                                remask_interval=args.remask_interval,
                                 shuffle_seeds=args.shuffle_seeds)
 
     elif args.command == 'sparse-fill':
@@ -265,6 +270,7 @@ def main():
                                bias=args.bias,
                                move_batch_size=args.move_batch_size,
                                max_moves=args.max_moves,
+                               remask_interval=args.remask_interval,
                                moves=args.bounds_num_moves)
 
     elif args.command == 'view':
