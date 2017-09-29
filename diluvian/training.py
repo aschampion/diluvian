@@ -87,6 +87,7 @@ class PredictionCopy(Callback):
     def on_epoch_end(self, epoch, logs=None):
         if self.epoch_reset:
             self.kludge['inputs'] = None
+            self.kludge['outputs'] = None
 
 
 class EarlyAbortException(Exception):
