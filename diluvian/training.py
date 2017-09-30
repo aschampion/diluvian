@@ -5,10 +5,12 @@
 from __future__ import division
 from __future__ import print_function
 
+import collections
 import importlib
 import itertools
 import logging
 import random
+import types
 
 import matplotlib as mpl
 # Use the 'Agg' backend to allow the generation of plots even if no X server
@@ -19,12 +21,14 @@ import numpy as np
 import six
 from six.moves import range as xrange
 
+import keras.backend as K
 from keras.callbacks import (
         Callback,
         EarlyStopping,
         ModelCheckpoint,
         TensorBoard,
         )
+from keras.engine import Model
 
 from .config import CONFIG
 from .diluvian import partition_volumes
@@ -67,22 +71,89 @@ def plot_history(history):
     return fig
 
 
-class PredictionCopy(Callback):
-    """Keras batch end callback to run prediction on input from a kludge.
+def patch_prediction_copy(model):
+    """Patch a Keras model to copy outputs to a kludge during training.
 
-    Used to predict masks for FOV moving. Surprisingly this is faster than
-    using a custom Keras training function to copy model predictions at the
-    same time as gradient updates.
+    This is necessary for mask updates to a region during training.
+
+    Parameters
+    ----------
+    model : keras.engine.Model
+    """
+    model._orig_train_on_batch = model.train_on_batch
+
+    def train_on_batch(self, x, y, **kwargs):
+        kludge = x.pop('kludge', None)
+        outputs = self._orig_train_on_batch(x, y, **kwargs)
+        kludge['outputs'] = outputs.pop()
+        if len(outputs) == 1:
+            return outputs[0]
+        return outputs
+
+    model.train_on_batch = types.MethodType(train_on_batch, model, Model)
+
+    model._orig_test_on_batch = model.test_on_batch
+
+    def test_on_batch(self, x, y, **kwargs):
+        kludge = x.pop('kludge', None)
+        outputs = self._orig_test_on_batch(x, y, **kwargs)
+        kludge['outputs'] = outputs.pop()
+        if len(outputs) == 1:
+            return outputs[0]
+        return outputs
+
+    model.test_on_batch = types.MethodType(test_on_batch, model, Model)
+
+    # Below is copied and modified from Keras Model._make_train_function.
+    # The only change is the addition of `self.outputs` to the train function.
+    def _make_train_function(self):
+        if not hasattr(self, 'train_function'):
+            raise RuntimeError('You must compile your model before using it.')
+        if self.train_function is None:
+            inputs = self._feed_inputs + self._feed_targets + self._feed_sample_weights
+            if self.uses_learning_phase and not isinstance(K.learning_phase(), int):
+                inputs += [K.learning_phase()]
+
+            with K.name_scope('training'):
+                with K.name_scope(self.optimizer.__class__.__name__):
+                    training_updates = self.optimizer.get_updates(
+                        params=self._collected_trainable_weights,
+                        loss=self.total_loss)
+                updates = self.updates + training_updates
+                # Gets loss and metrics. Updates weights at each call.
+                self.train_function = K.function(inputs,
+                                                 [self.total_loss] + self.metrics_tensors + self.outputs,
+                                                 updates=updates,
+                                                 name='train_function',
+                                                 **self._function_kwargs)
+
+    model._make_train_function = types.MethodType(_make_train_function, model, Model)
+
+    def _make_test_function(self):
+        if not hasattr(self, 'test_function'):
+            raise RuntimeError('You must compile your model before using it.')
+        if self.test_function is None:
+            inputs = self._feed_inputs + self._feed_targets + self._feed_sample_weights
+            if self.uses_learning_phase and not isinstance(K.learning_phase(), int):
+                inputs += [K.learning_phase()]
+            # Return loss and metrics, no gradient updates.
+            # Does update the network states.
+            self.test_function = K.function(inputs,
+                                            [self.total_loss] + self.metrics_tensors + self.outputs,
+                                            updates=self.state_updates,
+                                            name='test_function',
+                                            **self._function_kwargs)
+
+    model._make_test_function = types.MethodType(_make_test_function, model, Model)
+
+
+class KludgeReset(Callback):
+    """Keras epoch end callback to reset prediction copy kludges.
     """
     def __init__(self, kludge, name=None, epoch_reset=False):
         self.kludge = kludge
         self.name = name if name is not None else ''
         self.epoch_reset = epoch_reset
-
-    def on_batch_end(self, batch, logs=None):
-        if self.kludge['inputs'] and self.kludge['outputs'] is None:
-            logging.debug('Running prediction kludge {}'.format(self.name))
-            self.kludge['outputs'] = self.model.predict_on_batch(self.kludge['inputs'])
 
     def on_epoch_end(self, epoch, logs=None):
         if self.epoch_reset:
@@ -245,7 +316,7 @@ def static_training_generator(subvolumes, batch_size, training_size,
                    sample_weights)
 
 
-def moving_training_generator(subvolumes, batch_size, training_size, callback_kludge,
+def moving_training_generator(subvolumes, batch_size, training_size, kludge,
                               f_a_bins=None, reset_generators=True):
     """Generate Keras moving FOV training tuples from a subvolume generator.
 
@@ -261,9 +332,10 @@ def moving_training_generator(subvolumes, batch_size, training_size, callback_kl
     training_size : int
         Total size in samples of a training epoch, after which generators will
         be reset if ``reset_generators`` is true.
-    callback_kludge : dict
+    kludge : dict
         A kludge object to allow this generator to provide inputs and receive
-        outputs from the network. See ``diluvian.PredictionCopy``.
+        outputs from the network.
+        See ``diluvian.training.patch_prediction_copy``.
     f_a_bins : sequence of float, optional
         Bin boundaries for filling fractions. If provided, sample loss will be
         weighted to increase loss contribution from less-frequent f_a bins.
@@ -290,6 +362,9 @@ def moving_training_generator(subvolumes, batch_size, training_size, callback_kl
             f_a_init = False
             if reset_generators:
                 subvolumes.reset()
+                regions = [None] * batch_size
+                kludge['inputs'] = None
+                kludge['outputs'] = None
             if len(epoch_move_counts):
                 logging.info(' Average moves: %s', sum(epoch_move_counts)/float(len(epoch_move_counts)))
             epoch_move_counts = []
@@ -298,11 +373,11 @@ def moving_training_generator(subvolumes, batch_size, training_size, callback_kl
         # Before clearing last batches, reuse them to predict mask outputs
         # for move training. Add mask outputs to regions.
         active_regions = [n for n, region in enumerate(regions) if region is not None]
-        if active_regions and callback_kludge['outputs'] is not None:
+        if active_regions and kludge['outputs'] is not None and kludge['inputs'] is not None:
             for n in active_regions:
-                assert np.array_equal(callback_kludge['inputs']['image_input'][n, 0, 0, :, 0],
+                assert np.array_equal(kludge['inputs'][n, :],
                                       batch_image_input[n, 0, 0, :, 0])
-                regions[n].add_mask(callback_kludge['outputs'][n, :, :, :, 0], region_pos[n])
+                regions[n].add_mask(kludge['outputs'][n, :, :, :, 0], region_pos[n])
 
         batch_image_input = [None] * batch_size
         batch_mask_input = [None] * batch_size
@@ -333,10 +408,14 @@ def moving_training_generator(subvolumes, batch_size, training_size, callback_kl
         batch_mask_target = np.concatenate(batch_mask_target)
 
         sample_num += batch_size
-        inputs = {'image_input': batch_image_input,
-                  'mask_input': batch_mask_input}
-        callback_kludge['inputs'] = inputs
-        callback_kludge['outputs'] = None
+        inputs = collections.OrderedDict({'image_input': batch_image_input,
+                                          'mask_input': batch_mask_input})
+        inputs = collections.OrderedDict({'image_input': batch_image_input,
+                                          'mask_input': batch_mask_input})
+        inputs['kludge'] = kludge
+        # These inputs are only necessary for assurance the correct FOV is updated.
+        kludge['inputs'] = batch_image_input[:, 0, 0, :, 0].copy()
+        kludge['outputs'] = None
 
         if f_a_bins is None:
             yield (inputs,
@@ -382,6 +461,8 @@ def train_network(
             ffn = make_parallel(ffn, CONFIG.training.num_gpus)
         compile_network(ffn, CONFIG.optimizer)
 
+    patch_prediction_copy(ffn)
+
     if model_output_filebase is None:
         model_output_filebase = 'model_output'
 
@@ -411,7 +492,7 @@ def train_network(
         validation_shape = CONFIG.model.input_fov_shape
     else:
         validation_shape = CONFIG.model.training_subv_shape
-        validation_callback = PredictionCopy(validation_kludge, 'Validation', epoch_reset=True)
+        validation_callback = KludgeReset(validation_kludge, 'Validation', epoch_reset=True)
         callbacks.append(validation_callback)
     validation_gens = [
             preprocess_subvolume_generator(
@@ -428,11 +509,12 @@ def train_network(
             f_a_bins=f_a_bins,
             reset_generators=True)
 
-    # Keras does not call batch end callbacks during validation batches, so this
-    # wrapper is necessary to generate moves for moving validation.
+    # Force Keras validation workers to wait for predictions to finish before
+    # generating the next batch.
     def validation_wrapper():
         while True:
-            validation_callback.on_batch_end(None)
+            if validation_kludge['inputs'] is not None and validation_kludge['outputs'] is None:
+                continue
             yield six.next(validation_data)
 
     TRAINING_STEPS_PER_EPOCH = CONFIG.training.training_size // CONFIG.training.batch_size
@@ -453,6 +535,7 @@ def train_network(
     # Some workers may not receive any generators, so account for this when
     # determining per-worker training size.
     num_active_workers = sum(len(g) > 0 for g in worker_gens)
+    logging.debug('# of training workers: %s', num_active_workers)
     worker_training_size = CONFIG.training.training_size // num_active_workers
     # Create a training data generator for each worker.
     training_data = [moving_training_generator(
@@ -466,7 +549,7 @@ def train_network(
             Roundrobin(*training_data),
             steps_per_epoch=TRAINING_STEPS_PER_EPOCH,
             epochs=CONFIG.training.static_train_epochs,
-            max_queue_size=CONFIG.training.num_workers,
+            max_queue_size=num_active_workers - 1,
             workers=1,
             callbacks=callbacks,
             validation_data=validation_wrapper(),
@@ -474,9 +557,6 @@ def train_network(
 
     # Moving training
     kludges = [{'inputs': None, 'outputs': None} for _ in range(CONFIG.training.num_workers)]
-    callbacks.extend([
-            PredictionCopy(kludge, 'Training {}'.format(n), epoch_reset=CONFIG.training.reset_generators)
-            for n, kludge in enumerate(kludges)])
     callbacks.append(ModelCheckpoint(model_output_filebase + '.hdf5', save_best_only=True))
     if model_checkpoint_file:
         callbacks.append(ModelCheckpoint(model_checkpoint_file))
@@ -509,7 +589,7 @@ def train_network(
             steps_per_epoch=TRAINING_STEPS_PER_EPOCH,
             epochs=CONFIG.training.total_epochs,
             initial_epoch=CONFIG.training.static_train_epochs,
-            max_queue_size=CONFIG.training.num_workers,
+            max_queue_size=num_active_workers - 1,
             workers=1,
             callbacks=callbacks,
             validation_data=validation_wrapper(),

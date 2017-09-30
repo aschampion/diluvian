@@ -89,8 +89,7 @@ choices in ways pertinent to your use:
   highest mask probability with which it is added to the queue.
 * Currently only processing of each FOV is done on the GPU, with movement
   being processed on the CPU and requiring copying of FOV data to host and
-  back for each move. Also, during training the mask prediction used for
-  moving is done again *after* the batch gradient update.
+  back for each move.
 
 .. [Januszewski2016]
    Michał Januszewski, Jeremy Maitin-Shepard, Peter Li, Jorgen Kornfeld,
