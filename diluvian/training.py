@@ -54,7 +54,6 @@ from .volumes import (
         )
 from .regions import (
         Region,
-        mask_to_output_target,
         )
 
 
@@ -240,86 +239,13 @@ def augment_subvolume_generator(subvolume_generator):
     return gen
 
 
-def static_training_generator(subvolumes, batch_size, training_size,
-                              f_a_bins=None, reset_generators=True):
-    """Generate Keras non-moving training tuples from a subvolume generator.
-
-    Note that this generator is not yet compatible with networks with different
-    input and output FOV shapes.
-
-    Parameters
-    ----------
-    subvolumes : generator of Subvolume
-    batch_size : int
-    training_size : int
-        Total size in samples of a training epoch, after which generators will
-        be reset if ``reset_generators`` is true.
-    f_a_bins : sequence of float, optional
-        Bin boundaries for filling fractions. If provided, sample loss will be
-        weighted to increase loss contribution from less-frequent f_a bins.
-        Otherwise all samples are weighted equally.
-    reset_generators : bool
-        Whether to reset subvolume generators at the end of each epoch. If true
-        subvolumes will be sampled in the same order each epoch.
-    """
-    mask_input = np.full(np.append(subvolumes.shape, (1,)), CONFIG.model.v_false, dtype=np.float32)
-    mask_input[tuple(np.array(mask_input.shape) // 2)] = CONFIG.model.v_true
-    mask_input = np.tile(mask_input, (batch_size, 1, 1, 1, 1))
-    f_a_init = False
-
-    if f_a_bins is not None:
-        f_a_init = True
-        f_a_counts = np.ones_like(f_a_bins, dtype=np.int64)
-    f_as = np.zeros(batch_size)
-
-    sample_num = 0
-    while True:
-        if sample_num >= training_size:
-            f_a_init = False
-            if reset_generators:
-                subvolumes.reset()
-            sample_num = 0
-
-        batch_image_input = [None] * batch_size
-        batch_mask_target = [None] * batch_size
-
-        for batch_ind in range(0, batch_size):
-            subvolume = subvolumes.next()
-
-            f_as[batch_ind] = subvolume.f_a()
-            batch_image_input[batch_ind] = pad_dims(subvolume.image)
-            batch_mask_target[batch_ind] = pad_dims(mask_to_output_target(subvolume.label_mask))
-
-        batch_image_input = np.concatenate(batch_image_input)
-        batch_mask_target = np.concatenate(batch_mask_target)
-
-        sample_num += batch_size
-
-        if f_a_bins is None:
-            yield ({'image_input': batch_image_input,
-                    'mask_input': mask_input},
-                   [batch_mask_target])
-        else:
-            f_a_inds = np.digitize(f_as, f_a_bins) - 1
-            inds, counts = np.unique(f_a_inds, return_counts=True)
-            if f_a_init:
-                f_a_counts[inds] += counts.astype(np.int64)
-                sample_weights = np.ones(f_as.size, dtype=np.float64)
-            else:
-                sample_weights = np.reciprocal(f_a_counts[f_a_inds], dtype=np.float64) * float(f_as.size)
-            yield ({'image_input': batch_image_input,
-                    'mask_input': mask_input},
-                   [batch_mask_target],
-                   sample_weights)
-
-
 class MovingTrainingGenerator(six.Iterator):
     """Generate Keras moving FOV training tuples from a subvolume generator.
 
-    Unlike ``static_training_generator``, this generator expects a subvolume
-    generator that will provide subvolumes larger than the network FOV, and
-    will allow the output of training at one batch to generate moves within
-    these subvolumes to produce training data for the subsequent batch.
+    This generator expects a subvolume generator that will provide subvolumes
+    larger than the network FOV, and will allow the output of training at one
+    batch to generate moves within these subvolumes to produce training data
+    for the subsequent batch.
 
     Parameters
     ----------
@@ -334,8 +260,8 @@ class MovingTrainingGenerator(six.Iterator):
         weighted to increase loss contribution from less-frequent f_a bins.
         Otherwise all samples are weighted equally.
     reset_generators : bool
-        Whether to reset subvolume generators at the end of each epoch. If true
-        subvolumes will be sampled in the same order each epoch.
+        Whether to reset subvolume generators when this generator is reset.
+        If true subvolumes will be sampled in the same order each epoch.
     """
     def __init__(self, subvolumes, batch_size, kludge,
                  f_a_bins=None, reset_generators=True):
