@@ -147,18 +147,15 @@ def patch_prediction_copy(model):
     model._make_test_function = types.MethodType(_make_test_function, model, Model)
 
 
-class KludgeReset(Callback):
+class GeneratorReset(Callback):
     """Keras epoch end callback to reset prediction copy kludges.
     """
-    def __init__(self, kludge, name=None, epoch_reset=False):
-        self.kludge = kludge
-        self.name = name if name is not None else ''
-        self.epoch_reset = epoch_reset
+    def __init__(self, gens):
+        self.gens = gens
 
     def on_epoch_end(self, epoch, logs=None):
-        if self.epoch_reset:
-            self.kludge['inputs'] = None
-            self.kludge['outputs'] = None
+        for gen in self.gens:
+            gen.reset()
 
 
 class EarlyAbortException(Exception):
@@ -316,8 +313,7 @@ def static_training_generator(subvolumes, batch_size, training_size,
                    sample_weights)
 
 
-def moving_training_generator(subvolumes, batch_size, training_size, kludge,
-                              f_a_bins=None, reset_generators=True):
+class MovingTrainingGenerator(six.Iterator):
     """Generate Keras moving FOV training tuples from a subvolume generator.
 
     Unlike ``static_training_generator``, this generator expects a subvolume
@@ -329,9 +325,6 @@ def moving_training_generator(subvolumes, batch_size, training_size, kludge,
     ----------
     subvolumes : generator of Subvolume
     batch_size : int
-    training_size : int
-        Total size in samples of a training epoch, after which generators will
-        be reset if ``reset_generators`` is true.
     kludge : dict
         A kludge object to allow this generator to provide inputs and receive
         outputs from the network.
@@ -344,95 +337,103 @@ def moving_training_generator(subvolumes, batch_size, training_size, kludge,
         Whether to reset subvolume generators at the end of each epoch. If true
         subvolumes will be sampled in the same order each epoch.
     """
-    regions = [None] * batch_size
-    region_pos = [None] * batch_size
-    move_counts = [0] * batch_size
-    epoch_move_counts = []
-    batch_image_input = [None] * batch_size
-    f_a_init = False
+    def __init__(self, subvolumes, batch_size, kludge,
+                 f_a_bins=None, reset_generators=True):
+        self.subvolumes = subvolumes
+        self.batch_size = batch_size
+        self.kludge = kludge
+        self.reset_generators = reset_generators
 
-    if f_a_bins is not None:
-        f_a_init = True
-        f_a_counts = np.ones_like(f_a_bins, dtype=np.int64)
-    f_as = np.zeros(batch_size)
+        self.regions = [None] * batch_size
+        self.region_pos = [None] * batch_size
+        self.move_counts = [0] * batch_size
+        self.epoch_move_counts = []
+        self.batch_image_input = [None] * batch_size
 
-    sample_num = 0
-    while True:
-        if sample_num >= training_size:
-            f_a_init = False
-            if reset_generators:
-                subvolumes.reset()
-                regions = [None] * batch_size
-                kludge['inputs'] = None
-                kludge['outputs'] = None
-            if len(epoch_move_counts):
-                logging.info(' Average moves (%s): %s',
-                             subvolumes.name,
-                             sum(epoch_move_counts)/float(len(epoch_move_counts)))
-            epoch_move_counts = []
-            sample_num = 0
+        self.f_a_bins = f_a_bins
+        self.f_a_init = False
+        if f_a_bins is not None:
+            self.f_a_init = True
+            self.f_a_counts = np.ones_like(f_a_bins, dtype=np.int64)
+        self.f_as = np.zeros(batch_size)
 
+    def __iter__(self):
+        return self
+
+    def reset(self):
+        self.f_a_init = False
+        if self.reset_generators:
+            self.subvolumes.reset()
+            self.regions = [None] * self.batch_size
+            self.kludge['inputs'] = None
+            self.kludge['outputs'] = None
+        if len(self.epoch_move_counts):
+            logging.info(' Average moves (%s): %s',
+                         self.subvolumes.name,
+                         sum(self.epoch_move_counts)/float(len(self.epoch_move_counts)))
+        self.epoch_move_counts = []
+
+    def __next__(self):
         # Before clearing last batches, reuse them to predict mask outputs
         # for move training. Add mask outputs to regions.
-        active_regions = [n for n, region in enumerate(regions) if region is not None]
-        if active_regions and kludge['outputs'] is not None and kludge['inputs'] is not None:
+        active_regions = [n for n, region in enumerate(self.regions) if region is not None]
+        if active_regions and self.kludge['outputs'] is not None and self.kludge['inputs'] is not None:
             for n in active_regions:
-                assert np.array_equal(kludge['inputs'][n, :],
-                                      batch_image_input[n, 0, 0, :, 0])
-                regions[n].add_mask(kludge['outputs'][n, :, :, :, 0], region_pos[n])
+                assert np.array_equal(self.kludge['inputs'][n, :],
+                                      self.batch_image_input[n, 0, 0, :, 0])
+                self.regions[n].add_mask(self.kludge['outputs'][n, :, :, :, 0], self.region_pos[n])
 
-        batch_image_input = [None] * batch_size
-        batch_mask_input = [None] * batch_size
-        batch_mask_target = [None] * batch_size
+        self.batch_image_input = [None] * self.batch_size
+        batch_mask_input = [None] * self.batch_size
+        batch_mask_target = [None] * self.batch_size
 
-        for r, region in enumerate(regions):
+        for r, region in enumerate(self.regions):
             block_data = region.get_next_block() if region is not None else None
             if block_data is None:
                 while block_data is None:
-                    subvolume = six.next(subvolumes)
+                    subvolume = six.next(self.subvolumes)
 
-                    regions[r] = Region.from_subvolume(subvolume)
-                    region = regions[r]
-                    epoch_move_counts.append(move_counts[r])
-                    move_counts[r] = 0
+                    self.regions[r] = Region.from_subvolume(subvolume)
+                    region = self.regions[r]
+                    self.epoch_move_counts.append(self.move_counts[r])
+                    self.move_counts[r] = 0
                     block_data = region.get_next_block()
             else:
-                move_counts[r] += 1
+                self.move_counts[r] += 1
 
-            f_as[r] = subvolume.f_a()
-            batch_image_input[r] = pad_dims(block_data['image'])
+            self.f_as[r] = subvolume.f_a()
+            self.batch_image_input[r] = pad_dims(block_data['image'])
             batch_mask_input[r] = pad_dims(block_data['mask'])
             batch_mask_target[r] = pad_dims(block_data['target'])
-            region_pos[r] = block_data['position']
+            self.region_pos[r] = block_data['position']
 
-        batch_image_input = np.concatenate(batch_image_input)
+        self.batch_image_input = np.concatenate(self.batch_image_input)
         batch_mask_input = np.concatenate(batch_mask_input)
         batch_mask_target = np.concatenate(batch_mask_target)
 
-        sample_num += batch_size
-        inputs = collections.OrderedDict({'image_input': batch_image_input,
+        inputs = collections.OrderedDict({'image_input': self.batch_image_input,
                                           'mask_input': batch_mask_input})
-        inputs = collections.OrderedDict({'image_input': batch_image_input,
+        inputs = collections.OrderedDict({'image_input': self.batch_image_input,
                                           'mask_input': batch_mask_input})
-        inputs['kludge'] = kludge
+        inputs['kludge'] = self.kludge
         # These inputs are only necessary for assurance the correct FOV is updated.
-        kludge['inputs'] = batch_image_input[:, 0, 0, :, 0].copy()
-        kludge['outputs'] = None
+        self.kludge['inputs'] = self.batch_image_input[:, 0, 0, :, 0].copy()
+        self.kludge['outputs'] = None
 
-        if f_a_bins is None:
-            yield (inputs,
-                   [batch_mask_target])
+        if self.f_a_bins is None:
+            return (inputs,
+                    [batch_mask_target])
         else:
-            f_a_inds = np.digitize(f_as, f_a_bins) - 1
+            f_a_inds = np.digitize(self.f_as, self.f_a_bins) - 1
             inds, counts = np.unique(f_a_inds, return_counts=True)
-            if f_a_init:
-                f_a_counts[inds] += counts.astype(np.int64)
-                sample_weights = np.ones(f_as.size, dtype=np.float64)
+            if self.f_a_init:
+                self.f_a_counts[inds] += counts.astype(np.int64)
+                sample_weights = np.ones(self.f_as.size, dtype=np.float64)
             else:
-                sample_weights = np.reciprocal(f_a_counts[f_a_inds], dtype=np.float64) * float(f_as.size)
-            yield (inputs,
-                   [batch_mask_target],
-                   sample_weights)
+                sample_weights = np.reciprocal(self.f_a_counts[f_a_inds], dtype=np.float64) * float(self.f_as.size)
+            return (inputs,
+                    [batch_mask_target],
+                    sample_weights)
 
 
 def train_network(
@@ -494,10 +495,6 @@ def train_network(
         validation_shape = CONFIG.model.input_fov_shape
     else:
         validation_shape = CONFIG.model.training_subv_shape
-        validation_callbacks = [
-                KludgeReset(kludge, 'Validation', epoch_reset=True)
-                for kludge in validation_kludges]
-        callbacks.extend(validation_callbacks)
     validation_gens = [
             preprocess_subvolume_generator(
                     v.subvolume_generator(shape=validation_shape,
@@ -509,26 +506,17 @@ def train_network(
     validation_worker_gens = [
             validation_gens[i::CONFIG.training.num_workers]
             for i in xrange(CONFIG.training.num_workers)]
-    num_active_validation_workers = sum(len(g) > 0 for g in validation_worker_gens)
-    logging.debug('# of validation workers: %s', num_active_validation_workers)
-    worker_validation_size = CONFIG.training.validation_size // num_active_validation_workers
-    validation_data = [moving_training_generator(
+    validation_worker_gens = [g for g in validation_worker_gens if len(g) > 0]
+    logging.debug('# of validation workers: %s', len(validation_worker_gens))
+    validation_data = [MovingTrainingGenerator(
             Roundrobin(*gen, name='validation inner {}'.format(i)),
             CONFIG.training.batch_size,
-            worker_validation_size,
+            # worker_validation_size,
             kludge,
             f_a_bins=f_a_bins,
             reset_generators=True)
             for i, (gen, kludge) in enumerate(zip(validation_worker_gens, validation_kludges))]
-
-    # Force Keras validation workers to wait for predictions to finish before
-    # generating the next batch.
-    def validation_wrapper(data, kludge):
-        while True:
-            if kludge['inputs'] is not None and kludge['outputs'] is None:
-                continue
-            yield six.next(data)
-    validation_data = [validation_wrapper(d, k) for d, k in zip(validation_data, validation_kludges)]
+    callbacks.append(GeneratorReset(validation_data))
 
     TRAINING_STEPS_PER_EPOCH = CONFIG.training.training_size // CONFIG.training.batch_size
     VALIDATION_STEPS = CONFIG.training.validation_size // CONFIG.training.batch_size
@@ -545,25 +533,24 @@ def train_network(
     worker_gens = [
             training_gens[i::CONFIG.training.num_workers]
             for i in xrange(CONFIG.training.num_workers)]
-    # Some workers may not receive any generators, so account for this when
-    # determining per-worker training size.
-    num_active_workers = sum(len(g) > 0 for g in worker_gens)
-    logging.debug('# of training workers: %s', num_active_workers)
-    worker_training_size = CONFIG.training.training_size // num_active_workers
+    # Some workers may not receive any generators.
+    worker_gens = [g for g in worker_gens if len(g) > 0]
+    logging.debug('# of training workers: %s', len(worker_gens))
     # Create a training data generator for each worker.
-    training_data = [moving_training_generator(
+    training_data = [MovingTrainingGenerator(
             Roundrobin(*gen, name='static training inner {}'.format(i)),
             CONFIG.training.batch_size,
-            worker_training_size,
             {'outputs': None},  # Allows use of moving training gen like static.
             f_a_bins=f_a_bins,
             reset_generators=CONFIG.training.reset_generators)
             for i, gen in enumerate(worker_gens)]
+    training_reset_callback = GeneratorReset(training_data)
+    callbacks.append(training_reset_callback)
     history = ffn.fit_generator(
             Roundrobin(*training_data, name='static training outer'),
             steps_per_epoch=TRAINING_STEPS_PER_EPOCH,
             epochs=CONFIG.training.static_train_epochs,
-            max_queue_size=num_active_workers - 1,
+            max_queue_size=len(worker_gens) - 1,
             workers=1,
             callbacks=callbacks,
             validation_data=Roundrobin(*validation_data, name='validation out'),
@@ -591,20 +578,23 @@ def train_network(
     worker_gens = [
             training_gens[i::CONFIG.training.num_workers]
             for i in xrange(CONFIG.training.num_workers)]
-    training_data = [moving_training_generator(
+    worker_gens = [g for g in worker_gens if len(g) > 0]
+    training_data = [MovingTrainingGenerator(
             Roundrobin(*gen, name='moving training inner {}'.format(i)),
             CONFIG.training.batch_size,
-            worker_training_size,
             kludge,
             f_a_bins=f_a_bins,
             reset_generators=CONFIG.training.reset_generators)
             for i, (gen, kludge) in enumerate(zip(worker_gens, kludges))]
+    callbacks.remove(training_reset_callback)
+    training_reset_callback = GeneratorReset(training_data)
+    callbacks.append(training_reset_callback)
     moving_history = ffn.fit_generator(
             Roundrobin(*training_data, name='moving training outer'),
             steps_per_epoch=TRAINING_STEPS_PER_EPOCH,
             epochs=CONFIG.training.total_epochs,
             initial_epoch=CONFIG.training.static_train_epochs,
-            max_queue_size=num_active_workers - 1,
+            max_queue_size=len(worker_gens) - 1,
             workers=1,
             callbacks=callbacks,
             validation_data=Roundrobin(*validation_data, name='validation out'),
