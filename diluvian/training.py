@@ -392,6 +392,7 @@ class MovingTrainingGenerator(six.Iterator):
             if block_data is None:
                 while block_data is None:
                     subvolume = six.next(self.subvolumes)
+                    self.f_as[r] = subvolume.f_a()
 
                     self.regions[r] = Region.from_subvolume(subvolume)
                     region = self.regions[r]
@@ -401,7 +402,6 @@ class MovingTrainingGenerator(six.Iterator):
             else:
                 self.move_counts[r] += 1
 
-            self.f_as[r] = subvolume.f_a()
             self.batch_image_input[r] = pad_dims(block_data['image'])
             batch_mask_input[r] = pad_dims(block_data['mask'])
             batch_mask_target[r] = pad_dims(block_data['target'])
