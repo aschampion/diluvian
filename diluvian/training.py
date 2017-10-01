@@ -502,7 +502,7 @@ def train_network(
     if CONFIG.training.augment_validation:
         validation_gens = map(augment_subvolume_generator, validation_gens)
     validation_data = moving_training_generator(
-            Roundrobin(*validation_gens),
+            Roundrobin(*validation_gens, name='validation'),
             CONFIG.training.batch_size,
             CONFIG.training.validation_size,
             validation_kludge,
@@ -539,14 +539,15 @@ def train_network(
     worker_training_size = CONFIG.training.training_size // num_active_workers
     # Create a training data generator for each worker.
     training_data = [moving_training_generator(
-            Roundrobin(*gen),
+            Roundrobin(*gen, name='static training inner {}'.format(i)),
             CONFIG.training.batch_size,
             worker_training_size,
             {'outputs': None},  # Allows use of moving training gen like static.
             f_a_bins=f_a_bins,
-            reset_generators=CONFIG.training.reset_generators) for gen in worker_gens]
+            reset_generators=CONFIG.training.reset_generators)
+            for i, gen in enumerate(worker_gens)]
     history = ffn.fit_generator(
-            Roundrobin(*training_data),
+            Roundrobin(*training_data, name='static training outer'),
             steps_per_epoch=TRAINING_STEPS_PER_EPOCH,
             epochs=CONFIG.training.static_train_epochs,
             max_queue_size=num_active_workers - 1,
@@ -578,14 +579,15 @@ def train_network(
             training_gens[i::CONFIG.training.num_workers]
             for i in xrange(CONFIG.training.num_workers)]
     training_data = [moving_training_generator(
-            Roundrobin(*gen),
+            Roundrobin(*gen, name='moving training inner {}'.format(i)),
             CONFIG.training.batch_size,
             worker_training_size,
             kludge,
             f_a_bins=f_a_bins,
-            reset_generators=CONFIG.training.reset_generators) for gen, kludge in zip(worker_gens, kludges)]
+            reset_generators=CONFIG.training.reset_generators)
+            for i, (gen, kludge) in enumerate(zip(worker_gens, kludges))]
     moving_history = ffn.fit_generator(
-            Roundrobin(*training_data),
+            Roundrobin(*training_data, name='moving training outer'),
             steps_per_epoch=TRAINING_STEPS_PER_EPOCH,
             epochs=CONFIG.training.total_epochs,
             initial_epoch=CONFIG.training.static_train_epochs,

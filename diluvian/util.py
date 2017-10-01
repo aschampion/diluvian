@@ -6,6 +6,7 @@ from __future__ import print_function
 import collections
 import csv
 import itertools
+import logging
 import webbrowser
 
 import neuroglancer
@@ -137,15 +138,17 @@ class Roundrobin(six.Iterator):
     ['A', 'D', 'E', 'B', 'F', 'C']
     """
 
-    def __init__(self, *iterables):
+    def __init__(self, *iterables, **kwargs):
         self.iterables = iterables
         self.pending = len(self.iterables)
         self.nexts = itertools.cycle(self.iterables)
+        self.name = kwargs.get('name', 'Unknown')
 
     def __iter__(self):
         return self
 
     def reset(self):
+        logging.debug('Resetting generator: %s', self.name)
         for it in self.iterables:
             iter(it).reset()
         self.pending = len(self.iterables)
