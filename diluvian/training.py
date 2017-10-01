@@ -366,7 +366,9 @@ def moving_training_generator(subvolumes, batch_size, training_size, kludge,
                 kludge['inputs'] = None
                 kludge['outputs'] = None
             if len(epoch_move_counts):
-                logging.info(' Average moves: %s', sum(epoch_move_counts)/float(len(epoch_move_counts)))
+                logging.info(' Average moves (%s): %s',
+                             subvolumes.name,
+                             sum(epoch_move_counts)/float(len(epoch_move_counts)))
             epoch_move_counts = []
             sample_num = 0
 
@@ -486,14 +488,16 @@ def train_network(
         callbacks.append(EarlyAbort(threshold_epoch=CONFIG.training.early_abort_epoch,
                                     threshold_value=CONFIG.training.early_abort_loss))
 
-    validation_kludge = {'inputs': None, 'outputs': None}
+    validation_kludges = [{'inputs': None, 'outputs': None} for _ in range(CONFIG.training.num_workers)]
     output_margin = np.floor_divide(CONFIG.model.input_fov_shape - CONFIG.model.output_fov_shape, 2)
     if static_validation:
         validation_shape = CONFIG.model.input_fov_shape
     else:
         validation_shape = CONFIG.model.training_subv_shape
-        validation_callback = KludgeReset(validation_kludge, 'Validation', epoch_reset=True)
-        callbacks.append(validation_callback)
+        validation_callbacks = [
+                KludgeReset(kludge, 'Validation', epoch_reset=True)
+                for kludge in validation_kludges]
+        callbacks.extend(validation_callbacks)
     validation_gens = [
             preprocess_subvolume_generator(
                     v.subvolume_generator(shape=validation_shape,
@@ -501,21 +505,30 @@ def train_network(
             for v in six.itervalues(validation_volumes)]
     if CONFIG.training.augment_validation:
         validation_gens = map(augment_subvolume_generator, validation_gens)
-    validation_data = moving_training_generator(
-            Roundrobin(*validation_gens, name='validation'),
+    # Divide training generators up for workers.
+    validation_worker_gens = [
+            validation_gens[i::CONFIG.training.num_workers]
+            for i in xrange(CONFIG.training.num_workers)]
+    num_active_validation_workers = sum(len(g) > 0 for g in validation_worker_gens)
+    logging.debug('# of validation workers: %s', num_active_validation_workers)
+    worker_validation_size = CONFIG.training.validation_size // num_active_validation_workers
+    validation_data = [moving_training_generator(
+            Roundrobin(*gen, name='validation inner {}'.format(i)),
             CONFIG.training.batch_size,
-            CONFIG.training.validation_size,
-            validation_kludge,
+            worker_validation_size,
+            kludge,
             f_a_bins=f_a_bins,
             reset_generators=True)
+            for i, (gen, kludge) in enumerate(zip(validation_worker_gens, validation_kludges))]
 
     # Force Keras validation workers to wait for predictions to finish before
     # generating the next batch.
-    def validation_wrapper():
+    def validation_wrapper(data, kludge):
         while True:
-            if validation_kludge['inputs'] is not None and validation_kludge['outputs'] is None:
+            if kludge['inputs'] is not None and kludge['outputs'] is None:
                 continue
-            yield six.next(validation_data)
+            yield six.next(data)
+    validation_data = [validation_wrapper(d, k) for d, k in zip(validation_data, validation_kludges)]
 
     TRAINING_STEPS_PER_EPOCH = CONFIG.training.training_size // CONFIG.training.batch_size
     VALIDATION_STEPS = CONFIG.training.validation_size // CONFIG.training.batch_size
@@ -553,7 +566,7 @@ def train_network(
             max_queue_size=num_active_workers - 1,
             workers=1,
             callbacks=callbacks,
-            validation_data=validation_wrapper(),
+            validation_data=Roundrobin(*validation_data, name='validation out'),
             validation_steps=VALIDATION_STEPS)
 
     # Moving training
@@ -594,7 +607,7 @@ def train_network(
             max_queue_size=num_active_workers - 1,
             workers=1,
             callbacks=callbacks,
-            validation_data=validation_wrapper(),
+            validation_data=Roundrobin(*validation_data, name='validation out'),
             validation_steps=VALIDATION_STEPS)
     extend_keras_history(history, moving_history)
 
