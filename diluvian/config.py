@@ -104,6 +104,10 @@ class ModelConfig(BaseConfig):
     def move_step(self):
         return (self.output_fov_shape - 1) // self.output_fov_move_fraction
 
+    @property
+    def training_subv_moves(self):
+        return np.prod((self.training_subv_shape - self.input_fov_shape) // self.move_step + 1)
+
 
 class NetworkConfig(BaseConfig):
     """Configuration for the flood filling network architecture.

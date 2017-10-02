@@ -6,6 +6,7 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
+import copy
 import importlib
 import itertools
 import logging
@@ -63,10 +64,11 @@ def plot_history(history):
     ax = fig.add_subplot(111)
     ax.plot(history.history['loss'])
     ax.plot(history.history['val_loss'])
+    ax.plot(history.history['val_subv_loss'])
     fig.suptitle('model loss')
     ax.set_ylabel('loss')
     ax.set_xlabel('epoch')
-    ax.legend(['train', 'validation'], loc='upper right')
+    ax.legend(['train', 'validation', 'val subvolumes'], loc='upper right')
 
     return fig
 
@@ -156,6 +158,26 @@ class GeneratorReset(Callback):
     def on_epoch_end(self, epoch, logs=None):
         for gen in self.gens:
             gen.reset()
+
+
+class GeneratorSubvolumeMetric(Callback):
+    """Add a data generator's subvolume metric to Keras' metric logs.
+
+    Parameters
+    ----------
+    gens : iterable of diluvian.training.MovingTrainingGenerator
+    metric_name : string
+    """
+    def __init__(self, gens, metric_name):
+        self.gens = gens
+        self.metric_name = metric_name
+
+    def on_epoch_end(self, epoch, logs=None):
+        if self.metric_name not in self.params['metrics']:
+            self.params['metrics'].append(self.metric_name)
+        if logs:
+            metric = np.mean([gen.get_epoch_metric() for gen in self.gens])
+            logs[self.metric_name] = metric
 
 
 class EarlyAbortException(Exception):
@@ -264,18 +286,28 @@ class MovingTrainingGenerator(six.Iterator):
     reset_generators : bool
         Whether to reset subvolume generators when this generator is reset.
         If true subvolumes will be sampled in the same order each epoch.
+    subv_per_epoch : int, optional
+        If specified, the generator will only return moves from this many
+        subvolumes before being reset. Once this number of subvolumes is
+        exceeded, the generator will yield garbage batches (this is
+        necessary because Keras currently uses a fixed number of batches
+        per epoch). If specified, once each subvolume is complete its
+        total loss will be calculated.
     """
     def __init__(self, subvolumes, batch_size, kludge,
-                 f_a_bins=None, reset_generators=True):
+                 f_a_bins=None, reset_generators=True, subv_per_epoch=None):
         self.subvolumes = subvolumes
         self.batch_size = batch_size
         self.kludge = kludge
         self.reset_generators = reset_generators
+        self.subv_per_epoch = subv_per_epoch
 
         self.regions = [None] * batch_size
         self.region_pos = [None] * batch_size
         self.move_counts = [0] * batch_size
         self.epoch_move_counts = []
+        self.epoch_subv_metrics = []
+        self.epoch_subvolumes = 0
         self.batch_image_input = [None] * batch_size
 
         self.f_a_bins = f_a_bins
@@ -284,6 +316,9 @@ class MovingTrainingGenerator(six.Iterator):
             self.f_a_init = True
             self.f_a_counts = np.ones_like(f_a_bins, dtype=np.int64)
         self.f_as = np.zeros(batch_size)
+
+        self.fake_block = None
+        self.fake_mask = [False] * batch_size
 
     def __iter__(self):
         return self
@@ -300,8 +335,28 @@ class MovingTrainingGenerator(six.Iterator):
                          self.subvolumes.name,
                          sum(self.epoch_move_counts)/float(len(self.epoch_move_counts)))
         self.epoch_move_counts = []
+        self.epoch_subvolumes = 0
+        self.epoch_subv_metrics = []
+        self.fake_mask = [False] * self.batch_size
+
+    def get_epoch_metric(self):
+        assert len(self.epoch_subv_metrics) == self.subv_per_epoch
+        return np.mean(self.epoch_subv_metrics)
 
     def __next__(self):
+        # If in the fixed-subvolumes-per-epoch mode and completed, yield fake
+        # data quickly.
+        if all(self.fake_mask):
+            inputs = collections.OrderedDict({
+                    'image_input': np.repeat(pad_dims(self.fake_block['image']),
+                                             CONFIG.training.num_gpus, axis=0),
+                    'mask_input': np.repeat(pad_dims(self.fake_block['mask']),
+                                            CONFIG.training.num_gpus, axis=0)
+            })
+            inputs['kludge'] = self.kludge
+            outputs = np.repeat(pad_dims(self.fake_block['target']), CONFIG.training.num_gpus, axis=0)
+            return (inputs, outputs)
+
         # Before clearing last batches, reuse them to predict mask outputs
         # for move training. Add mask outputs to regions.
         active_regions = [n for n, region in enumerate(self.regions) if region is not None]
@@ -318,8 +373,17 @@ class MovingTrainingGenerator(six.Iterator):
         for r, region in enumerate(self.regions):
             block_data = region.get_next_block() if region is not None else None
             if block_data is None:
+                if self.subv_per_epoch:
+                    if region is not None:
+                        metric = region.binary_crossentropy()
+                        self.epoch_subv_metrics.append(metric)
+                        self.regions[r] = None
+                    if self.epoch_subvolumes >= self.subv_per_epoch:
+                        block_data = self.fake_block
+                        self.fake_mask[r] = True
                 while block_data is None:
                     subvolume = six.next(self.subvolumes)
+                    self.epoch_subvolumes += 1
                     self.f_as[r] = subvolume.f_a()
 
                     self.regions[r] = Region.from_subvolume(subvolume)
@@ -341,12 +405,13 @@ class MovingTrainingGenerator(six.Iterator):
 
         inputs = collections.OrderedDict({'image_input': self.batch_image_input,
                                           'mask_input': batch_mask_input})
-        inputs = collections.OrderedDict({'image_input': self.batch_image_input,
-                                          'mask_input': batch_mask_input})
         inputs['kludge'] = self.kludge
         # These inputs are only necessary for assurance the correct FOV is updated.
         self.kludge['inputs'] = self.batch_image_input[:, 0, 0, :, 0].copy()
         self.kludge['outputs'] = None
+
+        if self.subv_per_epoch and self.fake_block is None:
+            self.fake_block = copy.deepcopy(block_data)
 
         if self.f_a_bins is None:
             return (inputs,
@@ -412,10 +477,6 @@ def train_network(
     logging.info('Using {} volumes for training, {} for validation.'.format(num_training, num_validation))
 
     callbacks = []
-    if CONFIG.training.early_abort_epoch is not None and \
-       CONFIG.training.early_abort_loss is not None:
-        callbacks.append(EarlyAbort(threshold_epoch=CONFIG.training.early_abort_epoch,
-                                    threshold_value=CONFIG.training.early_abort_loss))
 
     validation_kludges = [{'inputs': None, 'outputs': None} for _ in range(CONFIG.training.num_workers)]
     output_margin = np.floor_divide(CONFIG.model.input_fov_shape - CONFIG.model.output_fov_shape, 2)
@@ -435,19 +496,27 @@ def train_network(
             validation_gens[i::CONFIG.training.num_workers]
             for i in xrange(CONFIG.training.num_workers)]
     validation_worker_gens = [g for g in validation_worker_gens if len(g) > 0]
+    subv_per_worker = CONFIG.training.validation_size // len(validation_worker_gens)
     logging.debug('# of validation workers: %s', len(validation_worker_gens))
     validation_data = [MovingTrainingGenerator(
             Roundrobin(*gen, name='validation inner {}'.format(i)),
             CONFIG.training.batch_size,
-            # worker_validation_size,
             kludge,
             f_a_bins=f_a_bins,
-            reset_generators=True)
+            reset_generators=True,
+            subv_per_epoch=subv_per_worker)
             for i, (gen, kludge) in enumerate(zip(validation_worker_gens, validation_kludges))]
+    callbacks.append(GeneratorSubvolumeMetric(validation_data, 'val_subv_loss'))
     callbacks.append(GeneratorReset(validation_data))
 
     TRAINING_STEPS_PER_EPOCH = CONFIG.training.training_size // CONFIG.training.batch_size
-    VALIDATION_STEPS = CONFIG.training.validation_size // CONFIG.training.batch_size
+    VALIDATION_STEPS = np.ceil(CONFIG.training.validation_size / CONFIG.training.batch_size) \
+        * CONFIG.model.training_subv_moves + len(validation_worker_gens)
+
+    if CONFIG.training.early_abort_epoch is not None and \
+       CONFIG.training.early_abort_loss is not None:
+        callbacks.append(EarlyAbort(threshold_epoch=CONFIG.training.early_abort_epoch,
+                                    threshold_value=CONFIG.training.early_abort_loss))
 
     # Pre-train
     training_gens = [
@@ -486,10 +555,10 @@ def train_network(
 
     # Moving training
     kludges = [{'inputs': None, 'outputs': None} for _ in range(CONFIG.training.num_workers)]
-    callbacks.append(ModelCheckpoint(model_output_filebase + '.hdf5', save_best_only=True))
+    callbacks.append(ModelCheckpoint(model_output_filebase + '.hdf5', monitor='val_subv_loss', save_best_only=True))
     if model_checkpoint_file:
         callbacks.append(ModelCheckpoint(model_checkpoint_file))
-    callbacks.append(EarlyStopping(patience=CONFIG.training.patience))
+    callbacks.append(EarlyStopping(monitor='val_subv_loss', patience=CONFIG.training.patience))
     # Activation histograms and weight images for TensorBoard will not work
     # because the Keras callback does not currently support validation data
     # generators.
