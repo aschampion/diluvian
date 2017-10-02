@@ -398,12 +398,15 @@ def fill_region_with_model(
                     max_moves=max_moves,
                     remask_interval=remask_interval)
         body = region.to_body()
-        mask, bounds = body.get_seeded_component(CONFIG.postprocessing.closing_shape)
         viewer = region.get_viewer()
-        viewer.add(mask.astype(np.float32),
-                   name='Body Mask',
-                   offset=bounds[0],
-                   shader=get_color_shader(2))
+        try:
+            mask, bounds = body.get_seeded_component(CONFIG.postprocessing.closing_shape)
+            viewer.add(mask.astype(np.float32),
+                       name='Body Mask',
+                       offset=bounds[0],
+                       shader=get_color_shader(2))
+        except ValueError:
+            logging.info('Seed not in body.')
         print(viewer)
         while True:
             s = raw_input("Press Enter to continue, v to open in browser, a to export animation, q to quit...")
