@@ -40,7 +40,7 @@ will want to use TensorFlow GPU if you have installed CUDA:
 
 .. code-block:: console
 
-   pip install 'tensorflow-gpu==1.2.1'
+   pip install 'tensorflow-gpu==1.3.0'
 
 To test that everything works train diluvian on three volumes from the
 `CREMI challenge <https://cremi.org>`_:
