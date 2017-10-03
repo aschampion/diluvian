@@ -2,6 +2,14 @@
 History
 =======
 
+0.0.5 (2017-10-03)
+------------------
+
+* Fix bug creating U-net with far too few channels.
+* Fix bug causing revisit of seed position.
+* Fix bug breaking sparse fill.
+
+
 0.0.4 (2017-10-02)
 ------------------
 

@@ -31,7 +31,7 @@ test_requirements = [str(tr.req) for tr in parsed_test_requirements]
 
 setup(
     name='diluvian',
-    version='0.0.4',
+    version='0.0.5',
     description="Flood filling networks for segmenting electron microscopy of neural tissue.",
     long_description=readme + '\n\n' + history,
     author="Andrew S. Champion",
