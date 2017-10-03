@@ -530,7 +530,7 @@ def train_network(
     write_keras_history_to_csv(history, model_output_filebase + '.csv')
 
     if viewer:
-        viz_ex = itertools.islice(validation_data, 1)
+        viz_ex = itertools.islice(validation_data[0], 1)
 
         for inputs, targets in viz_ex:
             viewer = WrappedViewer(voxel_size=list(np.flipud(CONFIG.volume.resolution)))
