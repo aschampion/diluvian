@@ -114,7 +114,8 @@ def make_flood_fill_unet(input_fov_shape, output_fov_shape, network_config):
 
     # Note that since the Keras 2 upgrade strangely models with depth > 3 are
     # rejected by TF.
-    ffn = add_unet_layer(ffn, network_config, network_config.unet_depth - 1, output_fov_shape)
+    ffn = add_unet_layer(ffn, network_config, network_config.unet_depth - 1, output_fov_shape,
+                         n_channels=network_config.convolution_filters)
 
     mask_output = Conv3D(
             1,
@@ -128,9 +129,10 @@ def make_flood_fill_unet(input_fov_shape, output_fov_shape, network_config):
     return ffn
 
 
-def add_unet_layer(model, network_config, remaining_layers, output_shape):
-    # Double number of channels at each layer.
-    n_channels = model.get_shape().as_list()[-1]
+def add_unet_layer(model, network_config, remaining_layers, output_shape, n_channels=None):
+    if n_channels is None:
+        n_channels = model.get_shape().as_list()[-1]
+
     downsample = np.array([x != 0 and remaining_layers % x == 0 for x in network_config.unet_downsample_rate])
 
     if network_config.convolution_padding == 'same':
