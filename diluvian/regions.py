@@ -133,6 +133,7 @@ class Region(object):
             assert np.isclose(self.target[tuple(self.seed_vox - self.target_offset)], CONFIG.model.v_true), \
                 'Seed position should be in target body.'
         self.mask[tuple(self.seed_vox)] = CONFIG.model.v_true
+        self.visited.add(tuple(self.seed_pos))
 
     def unfilled_copy(self):
         """Clone this region in an initial state without any filling.
