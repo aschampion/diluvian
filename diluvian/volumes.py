@@ -277,7 +277,7 @@ class MirrorAugmentGenerator(SubvolumeAugmentGenerator):
         seed = subv.seed.copy()
         seed[self.axis] = shape - subv.seed[self.axis] - 1
         subv = Subvolume(np.flip(subv.image, self.axis),
-                         np.flip(subv.label_mask, self.axis),
+                         np.flip(subv.label_mask, self.axis) if subv.label_mask is not None else None,
                          seed,
                          subv.label_id)
         return subv
@@ -305,7 +305,7 @@ class PermuteAxesAugmentGenerator(SubvolumeAugmentGenerator):
     def augment_subvolume(self):
         subv = self.subvolume
         subv = Subvolume(np.transpose(subv.image, self.axes),
-                         np.transpose(subv.label_mask, self.axes),
+                         np.transpose(subv.label_mask, self.axes) if subv.label_mask is not None else None,
                          subv.seed[self.axes],
                          self.subvolume.label_id)
         return subv
@@ -344,8 +344,9 @@ class MissingDataAugmentGenerator(SubvolumeAugmentGenerator):
 
         if missing_sections and missing_sections[0].size:
             subv = self.subvolume
+            mask = subv.label_mask.copy() if subv.label_mask is not None and self.remove_label else subv.label_mask
             subv = Subvolume(subv.image.copy(),
-                             subv.label_mask.copy(),
+                             mask,
                              subv.seed,
                              subv.label_id)
             slices = [slice(None), slice(None), slice(None)]
@@ -519,7 +520,7 @@ class MaskedArtifactAugmentGenerator(SubvolumeAugmentGenerator):
         if artifact_sections and artifact_sections[0].size:
             subv = self.subvolume
             subv = Subvolume(subv.image.copy(),
-                             subv.label_mask.copy(),
+                             subv.label_mask,
                              subv.seed,
                              subv.label_id)
             slices = [slice(None), slice(None), slice(None)]
