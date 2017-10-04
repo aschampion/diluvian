@@ -435,6 +435,8 @@ class Region(object):
         moves = 0
         last_check = 0
         last_remask = 0
+        if remask_interval is None:
+            remask_interval = float('inf')
         STOP_CHECK_INTERVAL = 100
         early_termination = False
 
