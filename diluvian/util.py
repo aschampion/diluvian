@@ -113,6 +113,7 @@ def get_nonzero_aabb(a):
         w = np.where(proj)[0]
         if w.size:
             amin, amax = w[[0, -1]]
+            amax += 1
         else:
             amin, amax = 0, 0
 
