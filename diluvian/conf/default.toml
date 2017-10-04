@@ -48,7 +48,7 @@ patience = 20
 augment_mirrors = [0, 1, 2]
 augment_permute_axes = [[0, 2, 1]]
 augment_missing_data = [{axis = 0, prob = 0.01}]
-augment_noise = [{axis = 0, mul = 0.1, add = 0.1}]
+augment_noise = [{axis = 0, mul = 0.05, add = 0.05}]
 augment_contrast = [{axis = 0, prob = 0.05, scaling_mean = 0.5, scaling_std = 0.1, center_mean = 1.2, center_std = 0.2}]
 
 [postprocessing]
