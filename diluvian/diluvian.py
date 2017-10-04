@@ -389,7 +389,7 @@ def fill_region_with_model(
             for k, v in six.iteritems(volumes)]
     if augment:
         subvolumes = map(augment_subvolume_generator, subvolumes)
-    regions = Roundrobin(*[Region.from_subvolume_generator(v) for v in subvolumes])
+    regions = Roundrobin(*[Region.from_subvolume_generator(v, block_padding='reflect') for v in subvolumes])
 
     model = load_model(model_file, CONFIG.network)
 
