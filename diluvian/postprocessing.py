@@ -61,9 +61,9 @@ class Body(object):
     def get_seeded_component(self, closing_shape=None):
         mask, bounds = self._get_bounded_mask(closing_shape)
 
-        label_im, _ = ndimage.label(mask)
+        label_im, n_labels = ndimage.label(mask)
         seed_label = label_im[tuple(self.seed - bounds[0])]
-        if seed_label == 0:
+        if n_labels > 1 and seed_label == 0:
             raise ValueError('Seed voxel (%s) is not in body.', np.array_str(self.seed))
         label_im[label_im != seed_label] = 0
         label_im[label_im == seed_label] = 1
