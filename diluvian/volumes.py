@@ -7,6 +7,7 @@ from __future__ import division
 from collections import namedtuple
 import csv
 import logging
+import re
 
 import h5py
 import math
@@ -24,6 +25,42 @@ from .util import get_nonzero_aabb
 
 
 DimOrder = namedtuple('DimOrder', ('X', 'Y', 'Z'))
+
+
+def partition_volumes(volumes):
+    """Paritition volumes into training and validation based on configuration.
+
+    Uses the regexes mapping partition sizes and indices in
+    diluvian.config.TrainingConfig by applying them to matching volumes based
+    on name.
+
+    Parameters
+    ----------
+    volumes : dict
+        Dictionary mapping volume name to diluvian.volumes.Volume.
+
+    Returns
+    -------
+    training_volumes, validation_volumes : dict
+        Dictionary mapping volume name to partitioned, downsampled volumes.
+    """
+    def apply_partitioning(volumes, partitioning):
+        partitioned = {}
+        for name, vol in six.iteritems(volumes):
+            partitions = [p for rgx, p in CONFIG.training.partitions.items() if re.match(rgx, name)]
+            partition_index = [idx for rgx, idx in partitioning.items() if re.match(rgx, name)]
+            if len(partitions) > 1 or len(partition_index) > 1:
+                raise ValueError('Volume "{}" matches more than one partition specifier'.format(name))
+            elif len(partitions) == 1 and len(partition_index) == 1:
+                partitioned[name] = vol.partition(partitions[0], partition_index[0]) \
+                                       .downsample(CONFIG.volume.resolution)
+
+        return partitioned
+
+    training_volumes = apply_partitioning(volumes, CONFIG.training.training_partition)
+    validation_volumes = apply_partitioning(volumes, CONFIG.training.validation_partition)
+
+    return training_volumes, validation_volumes
 
 
 class SubvolumeBounds(object):

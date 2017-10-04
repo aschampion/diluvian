@@ -13,7 +13,6 @@ from multiprocessing import (
         )
 import os
 import random
-import re
 
 import numpy as np
 import pytoml as toml
@@ -23,6 +22,7 @@ from tqdm import tqdm
 
 from .config import CONFIG
 from . import preprocessing
+from .training import augment_subvolume_generator
 from .util import (
         get_color_shader,
         Roundrobin,
@@ -350,6 +350,7 @@ def fill_volumes_with_model(
 def fill_region_with_model(
         model_file,
         volumes=None,
+        augment=False,
         bounds_input_file=None,
         bias=True,
         move_batch_size=1,
@@ -382,11 +383,13 @@ def fill_region_with_model(
             gen_kwargs = {
                     k: {'shape': subv_shape}
                     for k in volumes.iterkeys()}
-    regions = Roundrobin(*[
-            Region.from_subvolume_generator(
-                v.downsample(CONFIG.volume.resolution)
-                 .subvolume_generator(**gen_kwargs[k]))
-            for k, v in six.iteritems(volumes)])
+    subvolumes = [
+            v.downsample(CONFIG.volume.resolution)
+             .subvolume_generator(**gen_kwargs[k])
+            for k, v in six.iteritems(volumes)]
+    if augment:
+        subvolumes = map(augment_subvolume_generator, subvolumes)
+    regions = Roundrobin(*[Region.from_subvolume_generator(v) for v in subvolumes])
 
     model = load_model(model_file, CONFIG.network)
 
@@ -424,42 +427,6 @@ def fill_region_with_model(
                 viewer.open_in_browser()
             else:
                 break
-
-
-def partition_volumes(volumes):
-    """Paritition volumes into training and validation based on configuration.
-
-    Uses the regexes mapping partition sizes and indices in
-    diluvian.config.TrainingConfig by applying them to matching volumes based
-    on name.
-
-    Parameters
-    ----------
-    volumes : dict
-        Dictionary mapping volume name to diluvian.volumes.Volume.
-
-    Returns
-    -------
-    training_volumes, validation_volumes : dict
-        Dictionary mapping volume name to partitioned, downsampled volumes.
-    """
-    def apply_partitioning(volumes, partitioning):
-        partitioned = {}
-        for name, vol in six.iteritems(volumes):
-            partitions = [p for rgx, p in CONFIG.training.partitions.items() if re.match(rgx, name)]
-            partition_index = [idx for rgx, idx in partitioning.items() if re.match(rgx, name)]
-            if len(partitions) > 1 or len(partition_index) > 1:
-                raise ValueError('Volume "{}" matches more than one partition specifier'.format(name))
-            elif len(partitions) == 1 and len(partition_index) == 1:
-                partitioned[name] = vol.partition(partitions[0], partition_index[0]) \
-                                       .downsample(CONFIG.volume.resolution)
-
-        return partitioned
-
-    training_volumes = apply_partitioning(volumes, CONFIG.training.training_partition)
-    validation_volumes = apply_partitioning(volumes, CONFIG.training.validation_partition)
-
-    return training_volumes, validation_volumes
 
 
 def view_volumes(volumes):

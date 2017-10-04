@@ -150,6 +150,9 @@ def _make_main_parser():
             'sparse-fill', parents=[common_parser, fill_common_parser, bounds_common_parser],
             help='Use a trained network to fill random regions in a volume.')
     sparse_fill_parser.add_argument(
+            '--augment', action='store_true', dest='augment', default=False,
+            help='Apply training augmentations to subvolumes before filling.')
+    sparse_fill_parser.add_argument(
             '-bi', '--bounds-input-file', dest='bounds_input_file', default=None,
             help='Filename for bounds CSV input. Should contain "{volume}", which will be '
                  'substituted with the volume name for each respective volume\'s bounds.')
@@ -266,6 +269,7 @@ def main():
         volumes = load_volumes(args.volume_files, args.in_memory)
         fill_region_with_model(args.model_file,
                                volumes=volumes,
+                               augment=args.augment,
                                bounds_input_file=args.bounds_input_file,
                                bias=args.bias,
                                move_batch_size=args.move_batch_size,

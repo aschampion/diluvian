@@ -31,7 +31,6 @@ from keras.callbacks import (
 from keras.engine import Model
 
 from .config import CONFIG
-from .diluvian import partition_volumes
 from .network import compile_network, load_model
 from .third_party.multi_gpu import make_parallel
 from .util import (
@@ -49,6 +48,7 @@ from .volumes import (
         MaskedArtifactAugmentGenerator,
         MirrorAugmentGenerator,
         MissingDataAugmentGenerator,
+        partition_volumes,
         PermuteAxesAugmentGenerator,
         RelabelSeedComponentGenerator,
         )
