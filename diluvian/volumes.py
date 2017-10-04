@@ -289,6 +289,39 @@ class SubvolumeAugmentGenerator(six.Iterator):
         raise NotImplementedError('Subclasses must implement this method.')
 
 
+class ClipSubvolumeImageGenerator(six.Iterator):
+    """Clip subvolume image range (default between zero and one).
+
+    Useful to apply after a sequence of augmentations.
+
+    Parameters
+    ----------
+    subvolume_generator : SubvolumeGenerator
+    min_val, max_val : float, optional
+    """
+    def __init__(self, subvolume_generator, min_val=0.0, max_val=1.0):
+        self.subvolume_generator = subvolume_generator
+        self.min_val = min_val
+        self.max_val = max_val
+
+    @property
+    def shape(self):
+        return self.subvolume_generator.shape
+
+    def __iter__(self):
+        return self
+
+    def reset(self):
+        self.subvolume_generator.reset()
+
+    def __next__(self):
+        subv = six.next(self.subvolume_generator)
+        return Subvolume(np.clip(subv.image, self.min_val, self.max_val),
+                         subv.label_mask,
+                         subv.seed,
+                         subv.label_id)
+
+
 class MirrorAugmentGenerator(SubvolumeAugmentGenerator):
     """Repeats subvolumes from a subvolume generator mirrored along an axis.
 

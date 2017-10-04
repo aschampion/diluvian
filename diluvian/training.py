@@ -42,6 +42,7 @@ from .util import (
         write_keras_history_to_csv,
         )
 from .volumes import (
+        ClipSubvolumeImageGenerator,
         ContrastAugmentGenerator,
         ErodedMaskGenerator,
         GaussianNoiseAugmentGenerator,
@@ -235,6 +236,7 @@ def augment_subvolume_generator(subvolume_generator):
         gen = ContrastAugmentGenerator(gen, CONFIG.training.augment_use_both, v['axis'], v['prob'],
                                        v['scaling_mean'], v['scaling_std'],
                                        v['center_mean'], v['center_std'])
+    gen = ClipSubvolumeImageGenerator(gen)
 
     return gen
 
