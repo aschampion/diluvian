@@ -17,6 +17,7 @@ from diluvian import octrees
 from diluvian import regions
 from diluvian import volumes
 from diluvian.config import CONFIG
+from diluvian.util import get_nonzero_aabb
 
 
 def test_octree_bounds():
@@ -136,3 +137,17 @@ def test_volume_identity_downsample_returns_self():
     dv = v.downsample(resolution)
 
     assert v == dv
+
+
+def test_nonzero_aabb():
+    a = np.zeros([10, 10, 10], dtype=np.int32)
+    a[8, 7, 6] = 1
+
+    amin, amax = get_nonzero_aabb(a)
+    np.testing.assert_array_equal(amin, [8, 7, 6])
+    np.testing.assert_array_equal(amax, [9, 8, 7])
+
+    a[6, 7, 8] = 1
+    amin, amax = get_nonzero_aabb(a)
+    np.testing.assert_array_equal(amin, [6, 7, 6])
+    np.testing.assert_array_equal(amax, [9, 8, 9])
