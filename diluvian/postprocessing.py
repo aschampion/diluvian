@@ -41,7 +41,9 @@ class Body(object):
             mask = self.mask
 
         if closing_shape is not None:
-            mask = ndimage.binary_closing(mask, structure=np.ones(closing_shape))
+            # Use grey closing rather than binary closing because it uses
+            # a mode at the boundary that prevents erosion.
+            mask = ndimage.grey_closing(mask, structure=np.ones(closing_shape), mode='nearest')
 
         return mask, bounds
 
@@ -61,9 +63,9 @@ class Body(object):
     def get_seeded_component(self, closing_shape=None):
         mask, bounds = self._get_bounded_mask(closing_shape)
 
-        label_im, n_labels = ndimage.label(mask)
+        label_im, _ = ndimage.label(mask)
         seed_label = label_im[tuple(self.seed - bounds[0])]
-        if n_labels > 1 and seed_label == 0:
+        if seed_label == 0:
             raise ValueError('Seed voxel (%s) is not in body.', np.array_str(self.seed))
         label_im[label_im != seed_label] = 0
         label_im[label_im == seed_label] = 1
