@@ -85,6 +85,9 @@ def _make_main_parser():
 
     fill_common_parser = argparse.ArgumentParser(add_help=False)
     fill_common_parser.add_argument(
+            '--partition-volumes', action='store_true', dest='partition_volumes', default=False,
+            help='Partition volumes and only fill the validation partition.')
+    fill_common_parser.add_argument(
             '--no-bias', action='store_false', dest='bias', default=True,
             help='Overwrite prediction mask at the end of each field of view inference '
                  'rather than using the anti-merge bias update.')
@@ -249,6 +252,7 @@ def main():
                                 volumes,
                                 args.segmentation_output_file,
                                 resume_filename=args.resume_filename,
+                                partition=args.partition_volumes,
                                 viewer=args.viewer,
                                 seed_generator=args.seed_generator,
                                 background_label_id=args.background_label_id,
@@ -269,6 +273,7 @@ def main():
         volumes = load_volumes(args.volume_files, args.in_memory)
         fill_region_with_model(args.model_file,
                                volumes=volumes,
+                               partition=args.partition_volumes,
                                augment=args.augment,
                                bounds_input_file=args.bounds_input_file,
                                bias=args.bias,

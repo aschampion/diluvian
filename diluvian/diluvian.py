@@ -30,6 +30,7 @@ from .util import (
         )
 from .volumes import (
         HDF5Volume,
+        partition_volumes,
         SubvolumeBounds,
         )
 from .regions import Region
@@ -306,12 +307,16 @@ def fill_volumes_with_model(
         volumes,
         filename,
         resume_filename=None,
+        partition=False,
         viewer=False,
         **kwargs):
     if '{volume}' not in filename:
         raise ValueError('HDF5 filename must contain "{volume}" for volume name replacement.')
     if resume_filename is not None and '{volume}' not in resume_filename:
         raise ValueError('TOML resume filename must contain "{volume}" for volume name replacement.')
+
+    if partition:
+        _, volumes = partition_volumes(volumes)
 
     for volume_name, volume in six.iteritems(volumes):
         logging.info('Filling volume %s...', volume_name)
@@ -352,6 +357,7 @@ def fill_volumes_with_model(
 def fill_region_with_model(
         model_file,
         volumes=None,
+        partition=False,
         augment=False,
         bounds_input_file=None,
         bias=True,
@@ -365,6 +371,9 @@ def fill_region_with_model(
 
     if volumes is None:
         raise ValueError('Volumes must be provided.')
+
+    if partition:
+        _, volumes = partition_volumes(volumes)
 
     if bounds_input_file is not None:
         gen_kwargs = {
