@@ -7,6 +7,7 @@ from __future__ import division
 from collections import namedtuple
 import csv
 import logging
+import os
 import re
 
 import h5py
@@ -1039,7 +1040,8 @@ class HDF5Volume(Volume):
                 mask_dataset = dataset.get('mask_dataset', None)
                 mask_bounds = dataset.get('mask_bounds', None)
                 resolution = dataset.get('resolution', None)
-                volume = HDF5Volume(hdf5_file,
+                hdf5_pathed_file = os.path.join(os.path.dirname(filename), hdf5_file)
+                volume = HDF5Volume(hdf5_pathed_file,
                                     image_dataset,
                                     label_dataset,
                                     mask_dataset,
