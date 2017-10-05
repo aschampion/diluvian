@@ -335,6 +335,8 @@ def fill_volumes_with_model(
                 label_data=prediction)
         config['name'] = volume_name + ' segmentation'
         with open(volume_filename + '.toml', 'wb') as tomlfile:
+            tomlfile.write('# Filling model: {}\n'.format(model_file))
+            tomlfile.write('# Filling kwargs: {}\n'.format(str(kwargs)))
             tomlfile.write(str(toml.dumps({'dataset': [config]})))
 
         if viewer:
