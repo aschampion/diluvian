@@ -33,6 +33,10 @@ def _make_main_parser():
             help='Configuration files to use. For defaults, see `diluvian/conf/default.toml`. '
                  'Values are overwritten in the order provided.')
     common_parser.add_argument(
+            '-cd', action='append_const', dest='config_files',
+            const=os.path.join(os.path.dirname(__file__), 'conf', 'default.toml'),
+            help='Add default configuration file to chain of configuration files.')
+    common_parser.add_argument(
             '-m', '--model-file', dest='model_file', default=None,
             help='Existing network model file to use for prediction or continued training.')
     common_parser.add_argument(
