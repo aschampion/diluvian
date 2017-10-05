@@ -346,6 +346,9 @@ class Region(object):
         if CONFIG.model.move_recheck and not (
            np.array_equal(next_pos, self.seed_pos) or self.check_move_neighborhood(mask_block)):
             logging.debug('Skipping move: no threshold mask in cube around voxel %s', np.array_str(next_vox))
+            # Remove from the visited set: move was not taken, but later
+            # moves could queue it.
+            self.visited.remove(tuple(next_pos))
             return self.get_next_block()
 
         image_block = self.image[block_min[0]:block_max[0],
