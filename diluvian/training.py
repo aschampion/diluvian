@@ -7,7 +7,6 @@ from __future__ import print_function
 
 import collections
 import copy
-import importlib
 import itertools
 import logging
 import random
@@ -37,6 +36,7 @@ from .third_party.multi_gpu import make_parallel
 from .util import (
         extend_keras_history,
         get_color_shader,
+        get_function,
         pad_dims,
         Roundrobin,
         WrappedViewer,
@@ -64,7 +64,7 @@ def plot_history(history):
     ax = fig.add_subplot(111)
     ax.plot(history.history['loss'])
     ax.plot(history.history['val_loss'])
-    ax.plot(history.history['val_subv_loss'])
+    ax.plot(history.history['val_subv_metric'])
     fig.suptitle('model loss')
     ax.set_ylabel('loss')
     ax.set_xlabel('epoch')
@@ -293,14 +293,21 @@ class MovingTrainingGenerator(six.Iterator):
         necessary because Keras currently uses a fixed number of batches
         per epoch). If specified, once each subvolume is complete its
         total loss will be calculated.
+    subv_metric_fn : function, option
+        Metric function to run on subvolumes when `subv_per_epoch` is set.
+    subv_metric_threshold : bool, optional
+        Whether to threshold subvolume masks for metrics.
     """
     def __init__(self, subvolumes, batch_size, kludge,
-                 f_a_bins=None, reset_generators=True, subv_per_epoch=None):
+                 f_a_bins=None, reset_generators=True, subv_per_epoch=None,
+                 subv_metric_fn=None, subv_metric_threshold=False):
         self.subvolumes = subvolumes
         self.batch_size = batch_size
         self.kludge = kludge
         self.reset_generators = reset_generators
         self.subv_per_epoch = subv_per_epoch
+        self.subv_metric_fn = subv_metric_fn
+        self.subv_metric_threshold = subv_metric_threshold
 
         self.regions = [None] * batch_size
         self.region_pos = [None] * batch_size
@@ -375,7 +382,7 @@ class MovingTrainingGenerator(six.Iterator):
             if block_data is None:
                 if self.subv_per_epoch:
                     if region is not None:
-                        metric = region.binary_crossentropy()
+                        metric = region.prediction_metric(self.subv_metric_fn, threshold=self.subv_metric_threshold)
                         self.epoch_subv_metrics.append(metric)
                         self.regions[r] = None
                     if self.epoch_subvolumes >= self.subv_per_epoch:
@@ -440,9 +447,7 @@ def train_network(
     random.seed(CONFIG.random_seed)
 
     if model_file is None:
-        factory_mod_name, factory_func_name = CONFIG.network.factory.rsplit('.', 1)
-        factory_mod = importlib.import_module(factory_mod_name)
-        factory = getattr(factory_mod, factory_func_name)
+        factory = get_function(CONFIG.network.factory)
         ffn = factory(CONFIG.model.input_fov_shape,
                       CONFIG.model.output_fov_shape,
                       CONFIG.network)
@@ -494,15 +499,19 @@ def train_network(
     validation_worker_gens = [g for g in validation_worker_gens if len(g) > 0]
     subv_per_worker = CONFIG.training.validation_size // len(validation_worker_gens)
     logging.debug('# of validation workers: %s', len(validation_worker_gens))
+    validation_metric, validation_threshold, validation_mode = CONFIG.training.validation_metric
+    validation_metric = get_function(validation_metric)
     validation_data = [MovingTrainingGenerator(
             Roundrobin(*gen, name='validation inner {}'.format(i)),
             CONFIG.training.batch_size,
             kludge,
             f_a_bins=f_a_bins,
             reset_generators=True,
-            subv_per_epoch=subv_per_worker)
+            subv_per_epoch=subv_per_worker,
+            subv_metric_fn=validation_metric,
+            subv_metric_threshold=validation_threshold)
             for i, (gen, kludge) in enumerate(zip(validation_worker_gens, validation_kludges))]
-    callbacks.append(GeneratorSubvolumeMetric(validation_data, 'val_subv_loss'))
+    callbacks.append(GeneratorSubvolumeMetric(validation_data, 'val_subv_metric'))
     callbacks.append(GeneratorReset(validation_data))
 
     TRAINING_STEPS_PER_EPOCH = CONFIG.training.training_size // CONFIG.training.batch_size
@@ -551,10 +560,15 @@ def train_network(
 
     # Moving training
     kludges = [{'inputs': None, 'outputs': None} for _ in range(CONFIG.training.num_workers)]
-    callbacks.append(ModelCheckpoint(model_output_filebase + '.hdf5', monitor='val_subv_loss', save_best_only=True))
+    callbacks.append(ModelCheckpoint(model_output_filebase + '.hdf5',
+                                     monitor='val_subv_metric',
+                                     save_best_only=True,
+                                     mode=validation_mode))
     if model_checkpoint_file:
         callbacks.append(ModelCheckpoint(model_checkpoint_file))
-    callbacks.append(EarlyStopping(monitor='val_subv_loss', patience=CONFIG.training.patience))
+    callbacks.append(EarlyStopping(monitor='val_subv_metric',
+                                   patience=CONFIG.training.patience,
+                                   mode=validation_mode))
     # Activation histograms and weight images for TensorBoard will not work
     # because the Keras callback does not currently support validation data
     # generators.

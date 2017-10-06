@@ -383,16 +383,20 @@ class Region(object):
                 'target': target_block,
                 'position': next_pos}
 
-    def binary_crossentropy(self, eps=1e-15):
+    def prediction_metric(self, metric, threshold=True):
         pred_bounds = [None, None]
         pred_bounds[0] = self.get_block_bounds(self.pos_to_vox(self.move_bounds[0]), CONFIG.model.output_fov_shape)[0]
         pred_bounds[1] = self.get_block_bounds(self.pos_to_vox(self.move_bounds[1]), CONFIG.model.output_fov_shape)[1]
         pred = self.mask[map(slice, pred_bounds[0], pred_bounds[1])].copy()
         pred[np.isnan(pred)] = CONFIG.model.v_false
-        pred = np.clip(pred, eps, 1 - eps)
 
-        loss = self.target * np.log(pred) + (1.0 - self.target) * np.log(1.0 - pred)
-        return - np.sum(loss) / np.prod(self.target.shape)
+        if threshold:
+            target = self.target >= CONFIG.model.t_final
+            pred = pred >= CONFIG.model.t_final
+        else:
+            target = self.target
+
+        return metric(target, pred)
 
     def remask(self):
         """Reset the mask based on the seeded connected component.
