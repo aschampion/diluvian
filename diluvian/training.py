@@ -432,7 +432,6 @@ class MovingTrainingGenerator(six.Iterator):
 def train_network(
         model_file=None,
         volumes=None,
-        static_validation=False,
         model_output_filebase=None,
         model_checkpoint_file=None,
         tensorboard=False,
@@ -480,13 +479,10 @@ def train_network(
 
     validation_kludges = [{'inputs': None, 'outputs': None} for _ in range(CONFIG.training.num_workers)]
     output_margin = np.floor_divide(CONFIG.model.input_fov_shape - CONFIG.model.output_fov_shape, 2)
-    if static_validation:
-        validation_shape = CONFIG.model.input_fov_shape
-    else:
-        validation_shape = CONFIG.model.training_subv_shape
+
     validation_gens = [
             preprocess_subvolume_generator(
-                    v.subvolume_generator(shape=validation_shape,
+                    v.subvolume_generator(shape=CONFIG.model.validation_subv_shape,
                                           label_margin=output_margin))
             for v in six.itervalues(validation_volumes)]
     if CONFIG.training.augment_validation:
@@ -511,7 +507,7 @@ def train_network(
 
     TRAINING_STEPS_PER_EPOCH = CONFIG.training.training_size // CONFIG.training.batch_size
     VALIDATION_STEPS = np.ceil(CONFIG.training.validation_size / CONFIG.training.batch_size) \
-        * CONFIG.model.training_subv_moves + len(validation_worker_gens)
+        * CONFIG.model.validation_subv_moves + len(validation_worker_gens)
 
     if CONFIG.training.early_abort_epoch is not None and \
        CONFIG.training.early_abort_loss is not None:

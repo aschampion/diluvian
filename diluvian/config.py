@@ -85,6 +85,8 @@ class ModelConfig(BaseConfig):
         skipped. The cube size is one move step in each direction.
     training_subv_shape : sequence or ndarray of int, optional
         Shape of the subvolumes used during moving training.
+    validation_subv_shape : sequence or ndarray of int, optional
+        Shape of the subvolumes used during training validation.
     """
     def __init__(self, settings):
         self.input_fov_shape = np.array(settings.get('input_fov_shape', [17, 33, 33]))
@@ -99,14 +101,23 @@ class ModelConfig(BaseConfig):
         self.move_recheck = bool(settings.get('move_recheck', True))
         self.training_subv_shape = np.array(settings.get('training_subv_shape',
                                                          self.input_fov_shape + self.move_step * 2))
+        self.validation_subv_shape = np.array(settings.get('validation_subv_shape',
+                                                           self.input_fov_shape + self.move_step * 4))
 
     @property
     def move_step(self):
         return (self.output_fov_shape - 1) // self.output_fov_move_fraction
 
+    def subv_moves(self, shape):
+        return np.prod((shape - self.input_fov_shape) // self.move_step + 1)
+
     @property
     def training_subv_moves(self):
-        return np.prod((self.training_subv_shape - self.input_fov_shape) // self.move_step + 1)
+        return self.subv_moves(self.training_subv_shape)
+
+    @property
+    def validation_subv_moves(self):
+        return self.subv_moves(self.validation_subv_shape)
 
 
 class NetworkConfig(BaseConfig):
