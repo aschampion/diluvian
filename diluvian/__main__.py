@@ -164,6 +164,23 @@ def _make_main_parser():
             help='Filename for bounds CSV input. Should contain "{volume}", which will be '
                  'substituted with the volume name for each respective volume\'s bounds.')
 
+    evaluate_parser = commandparsers.add_parser(
+            'evaluate', parents=[common_parser],
+            help='Evaluate a filling result versus a ground truth.')
+    evaluate_parser.add_argument(
+            '--border-threshold', dest='border_threshold', default=25, type=float,
+            help='Region border threshold (in nm) to ignore. Official CREMI '
+                 'default is 25nm.')
+    evaluate_parser.add_argument(
+            '--partition-volumes', action='store_true', dest='partition_volumes', default=False,
+            help='Partition volumes and only evaluate the validation partitions.')
+    evaluate_parser.add_argument(
+            'ground_truth_name', default=None,
+            help='Name of the ground truth volume.')
+    evaluate_parser.add_argument(
+            'prediction_name', default=None,
+            help='Name of the prediction volume.')
+
     view_parser = commandparsers.add_parser(
             'view', parents=[common_parser],
             help='View a set of co-registered volumes in neuroglancer.')
@@ -285,6 +302,16 @@ def main():
                                max_moves=args.max_moves,
                                remask_interval=args.remask_interval,
                                moves=args.bounds_num_moves)
+
+    elif args.command == 'evaluate':
+        from .diluvian import evaluate_volume
+
+        volumes = load_volumes(args.volume_files, args.in_memory)
+        evaluate_volume(volumes,
+                        args.ground_truth_name,
+                        args.prediction_name,
+                        partition=args.partition_volumes,
+                        border_threshold=args.border_threshold)
 
     elif args.command == 'view':
         # Late import to prevent loading large modules for short CLI commands.

@@ -440,6 +440,66 @@ def fill_region_with_model(
                 break
 
 
+def evaluate_volume(volumes, gt_name, pred_name, partition=False, border_threshold=None):
+    import cremi
+
+    if partition:
+        _, volumes = partition_volumes(volumes, downsample=False)
+
+    def labels_to_cremi(v):
+        label_data = v.label_data.copy()
+        if hasattr(v, 'bounds'):
+            label_data = label_data[map(slice, list(v.bounds[0]), list(v.bounds[1]))]
+        volume = cremi.Volume(label_data, resolution=v.resolution)
+
+        return volume
+
+    gt_vol = volumes[gt_name]
+    pred_vol = volumes[pred_name]
+    logging.info('GT shape: %s\t Prediction shape:%s', gt_vol.shape, pred_vol.shape)
+
+    pred_upsample = gt_vol._get_downsample_from_resolution(pred_vol.resolution)
+    if np.any(pred_upsample > 0):
+        scale = np.exp2(pred_upsample).astype(np.int64)
+        logging.warn('Segmentation is different resolution than groundtruth. Upsampling by %s.', scale)
+
+        pred_data = pred_vol.label_data
+        if hasattr(pred_vol, 'bounds'):
+            pred_data = pred_data[map(slice, list(pred_vol.bounds[0]), list(pred_vol.bounds[1]))]
+        orig_shape = pred_data.shape
+        pred_data = np.lib.stride_tricks.as_strided(pred_data,
+                                                    [b for a in zip(orig_shape, scale) for b in a],
+                                                    [b for a in zip(pred_data.strides, [0, 0, 0]) for b in a])
+        new_shape = np.array(orig_shape) * scale
+        pred_data = pred_data.reshape(list(new_shape))
+
+        padding = np.array(gt_vol.shape) - new_shape
+        if np.any(padding > 0):
+            logging.warn('Padding segmentation (%s) to be groundtruth size (%s)', new_shape, gt_vol.shape)
+            pred_data = np.pad(pred_data, zip([0, 0, 0], list(padding)), 'edge')
+
+        pred = cremi.Volume(pred_data, resolution=gt_vol.resolution)
+    else:
+        pred = labels_to_cremi(pred_vol)
+
+    gt = labels_to_cremi(gt_vol)
+
+    # Some augmented CREMI volumes have not just a uint64 -1 as background, but
+    # several large values. Set these all to zero to avoid breaking coo_matrix.
+    gt.data[gt.data > np.uint64(-10)] = np.uint64(-1)
+    pred.data[pred.data > np.uint64(-10)] = 0
+
+    gt_neuron_ids = cremi.evaluation.NeuronIds(gt, border_threshold=border_threshold)
+
+    (voi_split, voi_merge) = gt_neuron_ids.voi(pred)
+    adapted_rand = gt_neuron_ids.adapted_rand(pred)
+
+    print('VOI split         :', voi_split)
+    print('VOI merge         :', voi_merge)
+    print('Adapted Rand-index:', adapted_rand)
+    print('CREMI             :', np.sqrt((voi_split + voi_merge) * adapted_rand))
+
+
 def view_volumes(volumes):
     """Display a set of volumes together in a neuroglancer viewer.
 

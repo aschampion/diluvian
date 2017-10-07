@@ -28,7 +28,7 @@ from .util import get_nonzero_aabb
 DimOrder = namedtuple('DimOrder', ('X', 'Y', 'Z'))
 
 
-def partition_volumes(volumes):
+def partition_volumes(volumes, downsample=True):
     """Paritition volumes into training and validation based on configuration.
 
     Uses the regexes mapping partition sizes and indices in
@@ -39,6 +39,8 @@ def partition_volumes(volumes):
     ----------
     volumes : dict
         Dictionary mapping volume name to diluvian.volumes.Volume.
+    downsample : bool, optional
+        Whether to downsample partitions automatically.
 
     Returns
     -------
@@ -53,8 +55,10 @@ def partition_volumes(volumes):
             if len(partitions) > 1 or len(partition_index) > 1:
                 raise ValueError('Volume "{}" matches more than one partition specifier'.format(name))
             elif len(partitions) == 1 and len(partition_index) == 1:
-                partitioned[name] = vol.partition(partitions[0], partition_index[0]) \
-                                       .downsample(CONFIG.volume.resolution)
+                v = vol.partition(partitions[0], partition_index[0])
+                if downsample:
+                    v = v.downsample(CONFIG.volume.resolution)
+                partitioned[name] = v
 
         return partitioned
 
