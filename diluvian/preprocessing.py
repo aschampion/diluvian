@@ -100,7 +100,7 @@ def intensity_distance_seeds(image_data, resolution, axis=0, erosion_radius=12, 
     return seeds
 
 
-def grid_seeds(image_data, _):
+def grid_seeds(image_data, _, grid_step_spacing=1):
     """Create seed locations in a volume on a uniform grid.
 
     Parameters
@@ -113,7 +113,7 @@ def grid_seeds(image_data, _):
     """
     seeds = []
     shape = image_data.shape
-    grid_size = (CONFIG.model.output_fov_shape - 1) // 2
+    grid_size = CONFIG.model.move_step * grid_step_spacing
     for x in range(grid_size[0], shape[0], grid_size[0]):
         for y in range(grid_size[1], shape[1], grid_size[1]):
             for z in range(grid_size[2], shape[2], grid_size[2]):
