@@ -1,0 +1,2 @@
+cremi==git+https://github.com/cremi/cremi_python.git
+munkres==1.0.12
