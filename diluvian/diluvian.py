@@ -440,7 +440,10 @@ def fill_region_with_model(
                 break
 
 
-def evaluate_volume(volumes, gt_name, pred_name, partition=False, border_threshold=None):
+def evaluate_volume(volumes, gt_name, pred_name, partition=False, border_threshold=None, use_gt_mask=True):
+    # TODO: This is very intrusive into Volumes and should be refactored to
+    # handle much of the partioned access and resampling there.
+
     import cremi
 
     if partition:
@@ -488,6 +491,14 @@ def evaluate_volume(volumes, gt_name, pred_name, partition=False, border_thresho
     # several large values. Set these all to zero to avoid breaking coo_matrix.
     gt.data[gt.data > np.uint64(-10)] = np.uint64(-1)
     pred.data[pred.data > np.uint64(-10)] = 0
+
+    if use_gt_mask and gt_vol.mask_data is not None:
+        logging.warn('Groundtruth has a mask channel that will be applied to segmentation.')
+        mask_data = gt_vol.mask_data
+        if hasattr(gt_vol, 'bounds'):
+            mask_data = mask_data[map(slice, list(gt_vol.bounds[0]), list(gt_vol.bounds[1]))]
+
+        pred.data[np.logical_not(mask_data)] = 0
 
     gt_neuron_ids = cremi.evaluation.NeuronIds(gt, border_threshold=border_threshold)
 
