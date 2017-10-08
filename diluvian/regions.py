@@ -392,7 +392,7 @@ class Region(object):
         new_mask_bin, bounds = body.get_seeded_component(CONFIG.postprocessing.closing_shape)
         new_mask_bin = new_mask_bin.astype(np.bool)
 
-        mask_block = self.mask[map(slice, bounds[0], bounds[1])]
+        mask_block = self.mask[map(slice, bounds[0], bounds[1])].copy()
         # Clip any values not in the seeded connected component so that they
         # cannot not generate moves when rechecking.
         mask_block[~new_mask_bin] = np.clip(mask_block[~new_mask_bin], None, 0.9 * CONFIG.model.t_move)
