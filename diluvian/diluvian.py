@@ -439,7 +439,11 @@ def fill_region_with_model(
             logging.info('Seed not in body.')
         print(viewer)
         while True:
-            s = raw_input("Press Enter to continue, v to open in browser, a to export animation, q to quit...")
+            s = raw_input('Press Enter to continue, '
+                          'v to open in browser, '
+                          'a to export animation, '
+                          'r to 3D render body, '
+                          'q to quit...')
             if s == 'q':
                 return
             elif s == 'a':
@@ -453,6 +457,16 @@ def fill_region_with_model(
                         max_moves=max_moves,
                         remask_interval=remask_interval)
                 s = raw_input("Press Enter when animation is complete...")
+            elif s == 'r':
+                region.render_body()
+            elif s == 'ra':
+                region_copy = region.unfilled_copy()
+                region_copy.fill_render(
+                        model,
+                        progress=True,
+                        move_batch_size=move_batch_size,
+                        max_moves=max_moves,
+                        remask_interval=remask_interval)
             elif s == 's':
                 body.to_swc('{}.swc'.format('_'.join(map(str, tuple(body.seed)))))
             elif s == 'v':
