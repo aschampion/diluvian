@@ -275,7 +275,7 @@ class Region(object):
         neigh_min = ctr - self.MOVE_DELTA
         neigh_max = ctr + self.MOVE_DELTA + 1
         neighborhood = mask[map(slice, neigh_min, neigh_max)]
-        return neighborhood.max() >= CONFIG.model.t_move
+        return np.nanmax(neighborhood) >= CONFIG.model.t_move
 
     def add_mask(self, mask_block, mask_pos):
         mask_vox = self.pos_to_vox(mask_pos)
