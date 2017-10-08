@@ -136,13 +136,19 @@ def fill_volume_with_model(
             # to fill all the way to the boundary.
             region = Region(image, seed_vox=seed, sparse_mask=True, block_padding='reflect')
             region.bias_against_merge = bias
-            early_termination = region.fill(
+            early_termination = False
+            try:
+                six.next(region.fill(
                     model,
                     move_batch_size=move_batch_size,
                     max_moves=max_moves,
                     progress=1 + worker_id,
                     stopping_callback=stopping_callback,
-                    remask_interval=remask_interval)
+                    remask_interval=remask_interval))
+            except Region.EarlyFillTermination:
+                early_termination = True
+            except StopIteration:
+                pass
             if reject_early_termination and early_termination:
                 body = None
             else:
@@ -407,11 +413,15 @@ def fill_region_with_model(
 
     for region in regions:
         region.bias_against_merge = bias
-        region.fill(model,
+        try:
+            six.next(region.fill(
+                    model,
                     progress=True,
                     move_batch_size=move_batch_size,
                     max_moves=max_moves,
-                    remask_interval=remask_interval)
+                    remask_interval=remask_interval))
+        except (StopIteration, Region.EarlyFillTermination):
+            pass
         body = region.to_body()
         viewer = region.get_viewer()
         try:
@@ -430,10 +440,15 @@ def fill_region_with_model(
             elif s == 'a':
                 region_copy = region.unfilled_copy()
                 # Must assign the animation to a variable so that it is not GCed.
-                ani = region_copy.fill_animation(model, 'export.mp4', verbose=True) # noqa
+                ani = region_copy.fill_animation(  # noqa
+                        'export.mp4',
+                        model,
+                        progress=True,
+                        move_batch_size=move_batch_size,
+                        max_moves=max_moves,
+                        remask_interval=remask_interval)
                 s = raw_input("Press Enter when animation is complete...")
             elif s == 's':
-                body = region.to_body()
                 body.to_swc('{}.swc'.format('_'.join(map(str, tuple(body.seed)))))
             elif s == 'v':
                 viewer.open_in_browser()

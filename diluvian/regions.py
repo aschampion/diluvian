@@ -401,9 +401,14 @@ class Region(object):
         self.mask[map(slice, bounds[0], bounds[1])] = mask_block
         return True
 
+    class EarlyFillTermination(Exception):
+        pass
+
     def fill(self, model, progress=False, move_batch_size=1, max_moves=None, stopping_callback=None,
-             remask_interval=None):
+             remask_interval=None, generator=False):
         """Flood fill this region.
+
+        Note this returns a generator, so must be iterated to start filling.
 
         Parameters
         ----------
@@ -429,11 +434,18 @@ class Region(object):
             long-running fills due to runaway merging. Only sensible when
             using move rechecking, proximity priority, and rejecting non-seeded
             connected components.
+        generator : bool
+            If true, each tuple of batch inputs and outputs will be yielded.
 
-        Returns
-        -------
-        bool
-            Whether filling was terminated early due to either exceedind the
+        Yields
+        ------
+        tuple
+            Batch inputs and outputs if ``generator`` is true.
+
+        Raises
+        ------
+        Region.EarlyFillTermination
+            If filling was terminated early due to either exceeding the
             maximum number of moves or the stopping callback.
         """
         moves = 0
@@ -474,6 +486,9 @@ class Region(object):
             for ind, block_data in enumerate(batch_block_data):
                 self.add_mask(output[ind, :, :, :, 0], block_data['position'])
 
+            if generator:
+                yield (batch_block_data, output)
+
             if max_moves is not None and moves > max_moves:
                 early_termination = True
                 break
@@ -487,15 +502,20 @@ class Region(object):
         if progress:
             pbar.close()
 
-        return early_termination
+        if early_termination:
+            raise Region.EarlyFillTermination()
 
-    def fill_animation(self, model, movie_filename, verbose=False):
+        return
+
+    def fill_animation(self, movie_filename, *args, **kwargs):
         """Create an animated movie of the filling process for this region.
 
-        .. note:: Deprecated
-                  This method is not maintained so has not been updated to
-                  reflect many changes. It is kept as a template but would
-                  need rewriting to be functional.
+        Parameters
+        ----------
+        movie_filename : str
+            File name of the MP4 movie to be saved.
+        *args, **kwargs
+            Passed to ``fill``.
         """
         dpi = 100
         fig = plt.figure(figsize=(1920/dpi, 1080/dpi), dpi=dpi)
@@ -506,11 +526,13 @@ class Region(object):
             'zy': fig.add_subplot(1, 3, 3),
         }
 
+        planes = {'xy': 0, 'xz': 1, 'zy': 2}
+
         def get_plane(arr, vox, plane):
             return {
-                'xy': lambda a, v: np.transpose(a[:, :, v[2]]),
-                'xz': lambda a, v: np.transpose(a[:, v[1], :]),
-                'zy': lambda a, v: a[v[0], :, :],
+                'xy': lambda a, v: a[v[0], :, :],
+                'xz': lambda a, v: a[:, v[1], :],
+                'zy': lambda a, v: np.transpose(a[:, :, v[2]]),
             }[plane](arr, np.round(vox).astype(np.int64))
 
         def get_hv(vox, plane):
@@ -518,19 +540,20 @@ class Region(object):
             rel = vox
             # rel = self.bounds - vox
             return {
-                'xy': {'h': rel[1], 'v': rel[0]},
-                'xz': {'h': rel[2], 'v': rel[0]},
-                'zy': {'h': rel[1], 'v': rel[2]},
+                'xy': {'h': rel[1], 'v': rel[2]},
+                'xz': {'h': rel[0], 'v': rel[2]},
+                'zy': {'h': rel[1], 'v': rel[0]},
             }[plane]
 
         def get_aspect(plane):
             return {
-                'xy': float(CONFIG.volume.resolution[1]) / float(CONFIG.volume.resolution[0]),
-                'xz': float(CONFIG.volume.resolution[2]) / float(CONFIG.volume.resolution[0]),
-                'zy': float(CONFIG.volume.resolution[1]) / float(CONFIG.volume.resolution[2]),
+                'xy': CONFIG.volume.resolution[1] / CONFIG.volume.resolution[2],
+                'xz': CONFIG.volume.resolution[0] / CONFIG.volume.resolution[2],
+                'zy': CONFIG.volume.resolution[1] / CONFIG.volume.resolution[0],
             }[plane]
 
         images = {
+            'last': None,
             'image': {},
             'mask': {},
         }
@@ -541,7 +564,7 @@ class Region(object):
             'bt': {},
         }
         current_vox = self.pos_to_vox(self.seed_pos)
-        margin = (CONFIG.model.input_fov_shape) // 2
+        margin = CONFIG.model.input_fov_shape // 2
         for plane, ax in six.iteritems(axes):
             ax.get_xaxis().set_visible(False)
             ax.get_yaxis().set_visible(False)
@@ -564,26 +587,24 @@ class Region(object):
 
             ax.set_aspect(aspect)
 
+        images['last'] = np.round(current_vox).astype(np.int64)
+
         plt.tight_layout()
 
+        fill_generator = self.fill(*args, generator=True, **kwargs)
+
         def update_fn(vox):
+            mask_changed = False
             if np.array_equal(np.round(vox).astype(np.int64), update_fn.next_pos_vox):
-                if update_fn.block_data is not None:
-                    image_input = pad_dims(update_fn.block_data['image'])
-                    mask_input = pad_dims(update_fn.block_data['mask'])
+                try:
+                    batch_block_data, output = six.next(fill_generator)
+                    block_data = batch_block_data[0]
+                    mask_changed = True
+                except (StopIteration, Region.EarlyFillTermination):
+                    block_data = None
 
-                    output = model.predict({'image_input': image_input,
-                                            'mask_input': mask_input})
-                    self.add_mask(output[0, :, :, :, 0], update_fn.block_data['position'])
-
-                if not self.queue.empty():
-                    update_fn.moves += 1
-                    if verbose:
-                        update_fn.pbar.total = update_fn.moves + self.queue.qsize()
-                        update_fn.pbar.update()
-                    update_fn.block_data = self.get_next_block()
-
-                    update_fn.next_pos_vox = self.pos_to_vox(update_fn.block_data['position'])
+                if block_data is not None:
+                    update_fn.next_pos_vox = self.pos_to_vox(block_data['position'])
                     if not np.array_equal(np.round(vox).astype(np.int64), update_fn.next_pos_vox):
                         p = update_fn.next_pos_vox - vox
                         steps = np.linspace(0, 1, 16)
@@ -593,14 +614,21 @@ class Region(object):
                     else:
                         update_fn.vox_queue.put(vox)
 
+            vox_round = np.round(vox).astype(np.int64)
+            changed_images = []
             for plane, im in six.iteritems(images['image']):
-                image_data = get_plane(self.image, vox, plane)
-                im.set_data(image_data)
+                if vox_round[planes[plane]] != images['last'][planes[plane]]:
+                    image_data = get_plane(self.image, vox, plane)
+                    im.set_data(image_data)
+                    changed_images.append(im)
 
             for plane, im in six.iteritems(images['mask']):
-                image_data = get_plane(self.mask, vox, plane)
-                masked_data = np.ma.masked_where(image_data < 0.5, image_data)
-                im.set_data(masked_data)
+                if mask_changed or vox_round[planes[plane]] != images['last'][planes[plane]]:
+                    image_data = get_plane(self.mask, vox, plane)
+                    masked_data = np.ma.masked_where(image_data < 0.5, image_data)
+                    im.set_data(masked_data)
+                    changed_images.append(im)
+            images['last'] = vox_round
 
             for plane in axes.iterkeys():
                 lines['h'][plane].set_ydata(get_hv(vox - margin, plane)['h'])
@@ -608,15 +636,11 @@ class Region(object):
                 lines['bl'][plane].set_xdata(get_hv(vox - margin, plane)['v'])
                 lines['bt'][plane].set_ydata(get_hv(vox + margin, plane)['h'])
 
-            return images['image'].values() + images['mask'].values() + \
+            return changed_images + \
                 lines['h'].values() + lines['v'].values() + \
                 lines['bl'].values() + lines['bt'].values()
 
         update_fn.moves = 0
-        update_fn.block_data = None
-        if verbose:
-            update_fn.pbar = tqdm(desc='Move queue')
-
         update_fn.next_pos_vox = current_vox
         update_fn.vox_queue = queue.Queue()
         update_fn.vox_queue.put(current_vox)
@@ -634,9 +658,6 @@ class Region(object):
         writer = animation.writers['ffmpeg'](fps=60)
 
         ani.save(movie_filename, writer=writer, dpi=dpi, savefig_kwargs={'facecolor': 'black'})
-
-        if verbose:
-            update_fn.pbar.close()
 
         return ani
 
