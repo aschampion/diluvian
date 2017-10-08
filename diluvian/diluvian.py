@@ -142,7 +142,7 @@ def fill_volume_with_model(
                     model,
                     move_batch_size=move_batch_size,
                     max_moves=max_moves,
-                    progress=1 + worker_id,
+                    progress=2 + worker_id,
                     stopping_callback=stopping_callback,
                     remask_interval=remask_interval))
             except Region.EarlyFillTermination:
@@ -165,6 +165,7 @@ def fill_volume_with_model(
         seeds = [s for s in seeds if volume.mask_data[tuple(volume.world_coord_to_local(s))]]
 
     pbar = tqdm(desc='Seed queue', total=len(seeds), miniters=1, smoothing=0.0)
+    label_pbar = tqdm(desc='Labeled vox', total=prediction.size, miniters=1, smoothing=0.0, position=1)
     num_seeds = len(seeds)
     if shuffle_seeds:
         random.shuffle(seeds)
@@ -290,7 +291,11 @@ def fill_volume_with_model(
                     revoked_seeds.append(tuple(seed))
                 loading_lock.release()
         conflict_count[bounds_shape][np.logical_and(np.logical_not(prediction_mask), mask)] += 1
+        label_shape = np.logical_and(prediction_mask, mask)
         prediction[bounds_shape][np.logical_and(prediction_mask, mask)] = label_id
+
+        label_pbar.set_description('Label {}'.format(label_id))
+        label_pbar.update(np.count_nonzero(label_shape))
         logging.info('Filled seed (%s) with %s voxels labeled %s.',
                      np.array_str(seed), body_size, label_id)
 
