@@ -194,9 +194,9 @@ def fill_volume_with_model(
 
         return total
 
-    processed_seeds = 1
     for _ in range(min(num_seeds, num_workers * worker_prequeue)):
-        processed_seeds += queue_next_seed()
+        processed_seeds = queue_next_seed()
+        pbar.update(processed_seeds)
 
     if 'CUDA_VISIBLE_DEVICES' in os.environ:
         set_devices = False
@@ -216,6 +216,7 @@ def fill_volume_with_model(
 
     # For each seed, create region, fill, threshold, and merge to output volume.
     while dispatched_seeds:
+        processed_seeds = 1
         expected_seed = dispatched_seeds.popleft()
         logging.debug('Expecting seed %s', np.array_str(expected_seed))
 
