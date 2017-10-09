@@ -1062,7 +1062,7 @@ class HDF5Volume(Volume):
     @staticmethod
     def write_file(filename, resolution, **kwargs):
         h5file = h5py.File(filename, 'w')
-        config = {'hdf5_file': filename}
+        config = {'hdf5_file': os.path.basename(filename)}
         channels = ['image', 'label', 'mask']
         default_datasets = {
             'image': 'volumes/raw',
