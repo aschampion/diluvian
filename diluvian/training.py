@@ -34,7 +34,6 @@ from .config import CONFIG
 from .network import compile_network, load_model
 from .third_party.multi_gpu import make_parallel
 from .util import (
-        extend_keras_history,
         get_color_shader,
         get_function,
         pad_dims,
@@ -502,7 +501,7 @@ def train_network(
     validation_metric, validation_threshold, validation_mode = CONFIG.training.validation_metric
     validation_metric = get_function(validation_metric)
     validation_data = [MovingTrainingGenerator(
-            Roundrobin(*gen, name='validation inner {}'.format(i)),
+            Roundrobin(*gen, name='validation {}'.format(i)),
             CONFIG.training.batch_size,
             kludge,
             f_a_bins=f_a_bins,
@@ -522,41 +521,6 @@ def train_network(
        CONFIG.training.early_abort_loss is not None:
         callbacks.append(EarlyAbort(threshold_epoch=CONFIG.training.early_abort_epoch,
                                     threshold_value=CONFIG.training.early_abort_loss))
-
-    # Pre-train
-    training_gens = [
-            augment_subvolume_generator(
-                    preprocess_subvolume_generator(
-                            v.subvolume_generator(shape=CONFIG.model.input_fov_shape,
-                                                  label_margin=output_margin)))
-            for v in six.itervalues(training_volumes)]
-    random.shuffle(training_gens)
-    # Divide training generators up for workers.
-    worker_gens = [
-            training_gens[i::CONFIG.training.num_workers]
-            for i in xrange(CONFIG.training.num_workers)]
-    # Some workers may not receive any generators.
-    worker_gens = [g for g in worker_gens if len(g) > 0]
-    logging.debug('# of training workers: %s', len(worker_gens))
-    # Create a training data generator for each worker.
-    training_data = [MovingTrainingGenerator(
-            Roundrobin(*gen, name='static training inner {}'.format(i)),
-            CONFIG.training.batch_size,
-            {'outputs': None},  # Allows use of moving training gen like static.
-            f_a_bins=f_a_bins,
-            reset_generators=CONFIG.training.reset_generators)
-            for i, gen in enumerate(worker_gens)]
-    training_reset_callback = GeneratorReset(training_data)
-    callbacks.append(training_reset_callback)
-    history = ffn.fit_generator(
-            Roundrobin(*training_data, name='static training outer'),
-            steps_per_epoch=TRAINING_STEPS_PER_EPOCH,
-            epochs=CONFIG.training.static_train_epochs,
-            max_queue_size=len(worker_gens) - 1,
-            workers=1,
-            callbacks=callbacks,
-            validation_data=Roundrobin(*validation_data, name='validation out'),
-            validation_steps=VALIDATION_STEPS)
 
     # Moving training
     kludges = [{'inputs': None, 'outputs': None} for _ in range(CONFIG.training.num_workers)]
@@ -582,31 +546,32 @@ def train_network(
                                                   label_margin=output_margin)))
             for v in six.itervalues(training_volumes)]
     random.shuffle(training_gens)
+    # Divide training generators up for workers.
     worker_gens = [
             training_gens[i::CONFIG.training.num_workers]
             for i in xrange(CONFIG.training.num_workers)]
+    # Some workers may not receive any generators.
     worker_gens = [g for g in worker_gens if len(g) > 0]
+    logging.debug('# of training workers: %s', len(worker_gens))
+    # Create a training data generator for each worker.
     training_data = [MovingTrainingGenerator(
-            Roundrobin(*gen, name='moving training inner {}'.format(i)),
+            Roundrobin(*gen, name='training {}'.format(i)),
             CONFIG.training.batch_size,
             kludge,
             f_a_bins=f_a_bins,
             reset_generators=CONFIG.training.reset_generators)
             for i, (gen, kludge) in enumerate(zip(worker_gens, kludges))]
-    callbacks.remove(training_reset_callback)
     training_reset_callback = GeneratorReset(training_data)
     callbacks.append(training_reset_callback)
-    moving_history = ffn.fit_generator(
-            Roundrobin(*training_data, name='moving training outer'),
+    history = ffn.fit_generator(
+            Roundrobin(*training_data, name='training outer'),
             steps_per_epoch=TRAINING_STEPS_PER_EPOCH,
             epochs=CONFIG.training.total_epochs,
-            initial_epoch=CONFIG.training.static_train_epochs,
             max_queue_size=len(worker_gens) - 1,
             workers=1,
             callbacks=callbacks,
-            validation_data=Roundrobin(*validation_data, name='validation out'),
+            validation_data=Roundrobin(*validation_data, name='validation outer'),
             validation_steps=VALIDATION_STEPS)
-    extend_keras_history(history, moving_history)
 
     write_keras_history_to_csv(history, model_output_filebase + '.csv')
 
