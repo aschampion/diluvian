@@ -61,6 +61,8 @@ def fill_volume_with_model(
         model_file,
         volume,
         resume_prediction=None,
+        checkpoint_filename=None,
+        checkpoint_label_interval=20,
         seed_generator='sobel',
         background_label_id=0,
         bias=True,
@@ -221,6 +223,8 @@ def fill_volume_with_model(
         w.start()
         workers.append(w)
 
+    last_checkpoint_label = label_id
+
     # For each seed, create region, fill, threshold, and merge to output volume.
     while dispatched_seeds:
         processed_seeds = 1
@@ -305,6 +309,16 @@ def fill_volume_with_model(
                 seed_queue.get_nowait()
             break
 
+        if checkpoint_filename is not None and label_id - last_checkpoint_label > checkpoint_label_interval:
+            config = HDF5Volume.write_file(
+                    checkpoint_filename + '.hdf5',
+                    CONFIG.volume.resolution,
+                    label_data=prediction)
+            config['name'] = 'segmentation checkpoint'
+            with open(checkpoint_filename + '.toml', 'wb') as tomlfile:
+                tomlfile.write('# Filling model: {}\n'.format(model_file))
+                tomlfile.write(str(toml.dumps({'dataset': [config]})))
+
     for _ in range(num_workers):
         seed_queue.put('DONE')
     for wid, worker in enumerate(workers):
@@ -339,13 +353,16 @@ def fill_volumes_with_model(
             resume_prediction = resume_volume.to_memory_volume().label_data
         else:
             resume_prediction = None
+
+        volume_filename = filename.format(volume=volume_name)
+        checkpoint_filename = volume_filename + '_checkpoint'
         prediction, conflict_count = fill_volume_with_model(
                 model_file,
                 volume,
                 resume_prediction=resume_prediction,
+                checkpoint_filename=checkpoint_filename,
                 **kwargs)
 
-        volume_filename = filename.format(volume=volume_name)
         config = HDF5Volume.write_file(
                 volume_filename + '.hdf5',
                 CONFIG.volume.resolution,
