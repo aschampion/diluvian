@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 
 
+from __future__ import division
 from __future__ import print_function
 
 import collections
 import csv
+import importlib
 import itertools
 import logging
 import webbrowser
@@ -75,6 +77,14 @@ def write_keras_history_to_csv(history, filename):
             writer.writerow(row)
 
 
+def get_function(name):
+    mod_name, func_name = name.rsplit('.', 1)
+    mod = importlib.import_module(mod_name)
+    func = getattr(mod, func_name)
+
+    return func
+
+
 def get_color_shader(channel, normalized=True):
     xform = 'toNormalized' if normalized else 'toRaw'
     value_str = '{}(getDataValue(0))'.format(xform)
@@ -124,6 +134,28 @@ def get_nonzero_aabb(a):
     mask_max = np.array(mask_max, dtype=np.int64)
 
     return mask_min, mask_max
+
+
+def binary_confusion_matrix(y, y_pred):
+    cm = np.bincount(2 * y + y_pred, minlength=4).reshape(2, 2)
+
+    return cm
+
+
+def binary_f1_score(y, y_pred):
+    cm = binary_confusion_matrix(y.flatten(), y_pred.flatten())
+    return confusion_f1_score(cm)
+
+
+def binary_crossentropy(y, y_pred, eps=1e-15):
+    y_pred = np.clip(y_pred, eps, 1 - eps)
+
+    loss = y * np.log(y_pred) + (1.0 - y) * np.log(1.0 - y_pred)
+    return - np.sum(loss) / np.prod(y.shape)
+
+
+def confusion_f1_score(cm):
+    return 2.0 * cm[1, 1] / (2.0 * cm[1, 1] + cm[1, 0] + cm[0, 1])
 
 
 class Roundrobin(six.Iterator):

@@ -85,6 +85,8 @@ class ModelConfig(BaseConfig):
         skipped. The cube size is one move step in each direction.
     training_subv_shape : sequence or ndarray of int, optional
         Shape of the subvolumes used during moving training.
+    validation_subv_shape : sequence or ndarray of int, optional
+        Shape of the subvolumes used during training validation.
     """
     def __init__(self, settings):
         self.input_fov_shape = np.array(settings.get('input_fov_shape', [17, 33, 33]))
@@ -99,10 +101,23 @@ class ModelConfig(BaseConfig):
         self.move_recheck = bool(settings.get('move_recheck', True))
         self.training_subv_shape = np.array(settings.get('training_subv_shape',
                                                          self.input_fov_shape + self.move_step * 2))
+        self.validation_subv_shape = np.array(settings.get('validation_subv_shape',
+                                                           self.input_fov_shape + self.move_step * 4))
 
     @property
     def move_step(self):
         return (self.output_fov_shape - 1) // self.output_fov_move_fraction
+
+    def subv_moves(self, shape):
+        return np.prod((shape - self.input_fov_shape) // self.move_step + 1)
+
+    @property
+    def training_subv_moves(self):
+        return self.subv_moves(self.training_subv_shape)
+
+    @property
+    def validation_subv_moves(self):
+        return self.subv_moves(self.validation_subv_shape)
 
 
 class NetworkConfig(BaseConfig):
@@ -233,6 +248,11 @@ class TrainingConfig(BaseConfig):
         Dictionaries mapping volume name regexes to a sequence of int indicating
         index of the partitions to use for training and validation,
         respectively. Each volume should match at most one regex.
+    validation_metric: tuple of str, bool, str
+        Module and function name for a metric function taking a true and
+        predicted region mask. Boolean of whether to threshold the mask for
+        the metric (true) or use the mask and target probabilities (false).
+        String for how to choose best validation metric value ('min', 'max').
     patience : int
         Number of epochs after the last minimal validation loss to terminate
         training.
@@ -297,6 +317,9 @@ class TrainingConfig(BaseConfig):
         self.partitions = settings.get('partitions', {'.*': [2, 1, 1]})
         self.training_partition = settings.get('training_partition', {'.*': [0, 0, 0]})
         self.validation_partition = settings.get('validation_partition', {'.*': [1, 0, 0]})
+        self.validation_metric = settings.get(
+                'validation_metric',
+                ['diluvian.util.binary_f1_score', True, 'max'])
         self.patience = int(np.array(settings.get('patience', 10)))
         self.early_abort_epoch = settings.get('early_abort_epoch', None)
         self.early_abort_loss = settings.get('early_abort_loss', None)

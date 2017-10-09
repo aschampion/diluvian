@@ -17,7 +17,11 @@ from diluvian import octrees
 from diluvian import regions
 from diluvian import volumes
 from diluvian.config import CONFIG
-from diluvian.util import get_nonzero_aabb
+from diluvian.util import (
+        binary_confusion_matrix,
+        confusion_f1_score,
+        get_nonzero_aabb,
+        )
 
 
 def test_octree_bounds():
@@ -151,3 +155,20 @@ def test_nonzero_aabb():
     amin, amax = get_nonzero_aabb(a)
     np.testing.assert_array_equal(amin, [6, 7, 6])
     np.testing.assert_array_equal(amax, [9, 8, 9])
+
+
+def test_confusion_matrix():
+    a = np.zeros([3, 3, 3], dtype=np.bool)
+    a[2, 2, :] = True
+    b = np.ones([3, 3, 3], dtype=np.bool)
+    b[:, 2, 2] = False
+
+    cm = np.array([[2, 22], [1, 2]])
+    np.testing.assert_array_equal(binary_confusion_matrix(a.flatten(), b.flatten()), cm)
+
+
+def test_f1_score():
+    a = np.array([[375695, 6409], [31208, 67419]])
+
+    np.testing.assert_almost_equal(confusion_f1_score(a), 0.782, decimal=3)
+    assert confusion_f1_score(np.eye(2)) == 1.0
