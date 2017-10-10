@@ -346,7 +346,9 @@ class MovingTrainingGenerator(six.Iterator):
         self.fake_mask = [False] * self.batch_size
 
     def get_epoch_metric(self):
-        assert len(self.epoch_subv_metrics) == self.subv_per_epoch
+        assert len(self.epoch_subv_metrics) == self.subv_per_epoch, \
+            'Not all validation subvs completed: {}/{} (Finished moves: {}, ongoing: {})'.format(
+                len(self.epoch_subv_metrics), self.subv_per_epoch, self.epoch_move_counts, self.move_counts)
         return np.mean(self.epoch_subv_metrics)
 
     def __next__(self):
@@ -486,8 +488,11 @@ def build_validation_gen(validation_volumes):
     callbacks.append(GeneratorSubvolumeMetric(validation_data, 'val_subv_metric'))
     callbacks.append(GeneratorReset(validation_data))
 
-    VALIDATION_STEPS = np.ceil(CONFIG.training.validation_size / CONFIG.training.batch_size) \
-        * CONFIG.model.validation_subv_moves + len(validation_worker_gens)
+    VALIDATION_STEPS = np.ceil(CONFIG.training.validation_size / CONFIG.training.batch_size)
+    # Number of all-move sequences must be a multiple of number of worker gens.
+    VALIDATION_STEPS = np.ceil(VALIDATION_STEPS / len(validation_worker_gens)) * len(validation_worker_gens)
+    VALIDATION_STEPS = VALIDATION_STEPS * CONFIG.model.validation_subv_moves + len(validation_worker_gens)
+    VALIDATION_STEPS = VALIDATION_STEPS.astype(np.int64)
 
     return DataGenerator(
             data=validation_data,
