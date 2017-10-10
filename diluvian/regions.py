@@ -390,11 +390,18 @@ class Region(object):
         pred = self.mask[map(slice, pred_bounds[0], pred_bounds[1])].copy()
         pred[np.isnan(pred)] = CONFIG.model.v_false
 
+        targ_bounds = [None, None]
+        targ_bounds[0] = self.get_block_bounds(self.pos_to_vox(self.move_bounds[0]) - self.target_offset,
+                                               CONFIG.model.output_fov_shape,
+                                               self.target_offset)[0]
+        targ_bounds[1] = self.get_block_bounds(self.pos_to_vox(self.move_bounds[1]) - self.target_offset,
+                                               CONFIG.model.output_fov_shape,
+                                               self.target_offset)[1]
+        target = self.target[map(slice, targ_bounds[0], targ_bounds[1])]
+
         if threshold:
-            target = self.target >= CONFIG.model.t_final
+            target = target >= CONFIG.model.t_final
             pred = pred >= CONFIG.model.t_final
-        else:
-            target = self.target
 
         return metric(target, pred)
 
