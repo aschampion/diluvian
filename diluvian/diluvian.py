@@ -492,7 +492,14 @@ def fill_region_with_model(
                 break
 
 
-def evaluate_volume(volumes, gt_name, pred_name, partition=False, border_threshold=None, use_gt_mask=True):
+def evaluate_volume(
+        volumes,
+        gt_name,
+        pred_name,
+        partition=False,
+        border_threshold=None,
+        use_gt_mask=True,
+        relabel=False):
     # TODO: This is very intrusive into Volumes and should be refactored to
     # handle much of the partioned access and resampling there.
 
@@ -540,9 +547,11 @@ def evaluate_volume(volumes, gt_name, pred_name, partition=False, border_thresho
     gt = labels_to_cremi(gt_vol)
 
     # Some augmented CREMI volumes have not just a uint64 -1 as background, but
-    # several large values. Set these all to zero to avoid breaking coo_matrix.
+    # several large values. Set these all to background to avoid breaking
+    # coo_matrix.
     gt.data[gt.data > np.uint64(-10)] = np.uint64(-1)
-    pred.data[pred.data > np.uint64(-10)] = 0
+    background_label_id = 0
+    pred.data[pred.data > np.uint64(-10)] = background_label_id
 
     if use_gt_mask and gt_vol.mask_data is not None:
         logging.warn('Groundtruth has a mask channel that will be applied to segmentation.')
@@ -550,7 +559,21 @@ def evaluate_volume(volumes, gt_name, pred_name, partition=False, border_thresho
         if hasattr(gt_vol, 'bounds'):
             mask_data = mask_data[map(slice, list(gt_vol.bounds[0]), list(gt_vol.bounds[1]))]
 
-        pred.data[np.logical_not(mask_data)] = 0
+        if relabel:
+            mask_exiting_bodies = np.unique(pred.data[np.logical_not(mask_data)])
+
+        pred.data[np.logical_not(mask_data)] = background_label_id
+
+        if relabel:
+            from skimage import morphology
+
+            pred_copy = np.zeros_like(pred.data)
+            exiting_bodies_mask = np.isin(pred.data, mask_exiting_bodies)
+            pred_copy[exiting_bodies_mask] = pred.data[exiting_bodies_mask]
+
+            new_pred = morphology.label(pred_copy, background=background_label_id, connectivity=2)
+
+            pred.data[exiting_bodies_mask] = new_pred[exiting_bodies_mask]
 
     gt_neuron_ids = cremi.evaluation.NeuronIds(gt, border_threshold=border_threshold)
 
