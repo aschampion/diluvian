@@ -463,8 +463,7 @@ def build_validation_gen(validation_volumes):
     subv_per_worker = CONFIG.training.validation_size // len(validation_worker_gens)
     logging.debug('# of validation workers: %s', len(validation_worker_gens))
 
-    validation_metric, validation_threshold, validation_mode = CONFIG.training.validation_metric
-    validation_metric = get_function(validation_metric)
+    validation_metric = get_function(CONFIG.training.validation_metric['metric'])
     validation_kludges = [{'inputs': None, 'outputs': None} for _ in range(CONFIG.training.num_workers)]
     validation_data = [MovingTrainingGenerator(
             Roundrobin(*gen, name='validation {}'.format(i)),
@@ -474,7 +473,7 @@ def build_validation_gen(validation_volumes):
             reset_generators=True,
             subv_per_epoch=subv_per_worker,
             subv_metric_fn=validation_metric,
-            subv_metric_threshold=validation_threshold)
+            subv_metric_threshold=CONFIG.training.validation_metric['threshold'])
             for i, (gen, kludge) in enumerate(zip(validation_worker_gens, validation_kludges))]
 
     callbacks = []
@@ -581,7 +580,7 @@ def train_network(
     callbacks.extend(validation.callbacks)
     callbacks.extend(training.callbacks)
 
-    validation_mode = CONFIG.training.validation_metric[2]
+    validation_mode = CONFIG.training.validation_metric['mode']
 
     if CONFIG.training.early_abort_epoch is not None and \
        CONFIG.training.early_abort_loss is not None:
