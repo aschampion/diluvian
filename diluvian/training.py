@@ -395,8 +395,9 @@ class MovingTrainingGenerator(six.Iterator):
                     self.f_as[r] = subvolume.f_a()
 
                     self.regions[r] = Region.from_subvolume(subvolume)
+                    if region is not None:
+                        self.epoch_move_counts.append(self.move_counts[r])
                     region = self.regions[r]
-                    self.epoch_move_counts.append(self.move_counts[r])
                     self.move_counts[r] = 0
                     block_data = region.get_next_block()
             else:
