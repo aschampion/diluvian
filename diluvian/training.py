@@ -403,6 +403,10 @@ class MovingTrainingGenerator(six.Iterator):
             else:
                 self.move_counts[r] += 1
 
+            if self.subv_per_epoch and self.fake_block is None:
+                assert block_data is not None
+                self.fake_block = copy.deepcopy(block_data)
+
             self.batch_image_input[r] = pad_dims(block_data['image'])
             batch_mask_input[r] = pad_dims(block_data['mask'])
             batch_mask_target[r] = pad_dims(block_data['target'])
@@ -418,9 +422,6 @@ class MovingTrainingGenerator(six.Iterator):
         # These inputs are only necessary for assurance the correct FOV is updated.
         self.kludge['inputs'] = self.batch_image_input[:, 0, 0, :, 0].copy()
         self.kludge['outputs'] = None
-
-        if self.subv_per_epoch and self.fake_block is None:
-            self.fake_block = copy.deepcopy(block_data)
 
         if self.f_a_bins is None:
             return (inputs,
