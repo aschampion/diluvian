@@ -111,6 +111,15 @@ def fill_volume_with_model(
             model = load_model(model_file, CONFIG.network)
         lock.release()
 
+        def is_revoked(test_seed):
+            ret = False
+            lock.acquire()
+            if tuple(test_seed) in revoked:
+                ret = True
+                revoked.remove(tuple(test_seed))
+            lock.release()
+            return ret
+
         while True:
             seed = seeds.get(True)
 
@@ -118,13 +127,12 @@ def fill_volume_with_model(
                 logging.debug('Worker %s: got DONE', worker_id)
                 break
 
+            if is_revoked(seed):
+                results.put((seed, None))
+                continue
+
             def stopping_callback(region):
-                stop = False
-                lock.acquire()
-                if tuple(seed) in revoked:
-                    revoked.remove(tuple(seed))
-                    stop = True
-                lock.release()
+                stop = is_revoked(seed)
                 if reject_non_seed_components and \
                    region.bias_against_merge and \
                    region.mask[tuple(region.seed_vox)] < 0.5:
