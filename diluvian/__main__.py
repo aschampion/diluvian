@@ -164,6 +164,10 @@ def _make_main_parser():
             help='Filename for bounds CSV input. Should contain "{volume}", which will be '
                  'substituted with the volume name for each respective volume\'s bounds.')
 
+    validate_parser = commandparsers.add_parser(  # noqa
+            'validate', parents=[common_parser],
+            help='Run a model on validation data.')
+
     evaluate_parser = commandparsers.add_parser(
             'evaluate', parents=[common_parser],
             help='Evaluate a filling result versus a ground truth.')
@@ -306,6 +310,14 @@ def main():
                                max_moves=args.max_moves,
                                remask_interval=args.remask_interval,
                                moves=args.bounds_num_moves)
+
+    elif args.command == 'validate':
+        # Late import to prevent loading large modules for short CLI commands.
+        init_seeds()
+        from .training import validate_model
+
+        volumes = load_volumes(args.volume_files, args.in_memory)
+        validate_model(args.model_file, volumes)
 
     elif args.command == 'evaluate':
         from .diluvian import evaluate_volume

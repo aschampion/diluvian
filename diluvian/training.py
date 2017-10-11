@@ -175,7 +175,7 @@ class GeneratorSubvolumeMetric(Callback):
         if self.metric_name not in self.params['metrics']:
             self.params['metrics'].append(self.metric_name)
         if logs:
-            metric = np.mean([gen.get_epoch_metric() for gen in self.gens])
+            metric = np.mean([np.mean(gen.get_epoch_metric()) for gen in self.gens])
             logs[self.metric_name] = metric
 
 
@@ -349,7 +349,7 @@ class MovingTrainingGenerator(six.Iterator):
         assert len(self.epoch_subv_metrics) == self.subv_per_epoch, \
             'Not all validation subvs completed: {}/{} (Finished moves: {}, ongoing: {})'.format(
                 len(self.epoch_subv_metrics), self.subv_per_epoch, self.epoch_move_counts, self.move_counts)
-        return np.mean(self.epoch_subv_metrics)
+        return self.epoch_subv_metrics
 
     def __next__(self):
         # If in the fixed-subvolumes-per-epoch mode and completed, yield fake
@@ -662,3 +662,35 @@ def train_network(
         fig.savefig(model_output_filebase + '.png')
 
     return history
+
+
+def validate_model(model_file, volumes):
+    from .network import load_model
+
+    _, volumes = partition_volumes(volumes)
+
+    validation = build_validation_gen(volumes)
+
+    model = load_model(model_file, CONFIG.network)
+
+    # Multi-GPU models are saved as a single-GPU model prior to compilation,
+    # so if loading from such a model file it will need to be recompiled.
+    if not hasattr(model, 'optimizer'):
+        if CONFIG.training.num_gpus > 1:
+            model = make_parallel(model, CONFIG.training.num_gpus)
+        compile_network(model, CONFIG.optimizer)
+
+    patch_prediction_copy(model)
+
+    model.evaluate_generator(
+            Roundrobin(*validation.data, name='validation outer'),
+            steps=validation.steps_per_epoch,
+            max_queue_size=len(validation.gens) - 1,
+            workers=1)
+
+    metrics = []
+    for gen in validation.data:
+        metrics.extend(gen.get_epoch_metric())
+
+    print('Metric: ', np.mean(metrics))
+    print('All: ', metrics)
