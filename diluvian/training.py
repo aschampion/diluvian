@@ -445,6 +445,12 @@ def get_output_margin(model_config):
 def build_validation_gen(validation_volumes):
     output_margin = get_output_margin(CONFIG.model)
 
+    # If there is only one volume, duplicate since more than one is needed
+    # for Keras queuing.
+    if len(validation_volumes) == 1:
+        single_vol = six.next(six.itervalues(validation_volumes))
+        validation_volumes = {'dupe {}'.format(n): single_vol for n in range(CONFIG.training.num_workers)}
+
     validation_gens = [
             preprocess_subvolume_generator(
                     v.subvolume_generator(shape=CONFIG.model.validation_subv_shape,
@@ -492,6 +498,12 @@ def build_validation_gen(validation_volumes):
 
 def build_training_gen(training_volumes):
     output_margin = get_output_margin(CONFIG.model)
+
+    # If there is only one volume, duplicate since more than one is needed
+    # for Keras queuing.
+    if len(training_volumes) == 1:
+        single_vol = six.next(six.itervalues(training_volumes))
+        training_volumes = {'dupe {}'.format(n): single_vol for n in range(CONFIG.training.num_workers)}
 
     training_gens = [
             augment_subvolume_generator(
