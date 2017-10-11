@@ -435,6 +435,103 @@ class MovingTrainingGenerator(six.Iterator):
                     sample_weights)
 
 
+DataGenerator = collections.namedtuple('DataGenerator', ['data', 'gens', 'callbacks', 'steps_per_epoch'])
+
+
+def get_output_margin(model_config):
+    return np.floor_divide(model_config.input_fov_shape - model_config.output_fov_shape, 2)
+
+
+def build_validation_gen(validation_volumes):
+    output_margin = get_output_margin(CONFIG.model)
+
+    validation_gens = [
+            preprocess_subvolume_generator(
+                    v.subvolume_generator(shape=CONFIG.model.validation_subv_shape,
+                                          label_margin=output_margin))
+            for v in six.itervalues(validation_volumes)]
+    if CONFIG.training.augment_validation:
+        validation_gens = map(augment_subvolume_generator, validation_gens)
+
+    # Divide training generators up for workers.
+    validation_worker_gens = [
+            validation_gens[i::CONFIG.training.num_workers]
+            for i in xrange(CONFIG.training.num_workers)]
+
+    # Some workers may not receive any generators.
+    validation_worker_gens = [g for g in validation_worker_gens if len(g) > 0]
+    subv_per_worker = CONFIG.training.validation_size // len(validation_worker_gens)
+    logging.debug('# of validation workers: %s', len(validation_worker_gens))
+
+    validation_metric, validation_threshold, validation_mode = CONFIG.training.validation_metric
+    validation_metric = get_function(validation_metric)
+    validation_kludges = [{'inputs': None, 'outputs': None} for _ in range(CONFIG.training.num_workers)]
+    validation_data = [MovingTrainingGenerator(
+            Roundrobin(*gen, name='validation {}'.format(i)),
+            CONFIG.training.batch_size,
+            kludge,
+            f_a_bins=CONFIG.training.fill_factor_bins,
+            reset_generators=True,
+            subv_per_epoch=subv_per_worker,
+            subv_metric_fn=validation_metric,
+            subv_metric_threshold=validation_threshold)
+            for i, (gen, kludge) in enumerate(zip(validation_worker_gens, validation_kludges))]
+
+    callbacks = []
+    callbacks.append(GeneratorSubvolumeMetric(validation_data, 'val_subv_metric'))
+    callbacks.append(GeneratorReset(validation_data))
+
+    VALIDATION_STEPS = np.ceil(CONFIG.training.validation_size / CONFIG.training.batch_size) \
+        * CONFIG.model.validation_subv_moves + len(validation_worker_gens)
+
+    return DataGenerator(
+            data=validation_data,
+            gens=validation_worker_gens,
+            callbacks=callbacks,
+            steps_per_epoch=VALIDATION_STEPS)
+
+
+def build_training_gen(training_volumes):
+    output_margin = get_output_margin(CONFIG.model)
+
+    training_gens = [
+            augment_subvolume_generator(
+                    preprocess_subvolume_generator(
+                            v.subvolume_generator(shape=CONFIG.model.training_subv_shape,
+                                                  label_margin=output_margin)))
+            for v in six.itervalues(training_volumes)]
+    random.shuffle(training_gens)
+
+    # Divide training generators up for workers.
+    worker_gens = [
+            training_gens[i::CONFIG.training.num_workers]
+            for i in xrange(CONFIG.training.num_workers)]
+
+    # Some workers may not receive any generators.
+    worker_gens = [g for g in worker_gens if len(g) > 0]
+    logging.debug('# of training workers: %s', len(worker_gens))
+
+    kludges = [{'inputs': None, 'outputs': None} for _ in range(CONFIG.training.num_workers)]
+    # Create a training data generator for each worker.
+    training_data = [MovingTrainingGenerator(
+            Roundrobin(*gen, name='training {}'.format(i)),
+            CONFIG.training.batch_size,
+            kludge,
+            f_a_bins=CONFIG.training.fill_factor_bins,
+            reset_generators=CONFIG.training.reset_generators)
+            for i, (gen, kludge) in enumerate(zip(worker_gens, kludges))]
+    training_reset_callback = GeneratorReset(training_data)
+    callbacks = [training_reset_callback]
+
+    TRAINING_STEPS_PER_EPOCH = CONFIG.training.training_size // CONFIG.training.batch_size
+
+    return DataGenerator(
+            data=training_data,
+            gens=worker_gens,
+            callbacks=callbacks,
+            steps_per_epoch=TRAINING_STEPS_PER_EPOCH)
+
+
 def train_network(
         model_file=None,
         volumes=None,
@@ -470,8 +567,6 @@ def train_network(
 
     CONFIG.to_toml(model_output_filebase + '.toml')
 
-    f_a_bins = CONFIG.training.fill_factor_bins
-
     training_volumes, validation_volumes = partition_volumes(volumes)
 
     num_training = len(training_volumes)
@@ -479,51 +574,20 @@ def train_network(
 
     logging.info('Using {} volumes for training, {} for validation.'.format(num_training, num_validation))
 
+    validation = build_validation_gen(validation_volumes)
+    training = build_training_gen(training_volumes)
+
     callbacks = []
+    callbacks.extend(validation.callbacks)
+    callbacks.extend(training.callbacks)
 
-    validation_kludges = [{'inputs': None, 'outputs': None} for _ in range(CONFIG.training.num_workers)]
-    output_margin = np.floor_divide(CONFIG.model.input_fov_shape - CONFIG.model.output_fov_shape, 2)
-
-    validation_gens = [
-            preprocess_subvolume_generator(
-                    v.subvolume_generator(shape=CONFIG.model.validation_subv_shape,
-                                          label_margin=output_margin))
-            for v in six.itervalues(validation_volumes)]
-    if CONFIG.training.augment_validation:
-        validation_gens = map(augment_subvolume_generator, validation_gens)
-    # Divide training generators up for workers.
-    validation_worker_gens = [
-            validation_gens[i::CONFIG.training.num_workers]
-            for i in xrange(CONFIG.training.num_workers)]
-    validation_worker_gens = [g for g in validation_worker_gens if len(g) > 0]
-    subv_per_worker = CONFIG.training.validation_size // len(validation_worker_gens)
-    logging.debug('# of validation workers: %s', len(validation_worker_gens))
-    validation_metric, validation_threshold, validation_mode = CONFIG.training.validation_metric
-    validation_metric = get_function(validation_metric)
-    validation_data = [MovingTrainingGenerator(
-            Roundrobin(*gen, name='validation {}'.format(i)),
-            CONFIG.training.batch_size,
-            kludge,
-            f_a_bins=f_a_bins,
-            reset_generators=True,
-            subv_per_epoch=subv_per_worker,
-            subv_metric_fn=validation_metric,
-            subv_metric_threshold=validation_threshold)
-            for i, (gen, kludge) in enumerate(zip(validation_worker_gens, validation_kludges))]
-    callbacks.append(GeneratorSubvolumeMetric(validation_data, 'val_subv_metric'))
-    callbacks.append(GeneratorReset(validation_data))
-
-    TRAINING_STEPS_PER_EPOCH = CONFIG.training.training_size // CONFIG.training.batch_size
-    VALIDATION_STEPS = np.ceil(CONFIG.training.validation_size / CONFIG.training.batch_size) \
-        * CONFIG.model.validation_subv_moves + len(validation_worker_gens)
+    validation_mode = CONFIG.training.validation_metric[2]
 
     if CONFIG.training.early_abort_epoch is not None and \
        CONFIG.training.early_abort_loss is not None:
         callbacks.append(EarlyAbort(threshold_epoch=CONFIG.training.early_abort_epoch,
                                     threshold_value=CONFIG.training.early_abort_loss))
 
-    # Moving training
-    kludges = [{'inputs': None, 'outputs': None} for _ in range(CONFIG.training.num_workers)]
     callbacks.append(ModelCheckpoint(model_output_filebase + '.hdf5',
                                      monitor='val_subv_metric',
                                      save_best_only=True,
@@ -539,44 +603,20 @@ def train_network(
     if tensorboard:
         callbacks.append(TensorBoard())
 
-    training_gens = [
-            augment_subvolume_generator(
-                    preprocess_subvolume_generator(
-                            v.subvolume_generator(shape=CONFIG.model.training_subv_shape,
-                                                  label_margin=output_margin)))
-            for v in six.itervalues(training_volumes)]
-    random.shuffle(training_gens)
-    # Divide training generators up for workers.
-    worker_gens = [
-            training_gens[i::CONFIG.training.num_workers]
-            for i in xrange(CONFIG.training.num_workers)]
-    # Some workers may not receive any generators.
-    worker_gens = [g for g in worker_gens if len(g) > 0]
-    logging.debug('# of training workers: %s', len(worker_gens))
-    # Create a training data generator for each worker.
-    training_data = [MovingTrainingGenerator(
-            Roundrobin(*gen, name='training {}'.format(i)),
-            CONFIG.training.batch_size,
-            kludge,
-            f_a_bins=f_a_bins,
-            reset_generators=CONFIG.training.reset_generators)
-            for i, (gen, kludge) in enumerate(zip(worker_gens, kludges))]
-    training_reset_callback = GeneratorReset(training_data)
-    callbacks.append(training_reset_callback)
     history = ffn.fit_generator(
-            Roundrobin(*training_data, name='training outer'),
-            steps_per_epoch=TRAINING_STEPS_PER_EPOCH,
+            Roundrobin(*training.data, name='training outer'),
+            steps_per_epoch=training.steps_per_epoch,
             epochs=CONFIG.training.total_epochs,
-            max_queue_size=len(worker_gens) - 1,
+            max_queue_size=len(training.gens) - 1,
             workers=1,
             callbacks=callbacks,
-            validation_data=Roundrobin(*validation_data, name='validation outer'),
-            validation_steps=VALIDATION_STEPS)
+            validation_data=Roundrobin(*validation.data, name='validation outer'),
+            validation_steps=validation.steps_per_epoch)
 
     write_keras_history_to_csv(history, model_output_filebase + '.csv')
 
     if viewer:
-        viz_ex = itertools.islice(validation_data[0], 1)
+        viz_ex = itertools.islice(validation.data[0], 1)
 
         for inputs, targets in viz_ex:
             viewer = WrappedViewer(voxel_size=list(np.flipud(CONFIG.volume.resolution)))
