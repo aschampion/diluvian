@@ -586,27 +586,41 @@ def evaluate_volume(
     print('CREMI             :', np.sqrt((voi_split + voi_merge) * adapted_rand))
 
 
-def view_volumes(volumes):
+def view_volumes(volumes, partition=False):
     """Display a set of volumes together in a neuroglancer viewer.
 
     Parameters
     ----------
     volumes : dict
         Dictionary mapping volume name to diluvian.volumes.Volume.
+    partition : bool
+        If true, partition the volumes and put the view origin at the validaiton
+        partition origin.
     """
+
+    if partition:
+        _, volumes = partition_volumes(volumes, downsample=False)
+
     viewer = WrappedViewer()
 
     for volume_name, volume in six.iteritems(volumes):
+        resolution = list(np.flipud(volume.resolution))
+        offset = getattr(volume, 'bounds', [np.zeros(3, dtype=np.int32)])[0]
+        offset = np.flipud(-offset)
+
         viewer.add(volume.image_data,
                    name='{} (Image)'.format(volume_name),
-                   voxel_size=list(np.flipud(volume.resolution)))
+                   voxel_size=resolution,
+                   voxel_offset=offset)
         if volume.label_data is not None:
             viewer.add(volume.label_data,
                        name='{} (Labels)'.format(volume_name),
-                       voxel_size=list(np.flipud(volume.resolution)))
+                       voxel_size=resolution,
+                       voxel_offset=offset)
         if volume.mask_data is not None:
             viewer.add(volume.mask_data,
                        name='{} (Mask)'.format(volume_name),
-                       voxel_size=list(np.flipud(volume.resolution)))
+                       voxel_size=resolution,
+                       voxel_offset=offset)
 
     viewer.print_view_prompt()

@@ -185,6 +185,10 @@ def _make_main_parser():
             'view', parents=[common_parser],
             help='View a set of co-registered volumes in neuroglancer.')
     view_parser.add_argument(
+            '--partition-volumes', action='store_true', dest='partition_volumes', default=False,
+            help='Partition volumes and view centered at the validation '
+                 'partitions.')
+    view_parser.add_argument(
             'volume_name_regex', default='.', nargs='?',
             help='Regex to filter which volumes of those defined in the '
                  'volume configuration should be loaded.')
@@ -318,7 +322,7 @@ def main():
         from .diluvian import view_volumes
 
         volumes = load_volumes(args.volume_files, args.in_memory, name_regex=args.volume_name_regex)
-        view_volumes(volumes)
+        view_volumes(volumes, partition=args.partition_volumes)
 
     elif args.command == 'check-config':
         prop = CONFIG
