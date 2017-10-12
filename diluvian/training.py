@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import six
 from six.moves import range as xrange
+from tqdm import tqdm
 
 import keras.backend as K
 from keras.callbacks import (
@@ -682,11 +683,21 @@ def validate_model(model_file, volumes):
 
     patch_prediction_copy(model)
 
-    model.evaluate_generator(
-            Roundrobin(*validation.data, name='validation outer'),
-            steps=validation.steps_per_epoch,
-            max_queue_size=len(validation.gens) - 1,
-            workers=1)
+    pbar = tqdm(desc='Validation batches', total=validation.steps_per_epoch)
+    finished = [False] * len(validation.gens)
+
+    for n, data in itertools.cycle(enumerate(validation.data)):
+        if all(finished):
+            break
+
+        pbar.update(1)
+
+        if all(data.fake_mask):
+            finished[n] = True
+            continue
+
+        batch = six.next(data)
+        model.test_on_batch(*batch)
 
     metrics = []
     for gen in validation.data:
