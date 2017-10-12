@@ -96,7 +96,7 @@ def intensity_distance_seeds(image_data, resolution, axis=0, erosion_radius=16, 
             logging.debug('Skipping blank slice.')
             continue
         logging.debug('Running Sobel filter on image shape %s', image_data.shape)
-        sobel[s] = ndimage.generic_gradient_magnitude(image_slice, make_prewitt((24 / resolution).max() * 2 + 1))
+        sobel[s] = ndimage.generic_gradient_magnitude(image_slice, make_prewitt(int((24 / resolution).max() * 2 + 1)))
         # sobel = ndimage.grey_dilation(sobel, size=(5,5,3))
         logging.debug('Running distance transform on image shape %s', image_data.shape)
 
