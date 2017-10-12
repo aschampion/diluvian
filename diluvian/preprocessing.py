@@ -17,7 +17,39 @@ from .util import (
 )
 
 
-def intensity_distance_seeds(image_data, resolution, axis=0, erosion_radius=12, min_sep=12, visualize=False):
+def make_prewitt(size):
+    """Construct a separable Prewitt gradient convolution of a given size.
+
+    Adapted from SciPy's ndimage ``prewitt``.
+
+    Parameters
+    ----------
+    size : int
+        1-D size of the filter (should be odd).
+    """
+    def prewitt(input, axis=-1, output=None, mode='reflect', cval=0.0):
+        input = np.asarray(input)
+        if axis < 0:
+            axis += input.ndim
+        if type(output) is not np.ndarray:
+            output = np.zeros_like(input)
+
+        kernel = list(range(1, size // 2 + 1))
+        kernel = [-x for x in reversed(kernel)] + [0] + kernel
+        smooth = np.ones(size, dtype=np.int32)
+        smooth = smooth / np.abs(kernel).sum()
+        smooth = list(smooth)
+
+        ndimage.correlate1d(input, kernel, axis, output, mode, cval, 0)
+        axes = [ii for ii in range(input.ndim) if ii != axis]
+        for ii in axes:
+            ndimage.correlate1d(output, smooth, ii, output, mode, cval, 0)
+        return output
+
+    return prewitt
+
+
+def intensity_distance_seeds(image_data, resolution, axis=0, erosion_radius=16, min_sep=24, visualize=False):
     """Create seed locations maximally distant from a Sobel filter.
 
     Parameters
@@ -64,7 +96,7 @@ def intensity_distance_seeds(image_data, resolution, axis=0, erosion_radius=12, 
             logging.debug('Skipping blank slice.')
             continue
         logging.debug('Running Sobel filter on image shape %s', image_data.shape)
-        sobel[s] = ndimage.generic_gradient_magnitude(image_slice, ndimage.prewitt)
+        sobel[s] = ndimage.generic_gradient_magnitude(image_slice, make_prewitt((24 / resolution).max() * 2 + 1))
         # sobel = ndimage.grey_dilation(sobel, size=(5,5,3))
         logging.debug('Running distance transform on image shape %s', image_data.shape)
 
@@ -87,7 +119,7 @@ def intensity_distance_seeds(image_data, resolution, axis=0, erosion_radius=12, 
         viewer.add(skmax, name='Seeds', shader=get_color_shader(0, normalized=False))
         viewer.print_view_prompt()
 
-    mask = np.zeros(np.floor_divide(erosion_radius, resolution) + 1)
+    mask = np.zeros(np.floor_divide(min_sep, resolution) + 1)
     mask[0, 0, 0] = 1
     seeds = np.transpose(np.nonzero(skmax))
     for seed in seeds:
