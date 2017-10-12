@@ -324,32 +324,35 @@ class Region(object):
                 self.queue.put((priority, tuple(new_pos)))
 
     def get_next_block(self):
-        try:
-            queued_move = self.queue.get_nowait()
-        except queue.Empty:
-            return None
+        mask_block = None
 
-        next_pos = np.asarray(queued_move[1])
-        next_vox = self.pos_to_vox(next_pos)
-        block_min, block_max, pad_pre, pad_post = self.get_block_bounds(next_vox, CONFIG.model.input_fov_shape)
+        while mask_block is None:
+            try:
+                queued_move = self.queue.get_nowait()
+            except queue.Empty:
+                return None
 
-        assert self.block_padding is not None or not (np.any(pad_pre) or np.any(pad_post)), \
-            'Position block extends out of region bounds, but padding is not enabled: {}'.format(next_pos)
+            next_pos = np.asarray(queued_move[1])
+            next_vox = self.pos_to_vox(next_pos)
+            block_min, block_max, pad_pre, pad_post = self.get_block_bounds(next_vox, CONFIG.model.input_fov_shape)
 
-        mask_block = self.mask[block_min[0]:block_max[0],
-                               block_min[1]:block_max[1],
-                               block_min[2]:block_max[2]].copy()
+            assert self.block_padding is not None or not (np.any(pad_pre) or np.any(pad_post)), \
+                'Position block extends out of region bounds, but padding is not enabled: {}'.format(next_pos)
 
-        mask_block[np.isnan(mask_block)] = CONFIG.model.v_false
+            mask_block = self.mask[block_min[0]:block_max[0],
+                                   block_min[1]:block_max[1],
+                                   block_min[2]:block_max[2]].copy()
 
-        # Check that there is still some t_move threshold mask near the move.
-        if CONFIG.model.move_recheck and not (
-           np.array_equal(next_pos, self.seed_pos) or self.check_move_neighborhood(mask_block)):
-            logging.debug('Skipping move: no threshold mask in cube around voxel %s', np.array_str(next_vox))
-            # Remove from the visited set: move was not taken, but later
-            # moves could queue it.
-            self.visited.remove(tuple(next_pos))
-            return self.get_next_block()
+            mask_block[np.isnan(mask_block)] = CONFIG.model.v_false
+
+            # Check that there is still some t_move threshold mask near the move.
+            if CONFIG.model.move_recheck and not (
+               np.array_equal(next_pos, self.seed_pos) or self.check_move_neighborhood(mask_block)):
+                logging.debug('Skipping move: no threshold mask in cube around voxel %s', np.array_str(next_vox))
+                # Remove from the visited set: move was not taken, but later
+                # moves could queue it.
+                self.visited.remove(tuple(next_pos))
+                mask_block = None
 
         image_block = self.image[block_min[0]:block_max[0],
                                  block_min[1]:block_max[1],
