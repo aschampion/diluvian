@@ -333,6 +333,9 @@ def fill_volume_with_model(
         worker.join()
     manager.shutdown()
 
+    label_pbar.close()
+    pbar.close()
+
     return prediction, conflict_count
 
 

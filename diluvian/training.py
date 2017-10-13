@@ -699,6 +699,8 @@ def validate_model(model_file, volumes):
         batch = six.next(data)
         model.test_on_batch(*batch)
 
+    pbar.close()
+
     metrics = []
     for gen in validation.data:
         metrics.extend(gen.get_epoch_metric())
