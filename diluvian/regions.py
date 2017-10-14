@@ -311,17 +311,29 @@ class Region(object):
         if self.prioritize_proximity:
             proximity = self.proximity[tuple(mask_pos)] + 1
             del self.proximity[tuple(mask_pos)]
+        else:
+            proximity = None
+
         for move in new_moves:
             new_pos = mask_pos + move['move']
             if not self.pos_in_bounds(new_pos):
                 continue
             if tuple(new_pos) not in self.visited and move['v'] >= CONFIG.model.t_move:
                 self.visited.add(tuple(new_pos))
-                priority = -move['v']
-                if self.prioritize_proximity:
-                    self.proximity[tuple(new_pos)] = min(self.proximity.get(tuple(new_pos), proximity), proximity)
-                    priority /= proximity
+                priority = self.get_move_priority(new_pos, move['v'], proximity)
                 self.queue.put((priority, tuple(new_pos)))
+
+    def get_move_priority(self, pos, value, proximity=None):
+        if CONFIG.model.move_priority == 'proximity':
+            priority = -value
+            self.proximity[tuple(pos)] = min(self.proximity.get(tuple(pos), proximity), proximity)
+            priority /= proximity
+        elif CONFIG.model.move_priority == 'random':
+            priority = np.random.rand()
+        else:  # descending
+            priority = -value
+
+        return priority
 
     def get_next_block(self):
         mask_block = None

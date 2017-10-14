@@ -75,9 +75,9 @@ class ModelConfig(BaseConfig):
         missing sections or image artifacts.
     move_priority : str
         How to prioritize the move queue. Either 'descending' to order by
-        descending mask probability in the move check plane (default) or
+        descending mask probability in the move check plane (default),
         'proximity' to prioritize moves minimizing L1 path distance from the
-        seed.
+        seed, or 'random'.
     move_recheck : bool
         If true, when moves are retrieved from the queue a cube in the
         probability mask will be checked around the move location. If no voxels
