@@ -297,10 +297,12 @@ class MovingTrainingGenerator(six.Iterator):
         Metric function to run on subvolumes when `subv_per_epoch` is set.
     subv_metric_threshold : bool, optional
         Whether to threshold subvolume masks for metrics.
+    subv_metric_args : dict, optional
+        Keyword arguments that will be passed to the subvolume metric.
     """
     def __init__(self, subvolumes, batch_size, kludge,
                  f_a_bins=None, reset_generators=True, subv_per_epoch=None,
-                 subv_metric_fn=None, subv_metric_threshold=False):
+                 subv_metric_fn=None, subv_metric_threshold=False, subv_metric_args=None):
         self.subvolumes = subvolumes
         self.batch_size = batch_size
         self.kludge = kludge
@@ -308,6 +310,9 @@ class MovingTrainingGenerator(six.Iterator):
         self.subv_per_epoch = subv_per_epoch
         self.subv_metric_fn = subv_metric_fn
         self.subv_metric_threshold = subv_metric_threshold
+        self.subv_metric_args = subv_metric_args
+        if self.subv_metric_args is None:
+            self.subv_metric_args = {}
 
         self.regions = [None] * batch_size
         self.region_pos = [None] * batch_size
@@ -384,7 +389,10 @@ class MovingTrainingGenerator(six.Iterator):
             if block_data is None:
                 if self.subv_per_epoch:
                     if region is not None:
-                        metric = region.prediction_metric(self.subv_metric_fn, threshold=self.subv_metric_threshold)
+                        metric = region.prediction_metric(
+                                self.subv_metric_fn,
+                                threshold=self.subv_metric_threshold,
+                                **self.subv_metric_args)
                         self.epoch_subv_metrics.append(metric)
                         self.regions[r] = None
                     if self.epoch_subvolumes >= self.subv_per_epoch:
@@ -484,7 +492,8 @@ def build_validation_gen(validation_volumes):
             reset_generators=True,
             subv_per_epoch=subv_per_worker,
             subv_metric_fn=validation_metric,
-            subv_metric_threshold=CONFIG.training.validation_metric['threshold'])
+            subv_metric_threshold=CONFIG.training.validation_metric['threshold'],
+            subv_metric_args=CONFIG.training.validation_metric['args'])
             for i, (gen, kludge) in enumerate(zip(validation_worker_gens, validation_kludges))]
 
     callbacks = []

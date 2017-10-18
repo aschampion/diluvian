@@ -142,9 +142,9 @@ def binary_confusion_matrix(y, y_pred):
     return cm
 
 
-def binary_f1_score(y, y_pred):
+def binary_f_score(y, y_pred, beta=1.0):
     cm = binary_confusion_matrix(y.flatten(), y_pred.flatten())
-    return confusion_f1_score(cm)
+    return confusion_f_score(cm, beta)
 
 
 def binary_crossentropy(y, y_pred, eps=1e-15):
@@ -154,8 +154,8 @@ def binary_crossentropy(y, y_pred, eps=1e-15):
     return - np.sum(loss) / np.prod(y.shape)
 
 
-def confusion_f1_score(cm):
-    return 2.0 * cm[1, 1] / (2.0 * cm[1, 1] + cm[1, 0] + cm[0, 1])
+def confusion_f_score(cm, beta):
+    return (1.0 + beta) * cm[1, 1] / ((1.0 + beta) * cm[1, 1] + (beta ** 2) * cm[1, 0] + cm[0, 1])
 
 
 class Roundrobin(six.Iterator):

@@ -19,7 +19,7 @@ from diluvian import volumes
 from diluvian.config import CONFIG
 from diluvian.util import (
         binary_confusion_matrix,
-        confusion_f1_score,
+        confusion_f_score,
         get_nonzero_aabb,
         )
 
@@ -170,5 +170,5 @@ def test_confusion_matrix():
 def test_f1_score():
     a = np.array([[375695, 6409], [31208, 67419]])
 
-    np.testing.assert_almost_equal(confusion_f1_score(a), 0.782, decimal=3)
-    assert confusion_f1_score(np.eye(2)) == 1.0
+    np.testing.assert_almost_equal(confusion_f_score(a, 1.0), 0.782, decimal=3)
+    assert confusion_f_score(np.eye(2), 1.0) == 1.0

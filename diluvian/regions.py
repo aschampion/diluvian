@@ -398,7 +398,7 @@ class Region(object):
                 'target': target_block,
                 'position': next_pos}
 
-    def prediction_metric(self, metric, threshold=True):
+    def prediction_metric(self, metric, threshold=True, **kwargs):
         pred_bounds = [None, None]
         pred_bounds[0] = self.get_block_bounds(self.pos_to_vox(self.move_bounds[0]), CONFIG.model.output_fov_shape)[0]
         pred_bounds[1] = self.get_block_bounds(self.pos_to_vox(self.move_bounds[1]), CONFIG.model.output_fov_shape)[1]
@@ -418,7 +418,7 @@ class Region(object):
             target = target >= CONFIG.model.t_final
             pred = pred >= CONFIG.model.t_final
 
-        return metric(target, pred)
+        return metric(target, pred, **kwargs)
 
     def remask(self):
         """Reset the mask based on the seeded connected component.

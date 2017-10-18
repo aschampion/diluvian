@@ -317,7 +317,7 @@ class TrainingConfig(BaseConfig):
         self.validation_partition = settings.get('validation_partition', {'.*': [1, 0, 0]})
         self.validation_metric = settings.get(
                 'validation_metric',
-                {'metric': 'diluvian.util.binary_f1_score', 'threshold': True, 'mode': 'max'})
+                {'metric': 'diluvian.util.binary_f_score', 'threshold': True, 'mode': 'max', 'args': {'beta': 0.5}})
         self.patience = int(np.array(settings.get('patience', 10)))
         self.early_abort_epoch = settings.get('early_abort_epoch', None)
         self.early_abort_loss = settings.get('early_abort_loss', None)
