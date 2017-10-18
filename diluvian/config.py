@@ -134,6 +134,8 @@ class NetworkConfig(BaseConfig):
         inputs and outputs. Data is assumed to be ZYX row-major, but old
         versions of diluvian used XYZ, so this is necessary to load old
         networks.
+    rescale_image : bool
+        If true, rescale the input image intensity from [0, 1) to [-1, 1).
     num_modules : int
         Number of convolution modules to use, each module consisting of a skip
         link in parallel with ``num_layers_per_module`` convolution layers.
@@ -176,6 +178,7 @@ class NetworkConfig(BaseConfig):
     def __init__(self, settings):
         self.factory = str(settings.get('factory'))
         self.transpose = bool(settings.get('transpose', False))
+        self.rescale_image = bool(settings.get('rescale_image', False))
         self.num_modules = int(settings.get('num_modules', 8))
         self.num_layers_per_module = int(settings.get('num_layers_per_module', 2))
         self.convolution_dim = np.array(settings.get('convolution_dim', [3, 3, 3]))

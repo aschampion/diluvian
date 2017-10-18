@@ -16,6 +16,7 @@ from keras.layers import (
         Cropping3D,
         Dropout,
         Input,
+        Lambda,
         Permute,
         )
 from keras.layers.merge import (
@@ -34,8 +35,12 @@ def make_flood_fill_network(input_fov_shape, output_fov_shape, network_config):
         raise ValueError('ResNet implementation only supports same padding.')
 
     image_input = Input(shape=tuple(input_fov_shape) + (1,), dtype='float32', name='image_input')
+    if network_config.rescale_image:
+        ffn = Lambda(lambda x: (x - 0.5) * 2.0)(image_input)
+    else:
+        ffn = image_input
     mask_input = Input(shape=tuple(input_fov_shape) + (1,), dtype='float32', name='mask_input')
-    ffn = concatenate([image_input, mask_input])
+    ffn = concatenate([ffn, mask_input])
 
     # Convolve and activate before beginning the skip connection modules,
     # as discussed in the Appendix of He et al 2016.
@@ -109,8 +114,12 @@ def make_flood_fill_unet(input_fov_shape, output_fov_shape, network_config):
     """Construct a U-net flood filling network.
     """
     image_input = Input(shape=tuple(input_fov_shape) + (1,), dtype='float32', name='image_input')
+    if network_config.rescale_image:
+        ffn = Lambda(lambda x: (x - 0.5) * 2.0)(image_input)
+    else:
+        ffn = image_input
     mask_input = Input(shape=tuple(input_fov_shape) + (1,), dtype='float32', name='mask_input')
-    ffn = concatenate([image_input, mask_input])
+    ffn = concatenate([ffn, mask_input])
 
     # Note that since the Keras 2 upgrade strangely models with depth > 3 are
     # rejected by TF.
