@@ -21,6 +21,8 @@ locations along the boundary of the current field of view that are confidently
 inside the region. This process is repeated until the region has been fully
 explored.
 
+As of December 2017 the original paper's authors have released `their implementation <https://github.com/google/ffn>`_.
+
 
 Quick Start
 -----------
