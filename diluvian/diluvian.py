@@ -57,6 +57,61 @@ def generate_subvolume_bounds(filename, volumes, num_bounds, sparse=False, moves
         SubvolumeBounds.iterable_to_csv(bounds, filename.format(volume=k))
 
 
+def generate_google_coordinates(
+        filename,
+        volumes,
+        seed_generator='sobel',
+        partition=False,
+        filter_seeds_by_mask=True):
+    import tensorflow as tf
+
+    if '{volume}' not in filename:
+        raise ValueError('GZip filename must contain "{volume}" for volume name replacement.')
+
+    if partition:
+        volumes, _ = partition_volumes(volumes)
+
+    for volume_name, volume in six.iteritems(volumes):
+        logging.info('Processing volume %s...', volume_name)
+        volume = volume.downsample(CONFIG.volume.resolution)
+
+        subvolume = volume.get_subvolume(SubvolumeBounds(start=np.zeros(3, dtype=np.int64),
+                                                         stop=volume.shape))
+
+        # Generate seeds from volume.
+        generator = preprocessing.SEED_GENERATORS[seed_generator]
+        seeds = generator(subvolume.image, CONFIG.volume.resolution)
+
+        if filter_seeds_by_mask and volume.mask_data is not None:
+            def in_mask(seed, volume, label_margin):
+                start_local = volume.world_coord_to_local(seed - label_margin)
+                stop_local = volume.world_coord_to_local(seed + label_margin)
+                mask = volume.mask_data[
+                        start_local[0]:stop_local[0],
+                        start_local[1]:stop_local[1],
+                        start_local[2]:stop_local[2]]
+                mask.all()
+            # seeds = [s for s in seeds if volume.mask_data[tuple(volume.world_coord_to_local(s))]]
+            seeds = [s for s in seeds if in_mask(seed, volume, CONFIG.model.training_subv_shape / 2 + 1)]
+
+        seeds = [s for s in seeds if np.all(s > CONFIG.model.training_subv_shape / 2 + 1)
+                 and np.all(s < (np.array(subvolume.image.shape) - CONFIG.model.training_subv_shape / 2))]
+
+        vol_filename = filename.format(volume=volume_name)
+
+        writer = tf.python_io.TFRecordWriter(
+            vol_filename,
+            tf.python_io.TFRecordOptions(tf.python_io.TFRecordCompressionType.GZIP))
+        for seed in seeds:
+            example = tf.train.Example(features=tf.train.Features(feature={
+                'center': tf.train.Feature(int64_list=tf.train.Int64List(value=seed)),
+                'label_volume_name': tf.train.Feature(bytes_list=tf.train.BytesList(
+                    value=[volume_name.encode('ascii', 'ignore')]))
+            }))
+            writer.write(example.SerializeToString())
+        writer.close()
+
+
 def fill_volume_with_model(
         model_file,
         volume,

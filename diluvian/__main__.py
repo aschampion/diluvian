@@ -215,6 +215,27 @@ def _make_main_parser():
             'num_bounds', default=None, type=int,
             help='Number of bounds to generate.')
 
+    gen_google_coordinates_parser = commandparsers.add_parser(
+            'gen-google-coordinates', parents=[common_parser],
+            help='Generate seed coordinates in a format suitable for training Google\'s FFN.')
+    gen_google_coordinates_parser.add_argument(
+            'coordinates_output_file', default=None,
+            help='Filename for the gzipped TFRecord output. Should contain '
+                 '"{volume}", which will be substituted with the volume name '
+                 'for each respective volume\'s coordinates.')
+    gen_google_coordinates_parser.add_argument(
+            '--partition-volumes', action='store_true', dest='partition_volumes', default=False,
+            help='Partition volumes and only generate seeds for the training partition.')
+    gen_google_coordinates_parser.add_argument(
+            '--seed-generator', dest='seed_generator', default='sobel', nargs='?',
+            # Would be nice to pull these from .preprocessing.SEED_GENERATORS,
+            # but want to avoid importing so that CLI is responsive.
+            choices=['grid', 'sobel'],
+            help='Method to generate seed locations for coordinate generation.')
+    gen_google_coordinates_parser.add_argument(
+            '--ignore-mask', dest='ignore_mask', default=False,
+            help='Ignore the mask channel when generating seeds.')
+
     return parser
 
 
@@ -354,6 +375,18 @@ def main():
                                   volumes,
                                   args.num_bounds,
                                   moves=args.bounds_num_moves)
+
+    elif args.command == 'gen-google-coordinates':
+        # Late import to prevent loading large modules for short CLI commands.
+        init_seeds()
+        from .diluvian import generate_google_coordinates
+
+        volumes = load_volumes(args.volume_files, args.in_memory)
+        generate_google_coordinates(args.coordinates_output_file,
+                                    volumes,
+                                    partition=args.partition_volumes,
+                                    seed_generator=args.seed_generator,
+                                    filter_seeds_by_mask=not args.ignore_mask)
 
 
 def load_volumes(volume_files, in_memory, name_regex=None):
