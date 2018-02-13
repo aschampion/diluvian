@@ -2,6 +2,17 @@
 History
 =======
 
+0.0.6 (2018-02-13)
+------------------
+
+* Add CREMI evaluation command.
+* Add 3D region filling animation.
+* Fix region filling animations.
+* F_0.5 validation metrics.
+* Fix pip install.
+* Many other fixes and tweaks (see git log).
+
+
 0.0.5 (2017-10-03)
 ------------------
 
