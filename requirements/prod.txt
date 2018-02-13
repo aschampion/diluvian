@@ -1,6 +1,6 @@
 h5py>=2.6.0
 Keras==2.0.8
-git+https://www.github.com/farizrahman4u/keras-contrib.git#egg=keras_contrib
+git+https://www.github.com/keras-team/keras-contrib.git#egg=keras_contrib
 matplotlib==2.0.0
 networkx==1.11
 neuroglancer==0.0.8
