@@ -10,7 +10,6 @@ import copy
 import itertools
 import logging
 import random
-import types
 
 import matplotlib as mpl
 # Use the 'Agg' backend to allow the generation of plots even if no X server
@@ -29,7 +28,6 @@ from keras.callbacks import (
         ModelCheckpoint,
         TensorBoard,
         )
-from keras.engine import Model
 
 from .config import CONFIG
 from .network import compile_network, load_model
@@ -92,7 +90,7 @@ def patch_prediction_copy(model):
             return outputs[0]
         return outputs
 
-    model.train_on_batch = types.MethodType(train_on_batch, model, Model)
+    model.train_on_batch = six.create_bound_method(train_on_batch, model)
 
     model._orig_test_on_batch = model.test_on_batch
 
@@ -104,7 +102,7 @@ def patch_prediction_copy(model):
             return outputs[0]
         return outputs
 
-    model.test_on_batch = types.MethodType(test_on_batch, model, Model)
+    model.test_on_batch = six.create_bound_method(test_on_batch, model)
 
     # Below is copied and modified from Keras Model._make_train_function.
     # The only change is the addition of `self.outputs` to the train function.
@@ -129,7 +127,7 @@ def patch_prediction_copy(model):
                                                  name='train_function',
                                                  **self._function_kwargs)
 
-    model._make_train_function = types.MethodType(_make_train_function, model, Model)
+    model._make_train_function = six.create_bound_method(_make_train_function, model)
 
     def _make_test_function(self):
         if not hasattr(self, 'test_function'):
@@ -146,7 +144,7 @@ def patch_prediction_copy(model):
                                             name='test_function',
                                             **self._function_kwargs)
 
-    model._make_test_function = types.MethodType(_make_test_function, model, Model)
+    model._make_test_function = six.create_bound_method(_make_test_function, model)
 
 
 class GeneratorReset(Callback):
@@ -470,7 +468,7 @@ def build_validation_gen(validation_volumes):
                                           label_margin=output_margin))
             for v in six.itervalues(validation_volumes)]
     if CONFIG.training.augment_validation:
-        validation_gens = map(augment_subvolume_generator, validation_gens)
+        validation_gens = list(map(augment_subvolume_generator, validation_gens))
 
     # Divide training generators up for workers.
     validation_worker_gens = [

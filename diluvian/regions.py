@@ -304,7 +304,7 @@ class Region(object):
             move_check_block = mask_block
         else:
             move_check_block = current_mask
-        pad_width = zip(list(pad_pre), list(pad_post))
+        pad_width = list(zip(list(pad_pre), list(pad_post)))
         move_check_block = np.pad(move_check_block, pad_width, 'constant')
 
         new_moves = self.get_moves(move_check_block)
