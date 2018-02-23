@@ -28,12 +28,12 @@ class Body(object):
         if isinstance(self.mask, OctreeVolume):
             # If this is a sparse volume, materialize it to memory.
             bounds = self.mask.get_leaf_bounds()
-            mask = self.mask[map(slice, bounds[0], bounds[1])]
+            mask = self.mask[list(map(slice, bounds[0], bounds[1]))]
             # Crop the mask and bounds to nonzero region of the mask.
             mask_min, mask_max = get_nonzero_aabb(mask)
             bounds[0] += mask_min
             bounds[1] -= np.array(mask.shape) - mask_max
-            mask = mask[map(slice, mask_min, mask_max)]
+            mask = mask[list(map(slice, mask_min, mask_max))]
             assert mask.shape == tuple(bounds[1] - bounds[0]), \
                 'Bounds shape ({}) and mask shape ({}) differ.'.format(bounds[1] - bounds[0], mask.shape)
         else:

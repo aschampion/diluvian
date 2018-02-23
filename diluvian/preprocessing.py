@@ -82,7 +82,7 @@ def intensity_distance_seeds(image_data, resolution, axis=0, erosion_radius=16, 
 
         def slices():
             for i in xrange(image_data.shape[axis]):
-                s = map(slice, [None] * 3)
+                s = list(map(slice, [None] * 3))
                 s[axis] = i
                 yield s
 
@@ -125,7 +125,7 @@ def intensity_distance_seeds(image_data, resolution, axis=0, erosion_radius=16, 
     for seed in seeds:
         if skmax[tuple(seed)]:
             lim = np.minimum(mask.shape, skmax.shape - seed)
-            skmax[map(slice, seed, seed + lim)] = mask[map(slice, lim)]
+            skmax[list(map(slice, seed, seed + lim))] = mask[list(map(slice, lim))]
 
     seeds = np.transpose(np.nonzero(skmax))
 

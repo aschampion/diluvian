@@ -294,7 +294,7 @@ def fill_volume_with_model(
             label_id += 1
 
         logging.debug('Adding body to prediction label volume.')
-        bounds_shape = map(slice, bounds[0], bounds[1])
+        bounds_shape = list(map(slice, bounds[0], bounds[1]))
         prediction_mask = prediction[bounds_shape] == background_label_id
         for seed in dispatched_seeds:
             if np.all(bounds[0] <= seed) and np.all(bounds[1] > seed) and mask[tuple(seed - bounds[0])]:
@@ -522,7 +522,7 @@ def evaluate_volume(
     def labels_to_cremi(v):
         label_data = v.label_data.copy()
         if hasattr(v, 'bounds'):
-            label_data = label_data[map(slice, list(v.bounds[0]), list(v.bounds[1]))]
+            label_data = label_data[list(map(slice, list(v.bounds[0]), list(v.bounds[1])))]
         volume = cremi.Volume(label_data, resolution=v.resolution)
 
         return volume
@@ -538,7 +538,7 @@ def evaluate_volume(
 
         pred_data = pred_vol.label_data
         if hasattr(pred_vol, 'bounds'):
-            pred_data = pred_data[map(slice, list(pred_vol.bounds[0]), list(pred_vol.bounds[1]))]
+            pred_data = pred_data[list(map(slice, list(pred_vol.bounds[0]), list(pred_vol.bounds[1])))]
         orig_shape = pred_data.shape
         pred_data = np.lib.stride_tricks.as_strided(pred_data,
                                                     [b for a in zip(orig_shape, scale) for b in a],
@@ -568,7 +568,7 @@ def evaluate_volume(
         logging.warn('Groundtruth has a mask channel that will be applied to segmentation.')
         mask_data = gt_vol.mask_data
         if hasattr(gt_vol, 'bounds'):
-            mask_data = mask_data[map(slice, list(gt_vol.bounds[0]), list(gt_vol.bounds[1]))]
+            mask_data = mask_data[list(map(slice, list(gt_vol.bounds[0]), list(gt_vol.bounds[1])))]
 
         if relabel:
             mask_exiting_bodies = np.unique(pred.data[np.logical_not(mask_data)])

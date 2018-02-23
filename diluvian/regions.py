@@ -285,7 +285,7 @@ class Region(object):
             assert self.block_padding is not None, \
                 'Position block extends out of region bounds, but padding is not enabled: {}'.format(mask_pos)
             end = [-x if x != 0 else None for x in pad_post]
-            mask_block = mask_block[map(slice, pad_pre, end)]
+            mask_block = mask_block[list(map(slice, pad_pre, end))]
         current_mask = self.mask[mask_min[0]:mask_max[0],
                                  mask_min[1]:mask_max[1],
                                  mask_min[2]:mask_max[2]]
@@ -402,7 +402,7 @@ class Region(object):
         pred_bounds = [None, None]
         pred_bounds[0] = self.get_block_bounds(self.pos_to_vox(self.move_bounds[0]), CONFIG.model.output_fov_shape)[0]
         pred_bounds[1] = self.get_block_bounds(self.pos_to_vox(self.move_bounds[1]), CONFIG.model.output_fov_shape)[1]
-        pred = self.mask[map(slice, pred_bounds[0], pred_bounds[1])].copy()
+        pred = self.mask[list(map(slice, pred_bounds[0], pred_bounds[1]))].copy()
         pred[np.isnan(pred)] = CONFIG.model.v_false
 
         targ_bounds = [None, None]
@@ -412,7 +412,7 @@ class Region(object):
         targ_bounds[1] = self.get_block_bounds(self.pos_to_vox(self.move_bounds[1]) - self.target_offset,
                                                CONFIG.model.output_fov_shape,
                                                self.target_offset)[1]
-        target = self.target[map(slice, targ_bounds[0], targ_bounds[1])]
+        target = self.target[list(map(slice, targ_bounds[0], targ_bounds[1]))]
 
         if threshold:
             target = target >= CONFIG.model.t_final
@@ -429,13 +429,13 @@ class Region(object):
         new_mask_bin, bounds = body.get_seeded_component(CONFIG.postprocessing.closing_shape)
         new_mask_bin = new_mask_bin.astype(np.bool)
 
-        mask_block = self.mask[map(slice, bounds[0], bounds[1])].copy()
+        mask_block = self.mask[list(map(slice, bounds[0], bounds[1]))].copy()
         # Clip any values not in the seeded connected component so that they
         # cannot not generate moves when rechecking.
         mask_block[~new_mask_bin] = np.clip(mask_block[~new_mask_bin], None, 0.9 * CONFIG.model.t_move)
 
         self.mask[:] = np.NAN
-        self.mask[map(slice, bounds[0], bounds[1])] = mask_block
+        self.mask[list(map(slice, bounds[0], bounds[1]))] = mask_block
         return True
 
     class EarlyFillTermination(Exception):

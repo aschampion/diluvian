@@ -9,6 +9,7 @@ import csv
 import importlib
 import itertools
 import logging
+import sys
 import webbrowser
 
 import neuroglancer
@@ -31,7 +32,7 @@ class WrappedViewer(neuroglancer.Viewer):
                 state['navigation']['pose'] = collections.OrderedDict()
             if 'position' not in state['navigation']['pose']:
                 state['navigation']['pose']['position'] = collections.OrderedDict()
-            state['navigation']['pose']['position']['voxelCoordinates'] = map(int, list(self.voxel_coordinates))
+            state['navigation']['pose']['position']['voxelCoordinates'] = list(map(int, list(self.voxel_coordinates)))
         return state
 
     def open_in_browser(self):
@@ -64,13 +65,17 @@ def write_keras_history_to_csv(history, filename):
     history : keras.callbacks.History
     filename : str
     """
-    with open(filename, 'wb') as csvfile:
+    if sys.version_info[0] < 3:
+        args, kwargs = (['wb', ], {})
+    else:
+        args, kwargs = (['w', ], {'newline': '', 'encoding': 'utf8', })
+    with open(filename, *args, **kwargs) as csvfile:
         writer = csv.writer(csvfile)
         metric_cols = history.history.keys()
         indices = [i[0] for i in sorted(enumerate(metric_cols), key=lambda x: x[1])]
-        metric_cols.sort()
+        metric_cols = sorted(metric_cols)
         cols = ['epoch'] + metric_cols
-        sorted_metrics = history.history.values()
+        sorted_metrics = list(history.history.values())
         sorted_metrics = [sorted_metrics[i] for i in indices]
         writer.writerow(cols)
         for row in zip(history.epoch, *sorted_metrics):
