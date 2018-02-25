@@ -80,6 +80,9 @@ def patch_prediction_copy(model):
     ----------
     model : keras.engine.Model
     """
+    model.train_function = None
+    model.test_function = None
+
     model._orig_train_on_batch = model.train_on_batch
 
     def train_on_batch(self, x, y, **kwargs):
