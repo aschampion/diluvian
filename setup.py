@@ -3,7 +3,6 @@
 
 
 import pip
-from pip.req import parse_requirements
 from setuptools import setup
 
 
@@ -14,19 +13,13 @@ with open('HISTORY.rst') as history_file:
     history = history_file.read()
 
 
-parsed_requirements = parse_requirements(
-    'requirements/prod.txt',
-    session=pip.download.PipSession()
-)
-
-parsed_test_requirements = parse_requirements(
-    'requirements/test.txt',
-    session=pip.download.PipSession()
-)
+def parse_requirements(filename):
+    lines = (line.strip() for line in open(filename))
+    return [line for line in lines if line and not line.startswith('#')]
 
 
-requirements = [str(ir.req) for ir in parsed_requirements]
-test_requirements = [str(tr.req) for tr in parsed_test_requirements]
+parsed_requirements = parse_requirements('requirements/prod.txt')
+parsed_test_requirements = parse_requirements('requirements/test.txt')
 
 
 setup(
@@ -48,7 +41,7 @@ setup(
         ]
     },
     include_package_data=True,
-    install_requires=requirements,
+    install_requires=parsed_requirements,
     license="MIT license",
     zip_safe=False,
     keywords='diluvian',
@@ -63,5 +56,5 @@ setup(
     ],
     setup_requires=['pytest-runner',],
     test_suite='tests',
-    tests_require=test_requirements
+    tests_require=parsed_test_requirements
 )
