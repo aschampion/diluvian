@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import six
 from six.moves import range as xrange
+import tensorflow as tf
 from tqdm import tqdm
 
 import keras.backend as K
@@ -30,8 +31,7 @@ from keras.callbacks import (
         )
 
 from .config import CONFIG
-from .network import compile_network, load_model
-from .third_party.multi_gpu import make_parallel
+from .network import compile_network, load_model, make_parallel
 from .util import (
         get_color_shader,
         get_function,
@@ -571,13 +571,17 @@ def train_network(
         metric_plot=False):
     random.seed(CONFIG.random_seed)
 
+    tf_device = 'cpu:0' if CONFIG.training.num_gpus > 1 else 'gpu:0'
+
     if model_file is None:
         factory = get_function(CONFIG.network.factory)
-        ffn = factory(CONFIG.model.input_fov_shape,
-                      CONFIG.model.output_fov_shape,
-                      CONFIG.network)
+        with tf.device(tf_device):
+            ffn = factory(CONFIG.model.input_fov_shape,
+                          CONFIG.model.output_fov_shape,
+                          CONFIG.network)
     else:
-        ffn = load_model(model_file, CONFIG.network)
+        with tf.device(tf_device):
+            ffn = load_model(model_file, CONFIG.network)
 
     # Multi-GPU models are saved as a single-GPU model prior to compilation,
     # so if loading from such a model file it will need to be recompiled.
@@ -682,7 +686,9 @@ def validate_model(model_file, volumes):
 
     validation = build_validation_gen(volumes)
 
-    model = load_model(model_file, CONFIG.network)
+    tf_device = 'cpu:0' if CONFIG.training.num_gpus > 1 else 'gpu:0'
+    with tf.device(tf_device):
+        model = load_model(model_file, CONFIG.network)
 
     # Multi-GPU models are saved as a single-GPU model prior to compilation,
     # so if loading from such a model file it will need to be recompiled.

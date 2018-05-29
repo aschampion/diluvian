@@ -25,6 +25,7 @@ from keras.layers.merge import (
         )
 from keras.layers.core import Activation
 from keras.models import load_model as keras_load_model, Model
+from keras.utils import multi_gpu_model
 import keras.optimizers
 
 
@@ -235,9 +236,6 @@ def compile_network(model, optimizer_config):
 
 
 def load_model(model_file, network_config):
-    # Import for loading legacy models.
-    from keras_contrib.layers import Deconvolution3D  # noqa
-
     model = keras_load_model(model_file)
 
     # If necessary, wrap the loaded model to transpose the axes for both
@@ -275,3 +273,15 @@ def load_model(model_file, network_config):
         model = new_model
 
     return model
+
+
+def make_parallel(model, gpus=None):
+    new_model = multi_gpu_model(model, gpus)
+    func_type = type(model.save)
+
+    # monkeypatch the save to save just the underlying model
+    def new_save(_, *args, **kwargs):
+        model.save(*args, **kwargs)
+    new_model.save = func_type(new_save, new_model)
+
+    return new_model
