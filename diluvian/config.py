@@ -174,6 +174,16 @@ class NetworkConfig(BaseConfig):
         ones. If data is anisotropic and Z should only be downsampled every
         other level, this value could be [2, 1, 1]. Axes set to 0 are never
         downsampled.
+    unet_downsample_mode: string
+        The mode to use for downsampling. The two options are "fixed_rate",
+        which will use the downsample rate previously defined, and "as_needed",
+        which will downsample on lower resolution axes until the volume is as
+        isotropic as possible. For example given a volume with resolution
+        [40,4,4] and 4 unet layers, would downsample to
+        [40,8,8],[40,16,16],[40,32,32],[80,64,64]
+    resolution: sequence or ndarray of int
+        The resolution of the input image data. This is necessary if you want
+        to use "as_needed" for ``unet_downsampling_mode``
     """
     def __init__(self, settings):
         self.factory = str(settings.get('factory'))
@@ -192,6 +202,8 @@ class NetworkConfig(BaseConfig):
         self.unet_depth = int(settings.get('unet_depth', 4))
         self.unet_downsample_rate = np.array(settings.get('unet_downsample_rate', [1, 1, 1]))
 
+        self.unet_downsample_mode = np.array(settings.get("unet_downsample_mode", "fixed_rate"))
+        self.resolution = np.array(settings.get("resolution", [1, 1, 1]))
 
 class OptimizerConfig(BaseConfig):
     """Configuration for the network optimizer.
