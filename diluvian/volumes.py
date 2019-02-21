@@ -1167,7 +1167,7 @@ class ImageStackVolume(Volume):
         return ImageStackVolume(bounds, resolution, tile_width, tile_height, format_url,
                                 missing_z=stack_info['broken_slices'])
 
-    def __init__(self, bounds, orig_resolution, translation, tile_width, tile_height, 
+    def __init__(self, bounds, orig_resolution, translation, tile_width, tile_height,
                  tile_format_url, zoom_level=0, missing_z=None, image_leaf_shape=None):
         self.orig_bounds = bounds
         self.orig_resolution = orig_resolution
