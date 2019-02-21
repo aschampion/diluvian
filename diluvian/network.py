@@ -28,6 +28,8 @@ from keras.models import load_model as keras_load_model, Model
 from keras.utils import multi_gpu_model
 import keras.optimizers
 
+from .coord import CoordinateChannel3D
+
 
 def make_flood_fill_network(input_fov_shape, output_fov_shape, network_config):
     """Construct a stacked convolution module flood filling network.
@@ -121,6 +123,9 @@ def make_flood_fill_unet(input_fov_shape, output_fov_shape, network_config):
         ffn = image_input
     mask_input = Input(shape=tuple(input_fov_shape) + (1,), dtype='float32', name='mask_input')
     ffn = concatenate([ffn, mask_input])
+
+    if network_config.coord_layer:
+        ffn = CoordinateChannel3D()(ffn)
 
     # Note that since the Keras 2 upgrade strangely models with depth > 3 are
     # rejected by TF.
