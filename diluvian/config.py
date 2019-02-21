@@ -205,6 +205,7 @@ class NetworkConfig(BaseConfig):
         self.unet_downsample_mode = np.array(settings.get("unet_downsample_mode", "fixed_rate"))
         self.resolution = np.array(settings.get("resolution", [1, 1, 1]))
 
+
 class OptimizerConfig(BaseConfig):
     """Configuration for the network optimizer.
 
