@@ -135,6 +135,41 @@ def test_volume_transforms():
     np.testing.assert_array_equal(dpsv.image, sv.image.reshape((1, 4, 1, 4, 1, 1)).mean(5).mean(3).mean(1))
 
 
+def test_volume_transforms_image_stacks():
+    # stack info
+    si = {
+        "bounds": [28128, 31840, 4841],
+        "resolution": [3.8, 3.8, 50],
+        "tile_width": 512,
+        "tile_height": 512,
+        "translation": [0, 0, 0]
+    }
+    # tile stack parameters
+    tsp = {
+        "source_base_url": "https://neurocean.janelia.org/ssd-tiles-no-cache/0111-8/",
+        "file_extension": "jpg",
+        "tile_width": 512,
+        "tile_height": 512,
+        "tile_source_type": 4,
+    }
+    v = volumes.ImageStackVolume.from_catmaid_stack(si, tsp)
+    pv = v.partition([2, 1, 1], [1, 0, 0])  # Note axes are flipped after volume initialization
+    dpv = pv.downsample((50, 15.2, 15.2))
+
+    np.testing.assert_array_equal(dpv.local_coord_to_world(np.array([2, 2, 2])), np.array([2422, 8, 8]))
+    np.testing.assert_array_equal(dpv.world_coord_to_local(np.array([2422, 8, 8])), np.array([2, 2, 2]))
+
+    svb = volumes.SubvolumeBounds(np.array((2420, 0, 0), dtype=np.int64),
+                                  np.array((2421, 4, 4), dtype=np.int64))
+    sv = v.get_subvolume(svb)
+
+    dpsvb = volumes.SubvolumeBounds(np.array((0, 0, 0), dtype=np.int64),
+                                    np.array((1, 1, 1), dtype=np.int64))
+    dpsv = dpv.get_subvolume(dpsvb)
+
+    np.testing.assert_array_equal(dpsv.image, sv.image.reshape((1, 4, 1, 4, 1, 1)).mean(5).mean(3).mean(1))
+
+
 def test_volume_identity_downsample_returns_self():
     resolution = (27, 185, 90)
     v = volumes.Volume(resolution, image_data=np.zeros((1, 1, 1)), label_data=np.zeros((1, 1, 1)))
