@@ -174,6 +174,7 @@ class NetworkConfig(BaseConfig):
         ones. If data is anisotropic and Z should only be downsampled every
         other level, this value could be [2, 1, 1]. Axes set to 0 are never
         downsampled.
+    coord_layer: whether to include coordinate channels in the input
     """
     def __init__(self, settings):
         self.factory = str(settings.get('factory'))
@@ -191,6 +192,7 @@ class NetworkConfig(BaseConfig):
         self.batch_normalization = bool(settings.get('batch_normalization', False))
         self.unet_depth = int(settings.get('unet_depth', 4))
         self.unet_downsample_rate = np.array(settings.get('unet_downsample_rate', [1, 1, 1]))
+        self.coord_layer = np.array(settings.get("coord_layer", False))
 
 
 class OptimizerConfig(BaseConfig):
