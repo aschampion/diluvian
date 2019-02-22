@@ -1129,14 +1129,14 @@ class HDF5Volume(Volume):
 
 class ImageStackVolume(Volume):
     """A volume for block sparse access to image pyramids over HTTP.
-    
+
     Coordinate Systems
     ----------
     World: physical coordinates, in nanometers, as used by CATMAID
     Pixel: pixel coordinates, starts at (0,0,0) and accounts for pixel resolution
         often (4x4x40) nanometers per pixel
     Local: Downsampled pixel space
-        
+
     Parameters
     ----------
     bounds : iterable of int
