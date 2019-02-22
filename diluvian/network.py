@@ -28,7 +28,7 @@ from keras.models import load_model as keras_load_model, Model
 from keras.utils import multi_gpu_model
 import keras.optimizers
 
-from .coord import CoordinateChannel3D
+from .third_party.coord import CoordinateChannel3D
 
 
 def make_flood_fill_network(input_fov_shape, output_fov_shape, network_config):
