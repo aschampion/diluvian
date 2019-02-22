@@ -139,11 +139,19 @@ def make_flood_fill_unet(input_fov_shape, output_fov_shape, network_config):
     return ffn
 
 
-def add_unet_layer(model, network_config, remaining_layers, output_shape, n_channels=None):
+def add_unet_layer(model, network_config, remaining_layers, output_shape, n_channels=None, resolution=None):
     if n_channels is None:
         n_channels = model.get_shape().as_list()[-1]
 
-    downsample = np.array([x != 0 and remaining_layers % x == 0 for x in network_config.unet_downsample_rate])
+    if network_config.unet_downsample_mode == "fixed_rate":
+        downsample = np.array([x != 0 and remaining_layers % x == 0 for x in network_config.unet_downsample_rate])
+    else:
+        resolution = resolution if resolution is not None else network_config.resolution
+        min_res = np.min(resolution)
+        # x < min_res * sqrt(2) because:
+        # if a > sqrt(2)b, then a/b > sqrt(2) and 2b/a < sqrt(2)
+        # if sqrt(2)b > a > b, then 2a/2b < sqrt(2) and 2b/a > sqrt(2)
+        downsample = np.array([x < min_res * (2 ** .5) for x in resolution])
 
     if network_config.convolution_padding == 'same':
         conv_contract = np.zeros(3, dtype=np.int32)
@@ -190,10 +198,18 @@ def add_unet_layer(model, network_config, remaining_layers, output_shape, n_chan
     if network_config.batch_normalization:
         model = BatchNormalization()(model)
     next_output_shape = np.ceil(np.divide(forward_link_shape, downsample.astype(np.float32) + 1.0)).astype(np.int32)
-    model = add_unet_layer(model,
-                           network_config,
-                           remaining_layers - 1,
-                           next_output_shape.astype(np.int32))
+    if network_config.unet_downsample_mode == "fixed_rate":
+        model = add_unet_layer(model,
+                               network_config,
+                               remaining_layers - 1,
+                               next_output_shape.astype(np.int32))
+    else:
+        model = add_unet_layer(model,
+                               network_config,
+                               remaining_layers - 1,
+                               next_output_shape.astype(np.int32),
+                               None,
+                               resolution * (downsample + 1))
 
     # Upsample output of previous layer and merge with forward link.
     model = Conv3DTranspose(
