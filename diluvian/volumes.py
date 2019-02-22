@@ -1129,7 +1129,14 @@ class HDF5Volume(Volume):
 
 class ImageStackVolume(Volume):
     """A volume for block sparse access to image pyramids over HTTP.
-
+    
+    Coordinate Systems
+    ----------
+    World: physical coordinates, in nanometers, as used by CATMAID
+    Pixel: pixel coordinates, starts at (0,0,0) and accounts for pixel resolution
+        often (4x4x40) nanometers per pixel
+    Local: Downsampled pixel space
+        
     Parameters
     ----------
     bounds : iterable of int
@@ -1194,15 +1201,15 @@ class ImageStackVolume(Volume):
         self.label_data = None
 
     def local_coord_to_world(self, a):
-        return self.pixel_coord_to_real(np.matmul(a, self.scale))
+        return self.pixel_coord_to_world(np.matmul(a, self.scale))
 
     def world_coord_to_local(self, a):
-        return np.floor_divide(self.real_coord_to_pixel(a), self.scale)
+        return np.floor_divide(self.world_coord_to_pixel(a), self.scale)
 
-    def real_coord_to_pixel(self, a):
+    def world_coord_to_pixel(self, a):
         return np.floor_divide(a - self.translation, self.orig_resolution)
 
-    def pixel_coord_to_real(self, a):
+    def pixel_coord_to_world(self, a):
         return np.matmul(a, self.orig_resolution) + self.translation
 
     @property
