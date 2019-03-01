@@ -1132,8 +1132,8 @@ class ImageStackVolume(Volume):
 
     Coordinate Systems
     ----------
-    World: physical coordinates, in nanometers, as used by CATMAID
-    Pixel: pixel coordinates, starts at (0,0,0) and accounts for pixel resolution
+    Real: Physical coordinates, generally measured in nanometers
+    World: pixel coordinates, starts at (0,0,0) and accounts for pixel resolution
         often (4x4x40) nanometers per pixel
     Local: Downsampled pixel space
 
@@ -1169,10 +1169,39 @@ class ImageStackVolume(Volume):
         }[tile_source_parameters['tile_source_type']].format(**tile_source_parameters)
         bounds = np.flipud(np.array(stack_info['bounds'], dtype=np.int64))
         resolution = np.flipud(np.array(stack_info['resolution']))
+        translation = np.flipud(np.array(stack_info['translation']))
         tile_width = int(tile_source_parameters['tile_width'])
         tile_height = int(tile_source_parameters['tile_height'])
-        return ImageStackVolume(bounds, resolution, tile_width, tile_height, format_url,
-                                missing_z=stack_info['broken_slices'])
+        return ImageStackVolume(bounds, resolution, translation, tile_width, tile_height,
+                                format_url, missing_z=stack_info.get("broken_slices", None))
+
+    def from_toml(filename):
+        volumes = {}
+        with open(filename, "rb") as fin:
+            datasets = toml.load(fin).get("ImageStack", [])
+            for dataset in datasets:
+                # stack info
+                si = [
+                    "bounds",
+                    "resolution",
+                    "translation",
+                    "broken_slices",
+                ]
+                # tile stack parameters
+                tsp = [
+                    "source_base_url",
+                    "file_extension",
+                    "tile_width",
+                    "tile_height",
+                    "tile_source_type",
+                ]
+                volume = ImageStackVolume.from_catmaid_stack(
+                    {si[key]: dataset[key] for key in si},
+                    {tsp[key]: dataset[key] for key in tsp},
+                )
+                volumes[dataset["title"]] = volume
+
+        return volumes
 
     def __init__(self, bounds, orig_resolution, translation, tile_width, tile_height,
                  tile_format_url, zoom_level=0, missing_z=None, image_leaf_shape=None):
@@ -1182,6 +1211,7 @@ class ImageStackVolume(Volume):
         self.tile_width = tile_width
         self.tile_height = tile_height
         self.tile_format_url = tile_format_url
+        self.mask_data = None
 
         self.zoom_level = int(zoom_level)
         if missing_z is None:
@@ -1201,16 +1231,16 @@ class ImageStackVolume(Volume):
         self.label_data = None
 
     def local_coord_to_world(self, a):
-        return self.pixel_coord_to_world(np.matmul(a, self.scale))
+        return np.multiply(a, self.scale)
 
     def world_coord_to_local(self, a):
-        return np.floor_divide(self.world_coord_to_pixel(a), self.scale)
+        return np.floor_divide(a, self.scale)
 
-    def world_coord_to_pixel(self, a):
+    def real_coord_to_world(self, a):
         return np.floor_divide(a - self.translation, self.orig_resolution)
 
-    def pixel_coord_to_world(self, a):
-        return np.matmul(a, self.orig_resolution) + self.translation
+    def world_coord_to_real(self, a):
+        return np.multiply(a, self.orig_resolution) + self.translation
 
     @property
     def resolution(self):
@@ -1223,6 +1253,7 @@ class ImageStackVolume(Volume):
             return ImageStackVolume(
                     self.orig_bounds,
                     self.orig_resolution,
+                    self.translation,
                     self.tile_width,
                     self.tile_height,
                     self.tile_format_url,
@@ -1262,10 +1293,10 @@ class ImageStackVolume(Volume):
 
     def image_populator(self, bounds):
         image_subvol = np.zeros(tuple(bounds[1] - bounds[0]), dtype=np.float32)
-        col_range = map(int, (math.floor(bounds[0][self.DIM.X]/self.tile_width),
-                              math.ceil(bounds[1][self.DIM.X]/self.tile_width)))
-        row_range = map(int, (math.floor(bounds[0][self.DIM.Y]/self.tile_height),
-                              math.ceil(bounds[1][self.DIM.Y]/self.tile_height)))
+        col_range = list(map(int, (math.floor(bounds[0][self.DIM.X] / self.tile_width),
+                                   math.ceil(bounds[1][self.DIM.X] / self.tile_width))))
+        row_range = list(map(int, (math.floor(bounds[0][self.DIM.Y] / self.tile_height),
+                                   math.ceil(bounds[1][self.DIM.Y] / self.tile_height))))
         tile_size = np.array([1, self.tile_height, self.tile_width]).astype(np.int64)
         for z in xrange(bounds[0][self.DIM.Z], bounds[1][self.DIM.Z]):
             if z in self.missing_z:
