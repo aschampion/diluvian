@@ -12,6 +12,9 @@ Tests for `diluvian` module.
 from __future__ import division
 
 import numpy as np
+from pathlib import Path
+import shutil
+import pyn5
 
 from diluvian import octrees
 from diluvian import regions
@@ -179,6 +182,70 @@ def test_volume_transforms_image_stacks():
     np.testing.assert_array_equal(
         dpsv.image, sv.image.reshape((1, 4, 1, 4, 1, 1)).mean(5).mean(3).mean(1)
     )
+
+
+def test_volume_transforms_n5_volume():
+    # Create test n5 dataset
+    test_dataset_path = Path("test.n5")
+    if test_dataset_path.is_dir():
+        shutil.rmtree(str(test_dataset_path.absolute()))
+    pyn5.create_dataset("test.n5", "test", [10, 10, 10], [2, 2, 2], "UINT8")
+    test_dataset = pyn5.open("test.n5", "test")
+
+    test_data = np.zeros([10, 10, 10]).astype(int)
+    x = np.linspace(0, 9, 10).reshape([10, 1, 1]).astype(int)
+    test_data = test_data + x + x.transpose([1, 2, 0]) + x.transpose([2, 0, 1])
+
+    block_starts = [(i % 5, i // 5 % 5, i // 25 % 5) for i in range(5 ** 3)]
+    for block_start in block_starts:
+        current_bound = list(
+            map(slice, [2 * x for x in block_start], [2 * x + 2 for x in block_start])
+        )
+        flattened = test_data[current_bound].reshape(-1)
+        try:
+            test_dataset.write_block(block_start, flattened)
+        except Exception as e:
+            raise AssertionError("Writing to n5 failed! Could not create test dataset.\nError: {}".format(e))
+
+    v = volumes.N5Volume("test.n5",
+                         {"image": {"path": "test", "dtype": "UINT8"}},
+                         bounds=[10, 10, 10],
+                         resolution=[1, 1, 1])
+    pv = v.partition(
+        [2, 1, 1], [1, 0, 0]
+    )  # Note axes are flipped after volume initialization
+    dpv = pv.downsample((2, 2, 2))
+
+    np.testing.assert_array_equal(
+        dpv.local_coord_to_world(np.array([2, 2, 2])), np.array([9, 4, 4])
+    )
+    np.testing.assert_array_equal(
+        dpv.world_coord_to_local(np.array([9, 4, 4])), np.array([2, 2, 2])
+    )
+
+    svb = volumes.SubvolumeBounds(
+        np.array((5, 0, 0), dtype=np.int64), np.array((7, 2, 2), dtype=np.int64)
+    )
+    sv = v.get_subvolume(svb)
+
+    dpsvb = volumes.SubvolumeBounds(
+        np.array((0, 0, 0), dtype=np.int64), np.array((1, 1, 1), dtype=np.int64)
+    )
+    dpsv = dpv.get_subvolume(dpsvb)
+
+    np.testing.assert_array_equal(
+        dpsv.image, sv.image.reshape((1, 2, 1, 2, 1, 2)).mean(5).mean(3).mean(1)
+    )
+
+    # sanity check that test.n5 contains varying data
+    svb2 = volumes.SubvolumeBounds(
+        np.array((5, 0, 1), dtype=np.int64), np.array((7, 2, 3), dtype=np.int64)
+    )
+    sv2 = v.get_subvolume(svb2)
+    assert not all(sv.image.flatten() == sv2.image.flatten())
+
+    if test_dataset_path.is_dir():
+        shutil.rmtree(str(test_dataset_path.absolute()))
 
 
 def test_volume_identity_downsample_returns_self():

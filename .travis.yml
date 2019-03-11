@@ -1,11 +1,10 @@
 sudo: required
 dist: trusty
 language: python
-python:
-    - 3.6
-    - 3.5
-    - 3.4
-    - 2.7
+jobs:
+  include:
+    - python: 3.6
+    - python: 3.5
 notifications:
   email: false
 install:
@@ -15,7 +14,7 @@ script: tox
 deploy:
   on:
     repo: aschampion/diluvian
-    python: 2.7
+    python: 3.5
     tags: true
   distributions: sdist bdist_wheel
   password:
