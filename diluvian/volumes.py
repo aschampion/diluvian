@@ -19,6 +19,7 @@ import requests
 from scipy import ndimage
 import six
 from six.moves import range as xrange
+import pyn5
 
 from .config import CONFIG
 from .octrees import OctreeVolume
@@ -1354,3 +1355,216 @@ class ImageStackVolume(Volume):
             ctr = np.array([self.random.randint(self.ctr_min[n], self.ctr_max[n])
                             for n in range(3)]).astype(np.int64)
             return SubvolumeBounds(seed=ctr)
+
+
+class N5Volume(Volume):
+    """A Volume for using an N5 filesystem for image retrieval
+
+    Parameters
+    ----------
+    root_path : string
+        /absolute/path/to/data.n5
+    dataset : dict of dicts (dataset name to dataset config)
+        possible keys: ("mask","labels","image")
+        values: {"path": path, "dtype": dtype, "read_only": read_only}
+    resolution : iterable of float
+        Resolution of the pixels at zoom level 0 in nm.
+    translation : iterable of float
+        Translational offset in nm s.t. for given coordinate
+        a in pixel space, a*resolution+translation = b where
+        b is in the desired nm coordinates
+    bounds: iterable of int, optional
+        Shape of the stack at zoom level 0 in pixels.
+        necessary if the volume is missing an attributes file
+    tile_width, tile_height : int, optional
+        Size of tiles in pixels
+        necessary if the volume is missing an attributes file
+    """
+
+    def from_toml(filename):
+        volumes = {}
+        with open(filename, "rb") as fin:
+            volume_configs = toml.load(fin).get("N5Volume", [])
+            for volume_config in volume_configs:
+                root_path = volume_config["root_path"]
+                datasets = volume_config["datasets"]
+                resolution = volume_config.get("resolution", None)
+                translation = volume_config.get["translation", None]
+                bounds = volume_config.get("bounds", None)
+                volume = N5Volume(
+                    root_path,
+                    datasets,
+                    bounds,
+                    resolution,
+                    translation,
+                )
+                volumes[volume_config["title"]] = volume
+
+        return volumes
+
+    def __init__(
+        self,
+        root_path,
+        datasets,
+        bounds=None,
+        resolution=None,
+        translation=None,
+    ):
+
+        self._dtype_map = {
+            "UINT8": np.uint8,
+            "UINT16": np.uint16,
+            "UINT32": np.uint32,
+            "UINT64": np.uint64,
+            "INT8": np.int8,
+            "INT16": np.int16,
+            "INT32": np.int32,
+            "INT64": np.int64,
+            "FLOAT32": np.float32,
+            "FLOAT64": np.float64,
+        }
+        self.bounds = bounds
+        self.resolution = resolution
+        self.translation = translation
+
+        self.scale = np.exp2(np.array([0, 0, 0])).astype(np.int64)
+        self.data_shape = (np.array([0, 0, 0]), self.bounds / self.scale)
+
+        # Initialization of data sources done in setter methods
+        self.root_path = root_path
+        self.image_config = datasets.get("image", None)
+        self.mask_config = datasets.get("mask", None)
+        self.label_config = datasets.get("label", None)
+
+    @property
+    def dtype_map(self):
+        return self._dtype_map
+
+    def local_coord_to_world(self, a):
+        return np.multiply(a, self.scale)
+
+    def world_coord_to_local(self, a):
+        return np.floor_divide(a, self.scale)
+
+    def real_coord_to_world(self, a):
+        return np.floor_divide(a - self.translation, self.orig_resolution)
+
+    def world_coord_to_real(self, a):
+        return np.multiply(a, self.orig_resolution) + self.translation
+
+    @property
+    def octree_leaf_shape(self):
+        return np.array([10, 10, 10])
+
+    @property
+    def image_config(self):
+        return self._image_config
+
+    @image_config.setter
+    def image_config(self, dataset):
+        self._image_config = dataset
+        if dataset is not None:
+            self._image_data = OctreeVolume(
+                self.octree_leaf_shape,
+                self.data_shape,
+                self.dtype_map[dataset.get("dtype", "FLOAT32")],
+                populator=self.image_populator,
+            )
+        else:
+            self._image_data = None
+
+    @property
+    def image_data(self):
+        return self._image_data
+
+    @property
+    def mask_config(self):
+        return self._mask_config
+
+    @mask_config.setter
+    def mask_config(self, dataset):
+        self._mask_config = dataset
+        if dataset is not None:
+            self._mask_data = OctreeVolume(
+                self.octree_leaf_shape,
+                self.data_shape,
+                self.dtype_map[dataset.get("dtype", "FLOAT32")],
+                populator=self.mask_populator,
+            )
+        else:
+            self._mask_data = None
+
+    @property
+    def mask_data(self):
+        return self._mask_data
+
+    @property
+    def label_config(self):
+        return self._label_config
+
+    @label_config.setter
+    def label_config(self, dataset):
+        self._label_config = dataset
+        if dataset is not None:
+            self._label_data = OctreeVolume(
+                self.octree_leaf_shape,
+                self.data_shape,
+                self.dtype_map[dataset.get("dtype", "FLOAT32")],
+                populator=self.label_populator,
+            )
+        else:
+            self._label_data = None
+
+    @property
+    def label_data(self):
+        return self._label_data
+
+    @property
+    def image_n5(self):
+        """
+        Create a new pyn5.Dataset every time you ask for image_n5.
+        This is necessary to accomadate parrallel reads since multiple
+        threads can't use the same reader.
+        """
+        if self.image_config is not None:
+            return pyn5.open(
+                self.root_path,
+                self.image_config.get("path"),
+                self.image_config.get("dtype", "UINT8"),
+                self.image_config.get("read_only", True),
+                )
+        else:
+            return None
+
+    def image_populator(self, bounds):
+        return pyn5.read(self.image_n5, (bounds[0], bounds[1]))
+
+    @property
+    def mask_n5(self):
+        if self.mask_config is not None:
+            return pyn5.open(
+                self.root_path,
+                self.mask_config.get("path"),
+                self.mask_config.get("dtype", "UINT8"),
+                self.mask_config.get("read_only", True),
+                )
+        else:
+            return None
+
+    def mask_populator(self, bounds):
+        return pyn5.read(self.mask_n5, (bounds[0], bounds[1]))
+
+    @property
+    def label_n5(self):
+        if self.label_config is not None:
+            return pyn5.open(
+                self.root_path,
+                self.label_config.get("path"),
+                self.label_config.get("dtype", "UINT8"),
+                self.label_config.get("read_only", True),
+                )
+        else:
+            return None
+
+    def label_populator(self, bounds):
+        return pyn5.read(self.label_n5, bounds)
