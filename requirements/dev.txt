@@ -10,7 +10,7 @@ numpydoc==0.6.0
 Sphinx==1.5.1
 sphinx-argparse==0.1.16
 cryptography==1.7
-PyYAML==3.12
+PyYAML==5.4
 pytest==3.0.7
 pytest-cov==2.5.1
 pytest-runner==2.11.1
