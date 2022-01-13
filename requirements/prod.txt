@@ -4,7 +4,7 @@ matplotlib==2.0.0
 networkx==1.11
 neuroglancer==0.0.8
 numpy==1.14.3
-Pillow==4.0.0
+Pillow==9.0.0
 pytoml==0.1.11
 requests==2.13.0
 scikit-image==0.13.0
