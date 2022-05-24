@@ -10,6 +10,6 @@ requests==2.13.0
 scikit-image==0.13.0
 scipy==0.19.1
 six==1.11.0
-tensorflow==1.8.0
+tensorflow==2.6.4
 tqdm==4.19.1
 pyn5==0.1.0
